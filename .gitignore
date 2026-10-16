@@ -1,0 +1,27 @@
+# Environments and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyd
+
+# Runtime logs and media
+data/logs/*
+!data/logs/.gitkeep
+data/temp_media/*
+!data/temp_media/.gitkeep
+data/uploads/*
+!data/uploads/.gitkeep
+output/*
+!output/.gitkeep
+
+# IDE and OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pamsimas Studio — Generator Laporan Word Monev</title>
+  <meta name="description" content="Aplikasi Pembuat Laporan Monitoring dan Evaluasi (Monev) Pamsimas Jawa Tengah format resmi Word (.docx) dengan live photo geotag stamping.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Leaflet.js for OpenStreetMap & Google Maps Picker -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="/style.css?v=4.0">
+</head>
+<body class="dark-theme">
+  <div class="app-layout">
+
+    <!-- =========================================================
+         TOP HEADER (STANDALONE LAPORAN WORD)
+         ========================================================= -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <h1 class="brand-title">PAMSIMAS <span>STUDIO</span></h1>
+          <span style="font-size:0.7rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-left:8px;">Laporan Word Monev</span>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="badge badge-accent" id="reportVillagesBadge" style="background:#2563eb; color:#fff; font-size:0.75rem; padding:4px 10px;">1 Desa</span>
+      </div>
+
+      <div class="header-actions">
+        <button class="btn btn-secondary btn-sm" id="btnViewErrorLogs" onclick="window.viewErrorLogs ? window.viewErrorLogs() : null">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Log Error
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="window.showHelpModal ? window.showHelpModal() : null">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Panduan
+        </button>
+      </div>
+    </header>
+
+    <!-- =========================================================
+         MAIN: PEMBUAT LAPORAN WORD (.DOCX) - MONEV PAMSIMAS
+         ========================================================= -->
+    <main id="viewReportBuilder" class="view-panel active" role="main" style="display:block; width:100%;">
+      <div class="report-builder-container" style="max-width:1400px; margin:0 auto; padding:18px 24px 60px 24px; width:100%;">
+
+        <!-- Success Toast Notification -->
+        <div id="reportSuccessNotice" style="display:none; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); color:#34d399; padding:12px 18px; border-radius:8px; margin-bottom:16px; font-size:0.85rem; align-items:center; justify-content:space-between;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span><strong>Berhasil!</strong> Dokumen Word (.docx) berhasil dibuat dan di-download.</span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-xs text-muted" onclick="this.parentElement.style.display='none'">&times;</button>
+        </div>
+
+        <!-- Top Action Bar -->
+        <div class="doc-compact-toolbar" style="margin-bottom:16px;">
+          <div class="toolbar-left">
+            <div class="toolbar-icon" style="color:#38bdf8;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <div class="toolbar-meta">
+              <span class="toolbar-title" id="reportTitlePreview" style="font-weight:700; color:var(--text-main);">
+                Monitoring dan Evaluasi Kegiatan Pamsimas
+              </span>
+              <span class="toolbar-status" id="reportStatusSummary" style="color:var(--text-muted); font-size:0.75rem;">
+                Format resmi Kementerian PU
+              </span>
+            </div>
+          </div>
+
+          <div class="toolbar-actions" style="display:flex; align-items:center; gap:8px;">
+            <input type="file" id="reportExistingDocxInput" accept=".docx" style="display:none;" onchange="window.reportBuilder.handleExistingDocxUpload(event)">
+            <button type="button" class="btn btn-outline btn-sm" id="btnUploadExistingDocx" onclick="document.getElementById('reportExistingDocxInput').click()" title="Upload dokumen Word (.docx) eksisting" style="border-color:#38bdf8; color:#38bdf8; font-weight:600; display:inline-flex; align-items:center; gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Upload Dokumen (.docx)</span>
+            </button>
+            <button type="button" class="btn btn-outline btn-sm" id="btnToggleAuditPanel" onclick="window.reportBuilder.toggleAuditCard()" title="Checklist audit kelengkapan dokumen" style="font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:6px; border-color:rgba(56,189,248,0.35); color:#e2e8f0;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <span>Audit: <strong id="reportAuditToolbarScore" style="color:#38bdf8;">0%</strong></span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.reportBuilder.loadSample('single')" title="Preset 1 Desa tanpa tabel pelaksana">
+              Preset 1 Desa
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.reportBuilder.loadSample('multi')" title="Preset multi desa dengan tabel pelaksana">
+              Preset Multi Desa
+            </button>
+            <button type="button" class="btn btn-success btn-sm" id="btnGenerateReportDocx" onclick="window.reportBuilder.generateDocx()" style="font-weight:600; padding:6px 14px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download .docx
+            </button>
+          </div>
+        </div>
+
+        <!-- Panel Audit Kelengkapan Dokumen Berjalan (Otomatis Muncul Saat Dokumen Dibuka & Terbarui Real-time) -->
+        <div id="reportAuditCard" class="doc-dashboard-panel" style="display:none; margin-bottom:16px; padding:14px 18px; border:1px solid rgba(56,189,248,0.3); background:rgba(15,23,42,0.85); box-shadow:0 4px 20px rgba(0,0,0,0.3); border-radius:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <h4 style="margin:0; font-size:0.92rem; color:var(--text-main); font-weight:700;">Audit Kelengkapan Dokumen (Real-time)</h4>
+              <span id="reportAuditBadge" style="font-size:0.75rem; padding:2px 10px; border-radius:12px; font-weight:700; background:rgba(56,189,248,0.2); color:#38bdf8; border:1px solid rgba(56,189,248,0.35);">
+                0% Terisi
+              </span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span id="reportAuditFileName" style="font-size:0.75rem; color:#94a3b8; font-family:monospace; background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px;"></span>
+              <button type="button" class="btn btn-ghost btn-xs text-muted" onclick="document.getElementById('reportAuditCard').style.display='none'" title="Sembunyikan panel audit" style="font-size:1.1rem; line-height:1; padding:0 6px;">&times;</button>
+            </div>
+          </div>
+          <p id="reportAuditSummary" style="font-size:0.8rem; color:var(--text-muted); margin:0 0 12px 0; line-height:1.45;"></p>
+          <div id="reportAuditGrid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:10px;">
+            <!-- Rendered dynamically by reportBuilder.renderAuditCard() -->
+          </div>
+        </div>
+
+        <!-- 2-Column Responsive Builder Grid -->
+        <div style="display:grid; grid-template-columns: minmax(400px, 1fr) minmax(500px, 1.25fr); gap:16px; align-items:start;">
+          
+          <!-- LEFT COLUMN: Administrasi & Data Desa -->
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            
+            <!-- SECTION 1: Data Administrasi & SPT (Compact Form) -->
+            <div class="doc-dashboard-panel" style="margin-bottom:0; padding:12px 14px;">
+              <div class="dashboard-header" style="margin-bottom:10px; padding-bottom:6px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <h4 style="margin:0; font-size:0.82rem; color:var(--text-main);">1. Data Administrasi & SPT</h4>
+                </div>
+              </div>
+              <div style="display:grid; grid-template-columns: 1fr 90px 1.2fr; gap:8px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label" style="font-size:0.7rem;">Kabupaten</label>
+                  <input type="text" id="reportKabupaten" list="reportKabupatenList" class="form-input form-input-sm" value="" placeholder="Ketik kabupaten...">
+                  <datalist id="reportKabupatenList"></datalist>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label" style="font-size:0.7rem;">Tahun</label>
+                  <input type="text" id="reportTahun" class="form-input form-input-sm font-mono" value="2026">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                    <label class="form-label" style="font-size:0.7rem; margin-bottom:0;">Tanggal Laporan</label>
+                    <span id="reportTanggalLaporanTag" style="font-size:0.62rem; color:#38bdf8; font-weight:600;" title="Otomatis H+1 dari Tanggal SPT">(H+1 SPT)</span>
+                  </div>
+                  <input type="date" id="reportTanggalLaporan" class="form-input form-input-sm" value="" onchange="window.reportBuilder ? window.reportBuilder.onTanggalLaporanChange(this.value) : null">
+                  <span id="reportTanggalLaporanPreview" style="font-size:0.68rem; color:#94a3b8; font-weight:500; margin-top:2px; display:block;"></span>
+                </div>
+              </div>
+              <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:8px; margin-top:8px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label" style="font-size:0.7rem;">Nomor SPT</label>
+                  <input type="text" id="reportNomorSpt" class="form-input form-input-sm font-mono" value="" placeholder="Contoh: CK07/T/Bpbpk11/2026/1766">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label" style="font-size:0.7rem;">Tanggal SPT</label>
+                  <input type="date" id="reportTanggalSpt" class="form-input form-input-sm" value="" onchange="window.reportBuilder ? window.reportBuilder.onTanggalSptChange(this.value) : null">
+                  <span id="reportTanggalSptPreview" style="font-size:0.68rem; color:#94a3b8; font-weight:500; margin-top:2px; display:block;"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- SECTION 2: Pelaksana Monev (Default Aktif) -->
+            <div class="doc-dashboard-panel" style="margin-bottom:0; padding:12px 14px;">
+              <div class="dashboard-header" style="margin-bottom:8px; padding-bottom:6px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                  <h4 style="margin:0; font-size:0.82rem; color:var(--text-main);">2. Pelaksana Monev</h4>
+                </div>
+                <label class="checkbox-inline" style="font-size:0.73rem; color:var(--text-muted); font-weight:600; cursor:pointer;">
+                  <input type="checkbox" id="reportIncludePelaksana" checked>
+                  <span>Sertakan Tabel Tanda Tangan</span>
+                </label>
+              </div>
+
+              <div id="reportPelaksanaContainer" style="display:block;">
+                <!-- Baris Ramping Tunggal: Pencarian & Auto-Add Pelaksana (One-Click) -->
+                <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;">
+                  <div style="position:relative; flex:1;">
+                    <input type="text" id="reportPersonelInput" list="reportPersonelDatalist" class="form-input form-input-sm" placeholder="Ketik nama personel, Enter untuk tambah..." style="width:100%; font-size:0.75rem; padding-left:10px;" oninput="window.reportBuilder.onPersonelInput(event)" onchange="window.reportBuilder.onPersonelInput(event)" onkeydown="window.reportBuilder.onPersonelKeydown(event)">
+                    <datalist id="reportPersonelDatalist"></datalist>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-xs" onclick="window.reportBuilder.addPelaksanaFromInput()" title="Tambahkan nama (atau tekan Enter)" style="padding:5px 12px; font-weight:600; font-size:0.73rem; white-space:nowrap;">
+                    + Tambah
+                  </button>
+                </div>
+
+                <!-- Daftar Pegawai yang telah ditambahkan -->
+                <div id="reportPelaksanaList" style="margin-bottom:8px;"></div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(255,255,255,0.08); padding-top:6px;">
+                  <span id="reportPelaksanaCountLabel" style="font-size:0.7rem; color:var(--text-dim);">0 Pelaksana Terpilih</span>
+                  <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.clearPelaksana()">
+                    Hapus Semua
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- SECTION 3: Data Desa & Narasi Hasil Monev -->
+            <div class="doc-dashboard-panel" style="margin-bottom:0; padding:12px 14px;">
+              <div class="dashboard-header" style="margin-bottom:10px; padding-bottom:6px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <h4 style="margin:0; font-size:0.82rem; color:var(--text-main);">3. Data Desa & Catatan Lapangan</h4>
+                </div>
+                <button type="button" class="btn btn-primary btn-xs" onclick="window.reportBuilder.addVillage()">
+                  + Tambah Desa
+                </button>
+              </div>
+
+              <!-- Global Datalist for Desa Autofill -->
+              <datalist id="reportDesaDatalist"></datalist>
+
+              <!-- Container of Village Cards -->
+              <div id="reportVillagesContainer"></div>
+            </div>
+
+          </div>
+
+          <!-- RIGHT COLUMN: Foto & Timestamp Maker & Pengaturan Massal -->
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            
+            <!-- SECTION 4: Dokumentasi Foto Lapangan & Timestamp Maker -->
+            <div class="doc-dashboard-panel" style="margin-bottom:0; padding:12px 14px;">
+              <div class="dashboard-header" style="margin-bottom:10px; padding-bottom:6px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <h4 style="margin:0; font-size:0.82rem; color:var(--text-main);">Dokumentasi Foto Lapangan</h4>
+                  <span class="badge" id="reportPhotosCountBadge" style="font-size:0.68rem;">0 Foto</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <button type="button" class="btn btn-outline-info btn-xs" id="btnToggleReportQuickPanel" onclick="window.reportBuilder.toggleQuickPanel()" style="display:flex; align-items:center; gap:4px; font-weight:600;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    <span id="reportQuickToggleText">Pengaturan Lanjutan</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- JADWAL PERJALANAN DINAS & RENTANG JAM KERJA -->
+              <div class="doc-trip-panel" style="background:rgba(15,23,42,0.6); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:10px 12px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span style="font-size:0.75rem; font-weight:700; color:#e2e8f0;">Jadwal Perjalanan Dinas & Rentang Jam</span>
+                  </div>
+                  <span class="badge badge-accent" id="reportTripDurationBadge" style="font-size:0.68rem; background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.3);">
+                    1 Hari Perjalanan Dinas
+                  </span>
+                </div>
+
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:8px;">
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label" style="font-size:0.68rem; color:var(--text-dim);">Tgl Mulai Dinas</label>
+                    <input type="date" id="reportTripStartDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()">
+                  </div>
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label" style="font-size:0.68rem; color:var(--text-dim);">Tgl Selesai Dinas</label>
+                    <input type="date" id="reportTripEndDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()" placeholder="Kosong = 1 Hari">
+                  </div>
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label" style="font-size:0.68rem; color:var(--text-dim);">Jam Mulai (WIB)</label>
+                    <input type="time" step="1" id="reportTripStartTime" class="form-input form-input-sm font-mono" value="09:14:23">
+                  </div>
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label" style="font-size:0.68rem; color:var(--text-dim);">Jam Selesai (WIB)</label>
+                    <input type="time" step="1" id="reportTripEndTime" class="form-input form-input-sm font-mono" value="15:47:38">
+                  </div>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06);">
+                  <span style="font-size:0.67rem; color:var(--text-muted);">
+                    Jam foto tersebar merata & bertahap.
+                  </span>
+                  <button type="button" class="btn btn-ghost btn-xs text-info" onclick="window.reportBuilder.randomizeWorkHours()" style="font-size:0.68rem; padding:2px 6px; display:inline-flex; align-items:center; gap:3px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="3" ry="3"/><circle cx="8" cy="8" r="1.5"/><circle cx="16" cy="16" r="1.5"/><circle cx="12" cy="12" r="1.5"/></svg>
+                    Acak Jam Kerja
+                  </button>
+                </div>
+              </div>
+
+              <!-- TOMBOL UTAMA: GENERATE TIMESTAMP OTOMATIS (ONE-CLICK) -->
+              <button type="button" class="btn btn-primary" id="btnAutoGenerateTimestamps" onclick="window.reportBuilder.autoGenerateAllTimestamps()" style="width:100%; padding:9px 16px; font-weight:700; font-size:0.86rem; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:10px; background:linear-gradient(135deg, #2563eb 0%, #0284c7 100%); border:none; box-shadow:0 4px 14px rgba(2,132,199,0.35); border-radius:6px; cursor:pointer;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <span>Generate Timestamp Otomatis (Semua Foto)</span>
+              </button>
+
+              <!-- Photo Upload Dropzone Ramping -->
+              <input type="file" id="reportPhotoFileInput" accept="image/*" multiple style="display:none;">
+              <div class="studio-dropzone-bar" id="reportPhotoDropZone" style="padding:10px; margin-bottom:10px; cursor:pointer;" onclick="document.getElementById('reportPhotoFileInput').click()">
+                <div class="dropzone-inner" style="gap:8px;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  <span class="dropzone-text" style="font-size:0.75rem;">Click or drag & drop foto ke sini</span>
+                </div>
+              </div>
+
+              <!-- PANEL PENGATURAN MASSAL STEMPEL (COLLAPSIBLE COMPACT PANEL) -->
+              <div class="doc-quick-setup-panel collapsed" id="reportQuickSetupPanel" style="margin-bottom:10px; background:var(--bg-surface-elevated); border:1px solid var(--border-color); border-radius:var(--radius-sm); overflow:hidden;">
+                <div class="quick-setup-body" id="reportQuickSetupBody" style="padding:12px; display:flex; flex-direction:column; gap:10px;">
+                  
+                  <!-- Section 1: Lokasi & Wilayah Administrasi -->
+                  <div class="quick-setup-section" style="padding:10px 12px; background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.06); border-radius:6px;">
+                    <div class="quick-section-title" style="margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                      <div style="display:flex; align-items:center; gap:6px;">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        <span style="font-size:0.75rem; font-weight:700; color:#cbd5e1;">1. Lokasi & Wilayah Administrasi</span>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:6px;">
+                        <label style="font-size:0.7rem; color:#38bdf8; font-weight:600;">Target Desa:</label>
+                        <select id="reportQuickVillageTarget" class="form-select form-input-sm" style="font-size:0.72rem; padding:2px 8px; border-color:#38bdf8;" onchange="window.reportBuilder.onVillageTargetChange(this.value)">
+                          <option value="preserve" selected>Pertahankan Wilayah Tiap Foto</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="quick-fields-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px;">
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Desa / Kelurahan</label>
+                        <input type="text" id="reportQuickDesa" class="form-input form-input-sm" placeholder="Contoh: Baleagung" oninput="window.reportBuilder.onQuickDesaInput(this.value)">
+                      </div>
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Kecamatan</label>
+                        <input type="text" id="reportQuickKec" class="form-input form-input-sm" placeholder="Contoh: Grabag">
+                      </div>
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Dusun / Lokasi (Opsional)</label>
+                        <input type="text" id="reportQuickDusun" class="form-input form-input-sm" placeholder="Contoh: Dusun Bedoyo">
+                      </div>
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Kabupaten / Kota</label>
+                        <input type="text" id="reportQuickKab" class="form-input form-input-sm" placeholder="Contoh: Magelang">
+                      </div>
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Provinsi</label>
+                        <input type="text" id="reportQuickProv" class="form-input form-input-sm" value="Jawa Tengah">
+                      </div>
+                    </div>
+                    <div class="quick-fields-row" style="display:grid; grid-template-columns: 180px 1fr; gap:8px; margin-top:8px;">
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Format Alamat Stempel</label>
+                        <select id="reportQuickAddressMode" class="form-select form-input-sm" style="font-size:0.72rem;">
+                          <option value="natural" selected>Murni Alamat GPS (Natural)</option>
+                          <option value="structured">Hierarki Wilayah (Dusun, Desa, Kec, Kab)</option>
+                        </select>
+                      </div>
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Alamat Bebas / Tambahan (Opsional)</label>
+                        <input type="text" id="reportQuickCustomAddress" class="form-input form-input-sm" placeholder="Ketik alamat custom jika ingin mengganti nama jalan/lokasi bebas...">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Section 2: Waktu, Tanggal & GPS -->
+                  <div class="quick-setup-section" style="padding:10px 12px; background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.06); border-radius:6px;">
+                    <div class="quick-section-title" style="margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      <span style="font-size:0.75rem; font-weight:700; color:#cbd5e1;">2. Waktu, Tanggal Kalender, GPS & Ukuran Teks</span>
+                    </div>
+                    <div class="quick-fields-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px;">
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);" id="reportQuickDateLabel">Tanggal</label>
+                        <input type="date" id="reportQuickDate" class="form-input form-input-sm">
+                      </div>
+                      <div class="quick-field" id="reportQuickEndDateGroup" style="display:none;">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Tanggal Selesai</label>
+                        <input type="date" id="reportQuickEndDate" class="form-input form-input-sm">
+                      </div>
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Jam Mulai (WIB)</label>
+                        <input type="time" step="1" id="reportQuickTime" class="form-input form-input-sm font-mono" value="09:14:23">
+                      </div>
+                      <div class="quick-field" id="reportQuickEndTimeGroup" style="display:none;">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Jam Selesai Maks (WIB)</label>
+                        <input type="time" step="1" id="reportQuickEndTime" class="form-input form-input-sm font-mono" value="15:00:00">
+                      </div>
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Alur Waktu Antar-Foto</label>
+                        <select id="reportQuickTimeMode" class="form-select form-input-sm" style="font-size:0.72rem;" onchange="window.reportBuilder.onTimeModeChange(this.value)">
+                          <option value="sequential" selected>Berurutan (+3 s/d 7 mnt)</option>
+                          <option value="multiday">Sebar Merata Multi-Hari</option>
+                          <option value="jitter">Jam Sama + Acak Detik</option>
+                          <option value="exact">Waktu Sama Persis</option>
+                        </select>
+                      </div>
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Latitude</label>
+                        <input type="text" id="reportQuickLat" class="form-input form-input-sm font-mono" placeholder="-7.585500">
+                      </div>
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Longitude</label>
+                        <input type="text" id="reportQuickLon" class="form-input form-input-sm font-mono" placeholder="110.297400">
+                      </div>
+                      <div class="quick-field">
+                        <label style="font-size:0.68rem; color:var(--text-dim);">Ukuran Teks</label>
+                        <select id="reportQuickFontScale" class="form-select form-input-sm" style="font-size:0.72rem;">
+                          <option value="0.8">Kecil (80%)</option>
+                          <option value="1.0" selected>Standar (100%)</option>
+                          <option value="1.2">Besar (120%)</option>
+                          <option value="1.4">Ekstra Besar (140%)</option>
+                        </select>
+                      </div>
+                      <div class="quick-field" style="justify-content:flex-end;">
+                        <button type="button" class="btn btn-secondary btn-sm" style="height:32px; font-size:0.72rem; display:inline-flex; align-items:center; gap:4px;" onclick="window.openReportQuickMapPicker()">
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                          Pilih di Peta
+                        </button>
+                      </div>
+                    </div>
+                    <div style="margin-top:8px;">
+                      <label class="checkbox-inline" style="font-size:0.72rem; color:var(--text-muted); cursor:pointer;">
+                        <input type="checkbox" id="reportQuickGpsJitter" checked>
+                        <span>GPS Jitter acak (6–22m per foto)</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Section 3: Tombol Aksi Penerapan Massal -->
+                  <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-top:2px;">
+                    <div style="display:flex; gap:8px;">
+                      <button type="button" class="btn btn-primary btn-sm" id="btnReportQuickApplyAll" onclick="window.reportBuilder.applyQuickSetup('all')">
+                        Terapkan ke SEMUA Foto (<span id="reportQuickApplyAllCount">0</span>)
+                      </button>
+                      <button type="button" class="btn btn-secondary btn-sm" id="btnReportQuickApplySelected" onclick="window.reportBuilder.applyQuickSetup('selected')">
+                        Terapkan ke Terpilih (<span id="reportQuickSelectedCount">0</span>)
+                      </button>
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-xs text-muted" onclick="window.reportBuilder.toggleQuickPanel()">
+                      Ciutkan
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- BATCH ACTION BAR LENGKAP -->
+              <div class="doc-batch-bar" id="reportBatchBar" style="padding:6px 10px; margin-bottom:8px; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:6px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                <div class="doc-batch-left" style="display:flex; align-items:center; gap:8px;">
+                  <label class="doc-select-all-label" style="font-size:0.72rem; color:var(--text-muted); display:flex; align-items:center; gap:5px; cursor:pointer; margin:0;">
+                    <input type="checkbox" id="reportSelectAllCheckbox" onchange="window.reportBuilder.toggleSelectAll(this.checked)">
+                    <span>Pilih Semua</span>
+                  </label>
+                  <span class="badge badge-accent" id="reportSelectedCountBadge" style="font-size:0.68rem;">0 Dipilih</span>
+                </div>
+                <div class="doc-batch-actions" style="display:flex; gap:4px; flex-wrap:wrap;">
+                  <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.jitterPhotosTime()" title="Atur urutan jam dan menit realistis" style="display:inline-flex; align-items:center; gap:3px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Time Jitter
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.jitterPhotosGps()" title="Acak koordinat GPS unik per foto" style="display:inline-flex; align-items:center; gap:3px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> GPS Jitter
+                  </button>
+                  <button type="button" class="btn btn-warning btn-xs" onclick="window.reportBuilder.batchSetKeepOriginal(true)" title="Biarkan foto terpilih tetap asli tanpa stempel" style="display:inline-flex; align-items:center; gap:3px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Foto Asli
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary btn-xs" onclick="window.reportBuilder.batchSetKeepOriginal(false)" title="Pasang stempel pada foto terpilih" style="display:inline-flex; align-items:center; gap:3px;">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Beri Stempel
+                  </button>
+                  <button type="button" class="btn btn-outline-danger btn-xs" id="btnReportDeleteSelected" onclick="window.reportBuilder.deleteSelectedPhotos()" style="display:none; align-items:center; gap:3px;" title="Hapus foto terpilih">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Hapus (<span id="reportDeleteSelectedCount">0</span>)
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.clearPhotos()" title="Hapus semua foto">
+                    Hapus Semua
+                  </button>
+                </div>
+              </div>
+
+              <!-- Photo Gallery Grid (2-Column Responsive) -->
+              <div id="reportPhotosGrid" style="display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; max-height:480px; overflow-y:auto; padding-right:2px; margin-bottom:8px;"></div>
+
+            </div>
+
+            <!-- SECTION 5: Tombol Download Utama -->
+            <div class="doc-dashboard-panel" style="margin-bottom:0; padding:12px 14px; background:var(--bg-surface-elevated);">
+              <button type="button" class="btn btn-success btn-block" id="btnGenerateReportDocxBottom" onclick="window.reportBuilder.generateDocx()" style="width:100%; padding:10px 14px; font-size:0.88rem; font-weight:700; justify-content:center; display:flex; align-items:center; gap:8px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download Laporan (.docx)
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- =========================================================
+       MODAL: Large & Clear Photo Lightbox Viewer
+       ========================================================= -->
+  <div class="modal-backdrop lightbox-backdrop" id="photoLightboxModal">
+    <div class="lightbox-container">
+      <div class="lightbox-header">
+        <div class="lightbox-meta">
+          <span class="lightbox-title" id="lightboxTitle">Foto #1 — Preview Besar</span>
+          <span class="lightbox-subtitle font-mono" id="lightboxSubtitle">-</span>
+          <span class="badge badge-accent" id="lightboxStampBadge">● Live Stamp</span>
+        </div>
+        <div class="lightbox-actions">
+          <button type="button" class="btn btn-outline btn-xs" id="btnLightboxToggleRaw" onclick="window.toggleLightboxRaw()" title="Beralih ke Foto Asli / Stempel">
+            Foto Asli
+          </button>
+          <button type="button" class="btn btn-primary btn-xs" onclick="window.openEditorFromLightbox()" title="Buka panel formulir edit untuk foto ini" style="display:inline-flex; align-items:center; gap:4px;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Edit Foto
+          </button>
+          <button type="button" class="btn btn-secondary btn-xs" onclick="window.downloadLightboxPhoto()" title="Download JPG foto ini" style="display:inline-flex; align-items:center; gap:4px;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Unduh JPG
+          </button>
+          <button type="button" class="lightbox-close" onclick="window.closePhotoLightbox()" title="Tutup pratinjau (Esc)">&times;</button>
+        </div>
+      </div>
+
+      <div class="lightbox-stage" id="lightboxStage">
+        <button type="button" class="lightbox-nav-btn lightbox-prev-btn" onclick="window.navigateLightbox(-1)" title="Foto Sebelumnya (Panah Kiri)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="lightbox-canvas-wrapper" id="lightboxCanvasWrapper">
+          <canvas id="lightboxCanvas"></canvas>
+        </div>
+        <button type="button" class="lightbox-nav-btn lightbox-next-btn" onclick="window.navigateLightbox(1)" title="Foto Berikutnya (Panah Kanan)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
+      <div class="lightbox-footer">
+        <div class="lightbox-info-pill" id="lightboxLocationPill">
+          Lokasi: -
+        </div>
+        <div class="lightbox-info-pill font-mono" id="lightboxTimePill">
+          Waktu: -
+        </div>
+        <div class="lightbox-keyboard-hint">
+          <span>Gunakan <kbd>←</kbd> <kbd>→</kbd> untuk ganti foto • <kbd>Esc</kbd> untuk tutup</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL: Edit Photo Stamp (Doc / Report Editor)
+       ========================================================= -->
+  <div class="modal-backdrop" id="docEditModal">
+    <div class="modal-card modal-photo-editor">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <h3 id="modalPhotoTitle" style="margin:0;">Edit Stempel Foto</h3>
+          <span class="badge badge-accent" style="font-size:0.7rem;">Ukuran Penuh & Tajam</span>
+        </div>
+        <button class="modal-close" onclick="window.closeActivePhotoModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-preview">
+          <div class="modal-preview-canvas-wrap" id="modalPreviewCanvasWrap" title="Klik untuk Pratinjau Layar Penuh">
+            <canvas id="modalPreviewCanvas"></canvas>
+            <div id="cropBoundingBox" class="crop-bounding-box" style="display:none; position:absolute; border:2px dashed #f59e0b; background:rgba(245, 158, 11, 0.2); pointer-events:none; z-index:15; box-shadow:0 0 0 9999px rgba(0,0,0,0.55);">
+              <span id="cropDimBadge" style="position:absolute; bottom:4px; right:4px; background:rgba(15,23,42,0.85); color:#facc15; font-size:0.65rem; padding:2px 4px; border-radius:3px; font-family:monospace; pointer-events:none;"></span>
+            </div>
+            <span class="preview-zoom-badge" id="modalPreviewZoomBadge" style="display:inline-flex; align-items:center; gap:4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Klik untuk Perbesar Penuh</span>
+          </div>
+          <div class="modal-preview-bar">
+            <span class="live-stamp-indicator">● Live Stamp Real-Time</span>
+            <button type="button" class="btn btn-warning btn-xs" id="btnToggleCropDraw" onclick="window.toggleCropDrawMode()" style="display:inline-flex; align-items:center; gap:3px;">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> Tarik Kotak Seleksi (Bounding Box)
+            </button>
+            <button type="button" class="btn btn-primary btn-xs" onclick="window.openLightboxFromModal()" style="display:inline-flex; align-items:center; gap:3px;">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Layar Penuh
+            </button>
+            <button type="button" class="btn btn-outline btn-xs" id="btnToggleModalRaw" onclick="window.toggleActiveModalRaw()">
+              Foto Asli
+            </button>
+            <button type="button" class="btn btn-outline btn-xs" onclick="window.openModalMapPicker()" style="display:inline-flex; align-items:center; gap:3px;">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> Google Maps
+            </button>
+          </div>
+        </div>
+        <div class="modal-form">
+          <div class="form-group" style="background:rgba(234,179,8,0.1); border:1px solid rgba(234,179,8,0.3); border-radius:8px; padding:10px 12px; margin-bottom:14px;">
+            <label class="checkbox-inline" style="font-weight:600; color:#facc15; cursor:pointer; display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" id="modalKeepOriginal" onchange="window.onActiveModalKeepOriginalChange(this.checked)">
+              <span style="display:inline-flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Tetap Pertahankan Foto Asli (Jangan beri stempel pada foto ini)</span>
+            </label>
+            <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px; margin-left:24px;">
+              Foto ini tidak akan distempel koordinat/waktu dan tetap utuh seperti berkas aslinya saat disimpan/digenerate.
+            </div>
+          </div>
+          <!-- KONTROL CROP MANUAL (BOUNDING BOX PADA FOTO LANGSUNG) -->
+          <div id="modalCropBar" style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); border-radius:8px; padding:10px 12px; margin-bottom:14px; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="font-weight:700; color:#fbbf24; font-size:0.82rem; display:flex; align-items:center; gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                <span>Potong Foto (Manual Draw Bounding Box)</span>
+              </div>
+              <span id="modalCropStatusBadge" class="badge" style="background:rgba(245,158,11,0.2); color:#facc15; font-size:0.68rem;">Siap</span>
+            </div>
+            <div style="font-size:0.72rem; color:var(--text-dim);" id="modalCropInfoText">
+              <strong>Cara:</strong> Klik tombol <em>Tarik Kotak Seleksi</em> di bawah foto, lalu klik & seret (drag) mouse langsung di atas foto untuk menentukan area potongan.
+            </div>
+            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+              <button type="button" class="btn btn-warning btn-xs" id="btnModalApplyCrop" onclick="window.modalApplyCrop()" style="display:none; font-weight:700; align-items:center; gap:3px;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> Potong Sesuai Kotak Bounding Box
+              </button>
+              <button type="button" class="btn btn-outline-warning btn-xs" id="btnModalQuickCrop43" onclick="window.modalQuickCropAspect43()" style="font-weight:600; display:inline-flex; align-items:center; gap:3px;" title="Center-crop otomatis ke rasio foto 4:3 landscape resmi">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Sesuaikan Rasio 4:3 Otomatis
+              </button>
+              <button type="button" class="btn btn-ghost btn-xs text-danger" id="btnModalCancelCropBox" onclick="window.modalCancelCropBox()" style="display:none;">
+                Batal Seleksi
+              </button>
+              <button type="button" class="btn btn-outline btn-xs" id="btnModalResetCrop" onclick="window.modalResetCrop()" style="display:none; align-items:center; gap:3px;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Reset Foto Asli
+              </button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Pilih Tanggal (Buka Kalender)</label>
+            <input type="date" id="modalDatePicker" class="form-input">
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Jam & Menit (WIB)</label>
+              <input type="time" step="1" id="modalTimePicker" class="form-input font-mono">
+            </div>
+            <div class="form-group">
+              <label>Quick Jitter Waktu</label>
+              <button type="button" class="btn btn-secondary btn-sm" style="width:100%; height:38px; display:inline-flex; align-items:center; justify-content:center; gap:4px;" onclick="window.jitterModalTime()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Acak Detik (±30d)
+              </button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Teks Stempel Waktu (Otomatis)</label>
+            <input type="text" id="modalTimeStr" class="form-input font-mono" readonly style="background:rgba(0,0,0,0.3); color:#38bdf8;">
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Latitude</label>
+              <input type="text" id="modalLat" class="form-input font-mono">
+            </div>
+            <div class="form-group">
+              <label>Longitude</label>
+              <input type="text" id="modalLon" class="form-input font-mono">
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-top:-6px; margin-bottom:12px; gap:8px; flex-wrap:wrap;">
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn btn-secondary btn-xs" onclick="window.openModalMapPicker()" style="display:inline-flex; align-items:center; gap:3px;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/></svg> Pilih di Google Maps
+              </button>
+              <button type="button" class="btn btn-primary btn-xs" onclick="window.reverseGeocodeModalCoords()" id="btnModalReverseGeocode" title="Deteksi otomatis alamat (Dusun, Desa, Kecamatan, Kab) dari koordinat GPS" style="display:inline-flex; align-items:center; gap:3px;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Deteksi Alamat GPS
+              </button>
+            </div>
+            <button type="button" class="btn btn-outline btn-xs" onclick="window.jitterModalCoords()">
+              Acak Jitter GPS Foto Ini (±15m)
+            </button>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Format Alamat Stempel</label>
+              <select id="modalAddressMode" class="form-select" onchange="window.onModalAddressModeChange ? window.onModalAddressModeChange(this.value) : null">
+                <option value="natural" selected>Murni Alamat GPS / Penitikkan Peta (Natural)</option>
+                <option value="structured">Hierarki Wilayah (Dusun, Desa, Kec, Kab)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Ukuran Teks Stempel</label>
+              <select id="modalFontScale" class="form-select" onchange="window.onModalFontScaleChange ? window.onModalFontScaleChange(this.value) : null">
+                <option value="0.8">Kecil (80%)</option>
+                <option value="1.0" selected>Standar (100%)</option>
+                <option value="1.2">Besar (120%)</option>
+                <option value="1.4">Ekstra Besar (140%)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="background:rgba(56,189,248,0.06); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:10px 12px; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <label style="margin:0; font-weight:600; color:#38bdf8; font-size:0.82rem;">Alamat Murni Tangkapan GPS / Peta (Natural)</label>
+              <span style="font-size:0.72rem; color:var(--text-dim);">Enter untuk baris baru</span>
+            </div>
+            <textarea id="modalCustomAddress" class="form-input" rows="2" placeholder="Contoh: Jl. Grabag - Secang, Dusun Bedoyo, Baleagung, Grabag, Magelang" oninput="window.onModalCustomAddressInput ? window.onModalCustomAddressInput(this.value) : null"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Dusun / Lokasi Spesifik</label>
+            <input type="text" id="modalDusun" class="form-input" placeholder="Contoh: Dusun Bedoyo">
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Desa / Kelurahan</label>
+              <input type="text" id="modalDesa" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>Kecamatan</label>
+              <input type="text" id="modalKecamatan" class="form-input">
+            </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Kabupaten</label>
+              <input type="text" id="modalKabupaten" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>Provinsi</label>
+              <input type="text" id="modalProvinsi" class="form-input">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="window.closeActivePhotoModal()">Batal</button>
+        <button class="btn btn-primary" onclick="window.saveActivePhotoChanges()">Simpan Perubahan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL: Help / Info
+       ========================================================= -->
+  <div class="modal-backdrop" id="helpModal">
+    <div class="modal-card modal-sm">
+      <div class="modal-header">
+        <h3>Panduan Laporan Word Monev</h3>
+        <button class="modal-close" onclick="window.closeHelpModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="flex-direction:column;">
+        <ul class="help-list">
+          <li><strong>Data Administrasi & SPT</strong>: Isi Kabupaten, Tahun, Tanggal SPT & Laporan. Sistem menghitung tanggal laporan otomatis (H+1 selesai dinas).</li>
+          <li><strong>Pelaksana Monev</strong>: Tambahkan pelaksana survei dari daftar 32 personel BPBPK / Kementerian PU atau nama custom. Format tabel tanda tangan zig-zag otomatis dihasilkan.</li>
+          <li><strong>Catatan Lapangan & Gemini AI</strong>: Tulis catatan temuan di tiap desa, lalu klik <em>Draft Narasi Resmi</em>. Narasi akan dijabarkan secara profesional dan terstruktur anti-pemalsuan (hanya mengelaborasi data nyata).</li>
+          <li><strong>Dokumentasi Foto Terstempel</strong>: Unggah foto kegiatan survei lapangan. Gunakan fitur <em>Generate Timestamp Otomatis</em> untuk penataan jam kerja natural bertahap.</li>
+          <li><strong>Buka Dokumen Eksisting</strong>: Anda dapat mengunggah file .docx laporan berjalan untuk diaudit kelengkapannya secara real-time.</li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-block" onclick="window.closeHelpModal()">Mengerti</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL: Smart Timeline & Location Grouper
+       ========================================================= -->
+  <div class="modal-backdrop" id="smartTimelineModal">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2.2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          <h3 style="margin:0;">Smart Timeline & Location Grouper</h3>
+        </div>
+        <button class="modal-close" onclick="window.closeSmartTimeline()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="flex-direction:column; gap:0; padding:0;">
+        <div class="st-config-bar">
+          <div class="st-steps-row">
+            <div class="st-step-block" style="min-width: 250px;">
+              <div class="st-step-label"><span class="st-step-num">1</span> Tanggal Survei (Mulai s/d Selesai)</div>
+              <div class="range-inputs" style="margin:0;">
+                <input type="date" id="stDatePicker" class="form-input form-input-sm" value="2026-08-14" title="Tanggal Mulai">
+                <span>s/d</span>
+                <input type="date" id="stEndDatePicker" class="form-input form-input-sm" value="2026-08-14" title="Tanggal Selesai">
+              </div>
+              <div class="st-date-badge" id="stDateBadge">Jumat, 14 Agustus 2026</div>
+              <input type="hidden" id="stDateStr" value="14 Agustus 2026">
+              <input type="hidden" id="stDayName" value="Jumat">
+            </div>
+
+            <div class="st-step-block">
+              <div class="st-step-label"><span class="st-step-num">2</span> Jam Kerja (Mulai s/d Maks Selesai)</div>
+              <div class="range-inputs" style="margin:0;">
+                <input type="text" id="stStartTime" class="form-input form-input-sm font-mono" value="09:15:23" placeholder="09:15:23" title="Jam Mulai Aktivitas">
+                <span>s/d</span>
+                <input type="text" id="stEndTime" class="form-input form-input-sm font-mono" value="15:00:00" placeholder="15:00:00" title="Jam Selesai Maksimal (Sore)">
+              </div>
+              <p class="st-step-hint">Jam mulai & batas maksimal sore (realistis)</p>
+            </div>
+
+            <div class="st-step-block">
+              <div class="st-step-label"><span class="st-step-num">3</span> Jeda Antar Foto (detik)</div>
+              <div class="range-inputs">
+                <input type="number" id="stIntraMin" class="form-input form-input-sm" value="45" min="15" max="180">
+                <span>–</span>
+                <input type="number" id="stIntraMax" class="form-input form-input-sm" value="165" min="30" max="300">
+              </div>
+              <p class="st-step-hint">Selisih detik antar foto dalam satu spot</p>
+            </div>
+
+            <div class="st-step-block">
+              <div class="st-step-label"><span class="st-step-num">4</span> Transit Antar Spot (menit)</div>
+              <div class="range-inputs">
+                <input type="number" id="stTransitMin" class="form-input form-input-sm" value="30" min="15" max="90">
+                <span>–</span>
+                <input type="number" id="stTransitMax" class="form-input form-input-sm" value="50" min="20" max="120">
+              </div>
+              <p class="st-step-hint">Waktu perjalanan pindah ke desa/dusun berikutnya</p>
+            </div>
+          </div>
+
+          <div class="st-config-actions">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" id="stGpsJitterToggle" checked style="width:18px; height:18px; accent-color:var(--accent-cyan); cursor:pointer;">
+              <label for="stGpsJitterToggle" style="margin:0; cursor:pointer; font-size:0.85rem; color:var(--text-main); font-weight:600;">
+                Jitter Koordinat GPS (5–25m) agar tidak plek ketiplek sama
+              </label>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="stBtnRecalculate">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              Acak Ulang Jitter
+            </button>
+          </div>
+        </div>
+
+        <div class="st-results-container" id="stResultsContainer" style="padding:20px;">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+
+      <div class="modal-footer" style="justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-outline btn-xs" id="stBtnSelectAll">Pilih Semua Foto</button>
+          <button class="btn btn-outline btn-xs" id="stBtnDeselectAll">Batal Pilih</button>
+          <span class="badge badge-accent" id="stSelectedBadge">Semua Terpilih</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" id="stBtnClose" onclick="window.closeSmartTimeline()">Batal</button>
+          <button class="btn btn-primary" id="stBtnApply" style="min-width:200px;">Terapkan ke Foto</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL: Google Maps / Leaflet Coordinate Picker
+       ========================================================= -->
+  <div class="modal-backdrop" id="mapPickerModal">
+    <div class="modal-card modal-map">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <h3 style="margin:0;">Google Maps — Pilih Koordinat & Alamat Geotag</h3>
+          <span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8; font-size:0.7rem; border:1px solid rgba(56,189,248,0.3);">Google HD</span>
+        </div>
+        <button class="modal-close" onclick="window.closeMapPicker()">&times;</button>
+      </div>
+      <div class="modal-body" style="flex-direction:column; gap:12px; padding:16px;">
+        <div class="map-search-row">
+          <input type="text" id="mapSearchInput" class="form-input" placeholder="Cari desa, dusun, atau jalan... (cth: Dusun Bedoyo, Grabag, Magelang)">
+          <button class="btn btn-secondary btn-sm" onclick="window.searchMapLocation()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Cari Lokasi
+          </button>
+        </div>
+
+        <div class="map-layer-switcher" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div class="btn-group btn-group-xs" id="mapLayerButtons" style="display:flex; gap:5px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-secondary btn-xs active" id="btnLayerGoogleHybrid" onclick="window.setMapLayer('googleHybrid')">Google Satelit (Hybrid)</button>
+            <button type="button" class="btn btn-secondary btn-xs" id="btnLayerGoogleRoad" onclick="window.setMapLayer('googleRoad')">Google Jalan</button>
+            <button type="button" class="btn btn-secondary btn-xs" id="btnLayerGoogleTerrain" onclick="window.setMapLayer('googleTerrain')">Google Medan</button>
+            <button type="button" class="btn btn-secondary btn-xs" id="btnLayerOsm" onclick="window.setMapLayer('osm')">OpenStreetMap</button>
+          </div>
+          <span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:0.7rem;">Auto Reverse GPS Aktif</span>
+        </div>
+
+        <p class="help-text" style="margin:0;">Klik di peta Google Maps untuk memilih titik koordinat. Data alamat lengkap (Dusun, Desa, Kec, Kab) akan terdeteksi otomatis persis seperti aplikasi geotag GPS.</p>
+        <div id="leafletMap" class="leaflet-map-container"></div>
+        <div class="map-coords-preview" id="mapCoordsPreview">
+          <div class="map-coord-item">
+            <span class="map-coord-label">Latitude:</span>
+            <span class="map-coord-value font-mono" id="mapPreviewLat">–</span>
+          </div>
+          <div class="map-coord-item">
+            <span class="map-coord-label">Longitude:</span>
+            <span class="map-coord-value font-mono" id="mapPreviewLon">–</span>
+          </div>
+          <div class="map-coord-item" style="width:100%; flex-direction:column; align-items:flex-start; gap:4px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+              <span class="map-coord-label">Alamat Murni Tangkapan GPS / Peta (Dapat diedit bebas):</span>
+              <span class="map-coord-value" id="mapPreviewAddr" style="font-size:0.72rem; color:var(--text-dim);">Klik peta untuk memilih titik</span>
+            </div>
+            <textarea id="mapPreviewAddrInput" class="form-input form-input-sm" rows="2" style="width:100%; font-size:0.8rem; background:rgba(0,0,0,0.35); border-color:rgba(56,189,248,0.3);" placeholder="Klik titik di peta untuk memuat alamat GPS..."></textarea>
+          </div>
+          <div class="map-addr-parsed" id="mapAddrParsed" style="display:flex; gap:12px; font-size:0.75rem; flex-wrap:wrap; width:100%; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px;">
+            <span>Dusun: <strong id="mapPreviewDusun" style="color:#34d399;">–</strong></span>
+            <span>Desa: <strong id="mapPreviewDesa" style="color:#38bdf8;">–</strong></span>
+            <span>Kec: <strong id="mapPreviewKec" style="color:#38bdf8;">–</strong></span>
+            <span>Kab: <strong id="mapPreviewKab" style="color:#38bdf8;">–</strong></span>
+            <span>Prov: <strong id="mapPreviewProv" style="color:#38bdf8;">–</strong></span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:space-between; flex-wrap:wrap; gap:10px;">
+        <button class="btn btn-secondary" onclick="window.closeMapPicker()">Batal</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="btnMapApplyAll" onclick="window.mapPickerApply('all')" disabled style="display:inline-flex; align-items:center; gap:4px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Gunakan & Terapkan ke SEMUA Foto
+          </button>
+          <button class="btn btn-secondary" id="btnMapApplySelected" onclick="window.mapPickerApply('selected')" disabled>
+            Terapkan ke Terpilih Saja
+          </button>
+          <button class="btn btn-outline" id="btnConfirmMapCoords" onclick="window.confirmMapCoords()" disabled>
+            Gunakan Koordinat & Alamat
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL: Error Catcher & System Diagnostics
+       ========================================================= -->
+  <div class="modal-backdrop" id="errorLogsModal">
+    <div class="modal-card" style="max-width:750px; width:95%;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <h3 style="margin:0;">Error Catcher & Log Sistem</h3>
+        </div>
+        <button class="modal-close" onclick="window.closeErrorLogsModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="flex-direction:column; gap:12px; padding:16px;">
+        <div style="font-size:0.8rem; color:var(--text-dim);">
+          Berkas log: <code id="errorLogsPath" class="font-mono" style="color:var(--text-main);">data/logs/error.log</code>
+        </div>
+        <pre id="errorLogsContent" class="font-mono" style="background:#090d16; color:#f87171; padding:14px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); max-height:360px; overflow-y:auto; font-size:0.75rem; white-space:pre-wrap; word-break:break-word;"></pre>
+      </div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        <button class="btn btn-outline btn-sm" onclick="window.clearErrorLogs()" style="color:#ef4444; border-color:rgba(239,68,68,0.3); display:inline-flex; align-items:center; gap:4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Bersihkan Log
+        </button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="window.viewErrorLogs()" style="display:inline-flex; align-items:center; gap:4px;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Segarkan
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="window.closeErrorLogsModal()">Tutup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Toast Container -->
+  <div id="errorToastArea" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px; max-width:400px; pointer-events:none;"></div>
+
+  <!-- Modular Application Entry Point -->
+  <script type="module" src="/js/app.js?v=4.0"></script>
+</body>
+</html>
