@@ -26,5 +26,20 @@ echo Memulai server aplikasi di http://localhost:8501 ...
 echo Tekan Ctrl+C untuk menghentikan server.
 echo.
 
-python server.py
+:: Deteksi python interpreter yang memiliki dependensi (prioritas Python 3.10)
+set "PYTHON_EXE="
+if exist "%LOCALAPPDATA%\Programs\Python\Python310\python.exe" (
+    set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python310\python.exe"
+)
+if not defined PYTHON_EXE (
+    py -3.10 -c "exit()" >nul 2>&1 && set "PYTHON_EXE=py -3.10"
+)
+if not defined PYTHON_EXE (
+    py -c "exit()" >nul 2>&1 && set "PYTHON_EXE=py"
+)
+if not defined PYTHON_EXE (
+    set "PYTHON_EXE=python"
+)
+
+%PYTHON_EXE% server.py
 pause
