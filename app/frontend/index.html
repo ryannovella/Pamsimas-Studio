@@ -17,36 +17,66 @@
   <div class="app-layout">
 
     <!-- =========================================================
-         TOP HEADER (STANDALONE LAPORAN WORD)
+         TOP UNIFIED HEADER (STANDALONE MONEV STUDIO)
          ========================================================= -->
     <header class="app-header">
-      <div class="brand">
-        <div class="brand-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-          </svg>
+      <div class="header-left">
+        <div class="brand">
+          <div class="brand-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          </div>
+          <div class="brand-info">
+            <h1 class="brand-title">PAMSIMAS <span>STUDIO</span></h1>
+            <span class="brand-tag">Monev Word</span>
+          </div>
         </div>
-        <div class="brand-info">
-          <h1 class="brand-title">PAMSIMAS <span>STUDIO</span></h1>
-          <span style="font-size:0.7rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-left:8px;">Laporan Word Monev</span>
-        </div>
-      </div>
 
-      <div style="display:flex; align-items:center; gap:10px;">
-        <span class="badge badge-accent" id="reportVillagesBadge" style="background:#2563eb; color:#fff; font-size:0.75rem; padding:4px 10px;">1 Desa</span>
+        <div class="header-divider"></div>
+
+        <div class="header-doc-meta">
+          <span class="header-doc-title" id="reportTitlePreview">Monitoring dan Evaluasi Kegiatan Pamsimas</span>
+          <span class="header-doc-subtitle" id="reportStatusSummary">Format resmi Kementerian PU</span>
+        </div>
       </div>
 
       <div class="header-actions">
-        <button class="btn btn-secondary btn-sm" id="btnViewErrorLogs" onclick="window.viewErrorLogs ? window.viewErrorLogs() : null">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          Log Error
+        <!-- Village Count Chip -->
+        <span class="doc-meta-chip" id="reportVillagesBadge">1 Desa</span>
+
+        <!-- Audit Button & Score -->
+        <button type="button" class="btn btn-secondary btn-sm" id="btnToggleAuditPanel" onclick="window.reportBuilder.toggleAuditCard()" title="Checklist audit kelengkapan dokumen">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span>Audit: <strong id="reportAuditToolbarScore" style="color:var(--text-main);">0%</strong></span>
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="window.showHelpModal ? window.showHelpModal() : null">
+
+        <!-- Upload Existing Docx -->
+        <input type="file" id="reportExistingDocxInput" accept=".docx" style="display:none;" onchange="window.reportBuilder.handleExistingDocxUpload(event)">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnUploadExistingDocx" onclick="document.getElementById('reportExistingDocxInput').click()" title="Buka / ekstrak dokumen Word (.docx) eksisting">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>Buka Dokumen</span>
+        </button>
+
+        <!-- Panduan Modal -->
+        <button type="button" class="btn btn-ghost btn-sm" onclick="window.showHelpModal ? window.showHelpModal() : null" title="Panduan penggunaan">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          Panduan
+          <span>Panduan</span>
+        </button>
+
+        <!-- Logs -->
+        <button type="button" class="btn btn-ghost btn-sm text-dim" id="btnViewErrorLogs" onclick="window.viewErrorLogs ? window.viewErrorLogs() : null" title="Lihat log error sistem">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Logs</span>
+        </button>
+
+        <!-- Primary CTA: Generate & Download Word -->
+        <button type="button" class="btn btn-primary btn-sm" id="btnGenerateReportDocx" onclick="window.reportBuilder.generateDocx()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Download .docx</span>
         </button>
       </div>
     </header>
@@ -55,10 +85,10 @@
          MAIN: PEMBUAT LAPORAN WORD (.DOCX) - MONEV PAMSIMAS
          ========================================================= -->
     <main id="viewReportBuilder" class="view-panel active" role="main" style="display:block; width:100%;">
-      <div class="report-builder-container" style="max-width:1400px; margin:0 auto; padding:18px 24px 60px 24px; width:100%;">
+      <div class="report-builder-container">
 
         <!-- Success Toast Notification -->
-        <div id="reportSuccessNotice" style="display:none; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); color:#34d399; padding:12px 18px; border-radius:8px; margin-bottom:16px; font-size:0.85rem; align-items:center; justify-content:space-between;">
+        <div id="reportSuccessNotice" class="report-toast-notice" style="display:none;">
           <div style="display:flex; align-items:center; gap:8px;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             <span><strong>Berhasil!</strong> Dokumen Word (.docx) berhasil dibuat dan di-download.</span>
@@ -66,118 +96,78 @@
           <button type="button" class="btn btn-ghost btn-xs text-muted" onclick="this.parentElement.style.display='none'">&times;</button>
         </div>
 
-        <!-- Top Action Bar -->
-        <div class="doc-compact-toolbar" style="margin-bottom:16px;">
-          <div class="toolbar-left">
-            <div class="toolbar-icon" style="color:#38bdf8;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-              </svg>
-            </div>
-            <div class="toolbar-meta">
-              <span class="toolbar-title" id="reportTitlePreview" style="font-weight:700; color:var(--text-main);">
-                Monitoring dan Evaluasi Kegiatan Pamsimas
-              </span>
-              <span class="toolbar-status" id="reportStatusSummary" style="color:var(--text-muted); font-size:0.75rem;">
-                Format resmi Kementerian PU
-              </span>
-            </div>
-          </div>
-
-          <div class="toolbar-actions" style="display:flex; align-items:center; gap:8px;">
-            <input type="file" id="reportExistingDocxInput" accept=".docx" style="display:none;" onchange="window.reportBuilder.handleExistingDocxUpload(event)">
-            <button type="button" class="btn btn-outline btn-sm" id="btnUploadExistingDocx" onclick="document.getElementById('reportExistingDocxInput').click()" title="Upload dokumen Word (.docx) eksisting" style="border-color:#38bdf8; color:#38bdf8; font-weight:600; display:inline-flex; align-items:center; gap:6px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              <span>Upload Dokumen (.docx)</span>
-            </button>
-            <button type="button" class="btn btn-outline btn-sm" id="btnToggleAuditPanel" onclick="window.reportBuilder.toggleAuditCard()" title="Checklist audit kelengkapan dokumen" style="font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:6px; border-color:rgba(56,189,248,0.35); color:#e2e8f0;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-              <span>Audit: <strong id="reportAuditToolbarScore" style="color:#38bdf8;">0%</strong></span>
-            </button>
-            <button type="button" class="btn btn-success btn-sm" id="btnGenerateReportDocx" onclick="window.reportBuilder.generateDocx()" style="font-weight:600; padding:6px 14px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Download .docx
-            </button>
-          </div>
-        </div>
-
         <!-- Panel Audit Kelengkapan Dokumen Berjalan (Otomatis Muncul Saat Dokumen Dibuka & Terbarui Real-time) -->
-        <div id="reportAuditCard" class="doc-dashboard-panel" style="display:none; margin-bottom:16px; padding:14px 18px; border:1px solid rgba(56,189,248,0.3); background:rgba(15,23,42,0.85); box-shadow:0 4px 20px rgba(0,0,0,0.3); border-radius:10px;">
+        <div id="reportAuditCard" class="doc-dashboard-panel report-audit-panel" style="display:none;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
             <div style="display:flex; align-items:center; gap:8px;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-              <h4 style="margin:0; font-size:0.92rem; color:var(--text-main); font-weight:700;">Audit Kelengkapan Dokumen (Real-time)</h4>
-              <span id="reportAuditBadge" style="font-size:0.75rem; padding:2px 10px; border-radius:12px; font-weight:700; background:rgba(56,189,248,0.2); color:#38bdf8; border:1px solid rgba(56,189,248,0.35);">
-                0% Terisi
-              </span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <h4 style="margin:0; font-size:0.88rem; color:var(--text-main); font-weight:600;">Audit Kelengkapan Dokumen</h4>
+              <span id="reportAuditBadge" class="badge">0% Terisi</span>
             </div>
             <div style="display:flex; align-items:center; gap:10px;">
-              <span id="reportAuditFileName" style="font-size:0.75rem; color:#94a3b8; font-family:monospace; background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:4px;"></span>
-              <button type="button" class="btn btn-ghost btn-xs text-muted" onclick="document.getElementById('reportAuditCard').style.display='none'" title="Sembunyikan panel audit" style="font-size:1.1rem; line-height:1; padding:0 6px;">&times;</button>
+              <span id="reportAuditFileName" class="font-mono text-dim" style="font-size:0.75rem;"></span>
+              <button type="button" class="btn btn-ghost btn-xs text-muted" onclick="document.getElementById('reportAuditCard').style.display='none'" title="Sembunyikan panel audit">&times;</button>
             </div>
           </div>
-          <p id="reportAuditSummary" style="font-size:0.8rem; color:var(--text-muted); margin:0 0 12px 0; line-height:1.45;"></p>
-          <div id="reportAuditGrid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:10px;">
+          <p id="reportAuditSummary" style="font-size:0.78rem; color:var(--text-muted); margin:0 0 12px 0; line-height:1.45;"></p>
+          <div id="reportAuditGrid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:10px;">
             <!-- Rendered dynamically by reportBuilder.renderAuditCard() -->
           </div>
         </div>
 
         <!-- 2-Column Responsive Builder Grid -->
-        <div style="display:grid; grid-template-columns: minmax(400px, 1fr) minmax(500px, 1.25fr); gap:16px; align-items:start;">
+        <div class="studio-main-grid">
           
           <!-- LEFT COLUMN: Administrasi & Data Desa -->
-          <div style="display:flex; flex-direction:column; gap:14px;">
+          <div class="studio-col-left">
             
             <!-- SECTION 1: Data Administrasi & SPT (Compact Form) -->
-            <div class="doc-dashboard-panel" style="margin-bottom:0; padding:12px 14px;">
-              <div class="dashboard-header" style="margin-bottom:10px; padding-bottom:6px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                  <h4 style="margin:0; font-size:0.82rem; color:var(--text-main);">1. Data Administrasi & SPT</h4>
+            <div class="doc-dashboard-panel">
+              <div class="dashboard-header">
+                <div class="dashboard-title-group">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <h3 class="section-title">1. Data Administrasi & SPT</h3>
                 </div>
               </div>
-              <div style="display:grid; grid-template-columns: 1fr 90px 1.2fr; gap:8px;">
-                <div class="form-group" style="margin-bottom:0; position:relative;">
-                  <label class="form-label" style="font-size:0.7rem;">Kabupaten</label>
+              <div class="form-grid-admin">
+                <div class="form-group" style="position:relative;">
+                  <label class="form-label">Kabupaten</label>
                   <input type="text" id="reportKabupaten" class="form-input form-input-sm" value="" placeholder="Ketik kabupaten..." autocomplete="off">
                 </div>
-                <div class="form-group" style="margin-bottom:0;">
-                  <label class="form-label" style="font-size:0.7rem;">Tahun</label>
+                <div class="form-group">
+                  <label class="form-label">Tahun</label>
                   <input type="text" id="reportTahun" class="form-input form-input-sm font-mono" value="2026">
                 </div>
-                <div class="form-group" style="margin-bottom:0;">
+                <div class="form-group">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-                    <label class="form-label" style="font-size:0.7rem; margin-bottom:0;">Tanggal Laporan</label>
-                    <span id="reportTanggalLaporanTag" style="font-size:0.62rem; color:#38bdf8; font-weight:600;" title="Otomatis H+1 dari Tanggal SPT">(H+1 SPT)</span>
+                    <label class="form-label" style="margin-bottom:0;">Tanggal Laporan</label>
+                    <span id="reportTanggalLaporanTag" class="tag-subtle" title="Otomatis H+1 dari Tanggal SPT">(H+1 SPT)</span>
                   </div>
                   <input type="date" id="reportTanggalLaporan" class="form-input form-input-sm" value="" onchange="window.reportBuilder ? window.reportBuilder.onTanggalLaporanChange(this.value) : null">
-                  <span id="reportTanggalLaporanPreview" style="font-size:0.68rem; color:#94a3b8; font-weight:500; margin-top:2px; display:block;"></span>
+                  <span id="reportTanggalLaporanPreview" class="date-preview-label"></span>
                 </div>
               </div>
-              <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:8px; margin-top:8px;">
-                <div class="form-group" style="margin-bottom:0;">
-                  <label class="form-label" style="font-size:0.7rem;">Nomor SPT</label>
+              <div class="form-grid-spt">
+                <div class="form-group">
+                  <label class="form-label">Nomor SPT</label>
                   <input type="text" id="reportNomorSpt" class="form-input form-input-sm font-mono" value="" placeholder="Contoh: CK07/T/Bpbpk11/2026/1766">
                 </div>
-                <div class="form-group" style="margin-bottom:0;">
-                  <label class="form-label" style="font-size:0.7rem;">Tanggal SPT</label>
+                <div class="form-group">
+                  <label class="form-label">Tanggal SPT</label>
                   <input type="date" id="reportTanggalSpt" class="form-input form-input-sm" value="" onchange="window.reportBuilder ? window.reportBuilder.onTanggalSptChange(this.value) : null">
-                  <span id="reportTanggalSptPreview" style="font-size:0.68rem; color:#94a3b8; font-weight:500; margin-top:2px; display:block;"></span>
+                  <span id="reportTanggalSptPreview" class="date-preview-label"></span>
                 </div>
               </div>
             </div>
 
             <!-- SECTION 2: Pelaksana Monev (Default Aktif) -->
-            <div class="doc-dashboard-panel" style="margin-bottom:0; padding:12px 14px;">
-              <div class="dashboard-header" style="margin-bottom:8px; padding-bottom:6px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                  <h4 style="margin:0; font-size:0.82rem; color:var(--text-main);">2. Pelaksana Monev</h4>
+            <div class="doc-dashboard-panel">
+              <div class="dashboard-header">
+                <div class="dashboard-title-group">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                  <h3 class="section-title">2. Pelaksana Monev</h3>
                 </div>
-                <label class="checkbox-inline" style="font-size:0.73rem; color:var(--text-muted); font-weight:600; cursor:pointer;">
+                <label class="checkbox-inline">
                   <input type="checkbox" id="reportIncludePelaksana" checked>
                   <span>Sertakan Tabel Tanda Tangan</span>
                 </label>
@@ -185,11 +175,11 @@
 
               <div id="reportPelaksanaContainer" style="display:block;">
                 <!-- Baris Ramping Tunggal: Pencarian & Auto-Add Pelaksana (One-Click) -->
-                <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;">
+                <div class="personel-input-row">
                   <div style="position:relative; flex:1;">
-                    <input type="text" id="reportPersonelInput" class="form-input form-input-sm" placeholder="Ketik nama personel, Enter untuk tambah..." style="width:100%; font-size:0.75rem; padding-left:10px;" autocomplete="off" onkeydown="window.reportBuilder.onPersonelKeydown(event)">
+                    <input type="text" id="reportPersonelInput" class="form-input form-input-sm" placeholder="Ketik nama personel, Enter untuk tambah..." autocomplete="off" onkeydown="window.reportBuilder.onPersonelKeydown(event)">
                   </div>
-                  <button type="button" class="btn btn-primary btn-xs" onclick="window.reportBuilder.addPelaksanaFromInput()" title="Tambahkan nama (atau tekan Enter)" style="padding:5px 12px; font-weight:600; font-size:0.73rem; white-space:nowrap;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="window.reportBuilder.addPelaksanaFromInput()" title="Tambahkan nama (atau tekan Enter)">
                     + Tambah
                   </button>
                 </div>
@@ -197,8 +187,8 @@
                 <!-- Daftar Pegawai yang telah ditambahkan -->
                 <div id="reportPelaksanaList" style="margin-bottom:8px;"></div>
 
-                <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(255,255,255,0.08); padding-top:6px;">
-                  <span id="reportPelaksanaCountLabel" style="font-size:0.7rem; color:var(--text-dim);">0 Pelaksana Terpilih</span>
+                <div class="pelaksana-footer">
+                  <span id="reportPelaksanaCountLabel" class="text-dim" style="font-size:0.72rem;">0 Pelaksana Terpilih</span>
                   <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.clearPelaksana()">
                     Hapus Semua
                   </button>
@@ -207,13 +197,13 @@
             </div>
 
             <!-- SECTION 3: Data Desa & Narasi Hasil Monev -->
-            <div class="doc-dashboard-panel" style="margin-bottom:0; padding:12px 14px;">
-              <div class="dashboard-header" style="margin-bottom:10px; padding-bottom:6px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                  <h4 style="margin:0; font-size:0.82rem; color:var(--text-main);">3. Data Desa & Catatan Lapangan</h4>
+            <div class="doc-dashboard-panel">
+              <div class="dashboard-header">
+                <div class="dashboard-title-group">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <h3 class="section-title">3. Data Desa & Catatan Lapangan</h3>
                 </div>
-                <button type="button" class="btn btn-primary btn-xs" onclick="window.reportBuilder.addVillage()">
+                <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.addVillage()">
                   + Tambah Desa
                 </button>
               </div>
@@ -225,60 +215,60 @@
           </div>
 
           <!-- RIGHT COLUMN: Foto & Timestamp Maker & Pengaturan Massal -->
-          <div style="display:flex; flex-direction:column; gap:14px;">
+          <div class="studio-col-right">
             
             <!-- SECTION 4: Dokumentasi Foto Lapangan & Timestamp Maker -->
-            <div class="doc-dashboard-panel" style="margin-bottom:0; padding:12px 14px;">
-              <div class="dashboard-header" style="margin-bottom:10px; padding-bottom:6px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  <h4 style="margin:0; font-size:0.82rem; color:var(--text-main);">Dokumentasi Foto Lapangan</h4>
-                  <span class="badge" id="reportPhotosCountBadge" style="font-size:0.68rem;">0 Foto</span>
+            <div class="doc-dashboard-panel">
+              <div class="dashboard-header">
+                <div class="dashboard-title-group">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <h3 class="section-title">Dokumentasi Foto Lapangan</h3>
+                  <span class="badge" id="reportPhotosCountBadge">0 Foto</span>
                 </div>
                 <div style="display:flex; align-items:center; gap:6px;">
-                  <button type="button" class="btn btn-outline-info btn-xs" id="btnToggleReportQuickPanel" onclick="window.reportBuilder.toggleQuickPanel()" style="display:flex; align-items:center; gap:4px; font-weight:600;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  <button type="button" class="btn btn-secondary btn-xs" id="btnToggleReportQuickPanel" onclick="window.reportBuilder.toggleQuickPanel()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                     <span id="reportQuickToggleText">Pengaturan Lanjutan</span>
                   </button>
                 </div>
               </div>
 
               <!-- JADWAL PERJALANAN DINAS & RENTANG JAM KERJA -->
-              <div class="doc-trip-panel" style="background:rgba(15,23,42,0.6); border:1px solid rgba(56,189,248,0.25); border-radius:8px; padding:10px 12px; margin-bottom:10px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
+              <div class="doc-trip-panel">
+                <div class="trip-panel-header">
                   <div style="display:flex; align-items:center; gap:6px;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                    <span style="font-size:0.75rem; font-weight:700; color:#e2e8f0;">Jadwal Perjalanan Dinas & Rentang Jam</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span class="trip-panel-title">Jadwal Perjalanan Dinas & Rentang Jam</span>
                   </div>
-                  <span class="badge badge-accent" id="reportTripDurationBadge" style="font-size:0.68rem; background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.3);">
+                  <span class="badge" id="reportTripDurationBadge">
                     1 Hari Perjalanan Dinas
                   </span>
                 </div>
 
-                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:8px;">
-                  <div class="form-group" style="margin-bottom:0;">
-                    <label class="form-label" style="font-size:0.68rem; color:var(--text-dim);">Tgl Mulai Dinas</label>
+                <div class="trip-grid">
+                  <div class="form-group">
+                    <label class="form-label">Tgl Mulai Dinas</label>
                     <input type="date" id="reportTripStartDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()">
                   </div>
-                  <div class="form-group" style="margin-bottom:0;">
-                    <label class="form-label" style="font-size:0.68rem; color:var(--text-dim);">Tgl Selesai Dinas</label>
+                  <div class="form-group">
+                    <label class="form-label">Tgl Selesai Dinas</label>
                     <input type="date" id="reportTripEndDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()" placeholder="Kosong = 1 Hari">
                   </div>
-                  <div class="form-group" style="margin-bottom:0;">
-                    <label class="form-label" style="font-size:0.68rem; color:var(--text-dim);">Jam Mulai (WIB)</label>
+                  <div class="form-group">
+                    <label class="form-label">Jam Mulai (WIB)</label>
                     <input type="time" step="1" id="reportTripStartTime" class="form-input form-input-sm font-mono" value="09:14:23">
                   </div>
-                  <div class="form-group" style="margin-bottom:0;">
-                    <label class="form-label" style="font-size:0.68rem; color:var(--text-dim);">Jam Selesai (WIB)</label>
+                  <div class="form-group">
+                    <label class="form-label">Jam Selesai (WIB)</label>
                     <input type="time" step="1" id="reportTripEndTime" class="form-input form-input-sm font-mono" value="15:47:38">
                   </div>
                 </div>
 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06);">
-                  <span style="font-size:0.67rem; color:var(--text-muted);">
+                <div class="trip-footer">
+                  <span class="text-muted" style="font-size:0.7rem;">
                     Jam foto tersebar merata & bertahap.
                   </span>
-                  <button type="button" class="btn btn-ghost btn-xs text-info" onclick="window.reportBuilder.randomizeWorkHours()" style="font-size:0.68rem; padding:2px 6px; display:inline-flex; align-items:center; gap:3px;">
+                  <button type="button" class="btn btn-ghost btn-xs" onclick="window.reportBuilder.randomizeWorkHours()">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="3" ry="3"/><circle cx="8" cy="8" r="1.5"/><circle cx="16" cy="16" r="1.5"/><circle cx="12" cy="12" r="1.5"/></svg>
                     Acak Jam Kerja
                   </button>
@@ -286,21 +276,21 @@
               </div>
 
               <!-- TOMBOL UTAMA: GENERATE TIMESTAMP OTOMATIS (ONE-CLICK) -->
-              <button type="button" class="btn btn-primary" id="btnAutoGenerateTimestamps" onclick="window.reportBuilder.autoGenerateAllTimestamps()" style="width:100%; padding:9px 16px; font-weight:700; font-size:0.86rem; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:10px; background:linear-gradient(135deg, #2563eb 0%, #0284c7 100%); border:none; box-shadow:0 4px 14px rgba(2,132,199,0.35); border-radius:6px; cursor:pointer;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <button type="button" class="btn-generate-timestamps" id="btnAutoGenerateTimestamps" onclick="window.reportBuilder.autoGenerateAllTimestamps()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 <span>Generate Timestamp Otomatis (Semua Foto)</span>
               </button>
 
               <!-- Photo Upload Dropzone Ramping -->
               <input type="file" id="reportPhotoFileInput" accept="image/*" multiple style="display:none;">
-              <div class="studio-dropzone-bar" id="reportPhotoDropZone" style="padding:10px; margin-bottom:10px; cursor:pointer;" onclick="document.getElementById('reportPhotoFileInput').click()">
-                <div class="dropzone-inner" style="gap:8px;">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+              <div class="studio-dropzone-bar" id="reportPhotoDropZone" onclick="document.getElementById('reportPhotoFileInput').click()">
+                <div class="dropzone-inner">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                     <polyline points="17 8 12 3 7 8"/>
                     <line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
-                  <span class="dropzone-text" style="font-size:0.75rem;">Click or drag & drop foto ke sini</span>
+                  <span class="dropzone-text">Pilih atau seret berkas foto dokumentasi ke sini</span>
                 </div>
               </div>
 

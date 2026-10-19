@@ -850,9 +850,9 @@ export class ReportBuilder {
     if (el) {
       const kabClean = (this.kabupaten || '').replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
       if (kabClean) {
-        el.textContent = `Monitoring dan Evaluasi Kegiatan Pamsimas Kabupaten ${kabClean} TA ${this.tahun}`;
+        el.textContent = `Monev Pamsimas Kab. ${kabClean} (TA ${this.tahun})`;
       } else {
-        el.textContent = `Monitoring dan Evaluasi Kegiatan Pamsimas TA ${this.tahun}`;
+        el.textContent = `Laporan Monev Pamsimas (TA ${this.tahun})`;
       }
     }
   }
@@ -1124,16 +1124,17 @@ export class ReportBuilder {
     }
 
     container.innerHTML = this.villages.map((v, idx) => `
-      <div class="village-card" id="card_${v.id}" style="background:var(--bg-surface); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:12px; position:relative;">
-        <div class="village-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid var(--border-color); padding-bottom:6px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span class="badge" style="background:#2563eb; color:#fff; font-size:0.7rem; font-weight:700;">Desa #${idx + 1}</span>
-            <strong style="font-size:0.85rem; color:var(--text-main);" id="vTitle_${v.id}">
+      <div class="village-card" id="card_${v.id}">
+        <div class="village-card-header">
+          <div class="village-header-left">
+            <span class="village-index-badge">Desa #${idx + 1}</span>
+            <strong class="village-title" id="vTitle_${v.id}">
               ${v.desa ? 'Desa ' + this.escapeHtml(v.desa) : 'Desa Baru'}
               ${v.kecamatan ? ' (' + this.escapeHtml(v.kecamatan) + ')' : ''}
             </strong>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
+          <div class="village-header-right">
+            <span id="autofillNotice_${v.id}" class="autofill-notice" style="display:none;"></span>
             ${this.villages.length > 1 ? `
               <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.removeVillage('${v.id}')" title="Hapus desa ini">
                 Hapus
@@ -1142,40 +1143,24 @@ export class ReportBuilder {
           </div>
         </div>
 
-        <!-- Baris 1: Dropdown Autofill Desa (Kecamatan Otomatis) -->
-        <div style="margin-bottom:8px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
-            <label class="form-label" style="font-size:0.7rem; color:var(--text-muted); margin:0; display:inline-flex; align-items:center; gap:4px;">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              Pilih dari database:
-            </label>
-            <span id="autofillNotice_${v.id}" style="font-size:0.67rem; color:#10b981; font-weight:600; display:none;">
-              Kecamatan otomatis disesuaikan
-            </span>
-          </div>
-          <select class="form-select form-input-sm" style="width:100%; font-size:0.75rem; border-color:rgba(56,189,248,0.35); background:rgba(56,189,248,0.04); color:#38bdf8;" onchange="window.reportBuilder.onSelectDesaPreset('${v.id}', this.value)">
-            ${this.renderDesaSelectOptions(v)}
-          </select>
-        </div>
-
-        <!-- Baris 2: Nama Desa & Kecamatan (Autofill) -->
-        <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:8px;">
+        <!-- Nama Desa & Kecamatan -->
+        <div class="form-row form-grid-2" style="margin-bottom:8px;">
           <div class="form-group" style="margin-bottom:0; position:relative;">
-            <label class="form-label" style="font-size:0.7rem; color:var(--text-muted);">Nama Desa</label>
+            <label class="form-label">Nama Desa</label>
             <input type="text" id="desa_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.desa)}" placeholder="Ketik nama desa (otomatis terfilter)..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'desa', this.value)">
           </div>
           <div class="form-group" style="margin-bottom:0; position:relative;">
-            <label class="form-label" style="font-size:0.7rem; color:var(--text-muted);">Kecamatan</label>
+            <label class="form-label">Kecamatan</label>
             <input type="text" id="kec_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.kecamatan)}" placeholder="Ketik atau pilih kecamatan..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'kecamatan', this.value)">
           </div>
         </div>
 
-        <!-- Baris 3: Catatan Lapangan -->
+        <!-- Catatan Lapangan -->
         <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label" style="font-size:0.7rem; font-weight:600; color:var(--text-main); margin-bottom:4px; display:block;">
+          <label class="form-label">
             Catatan Lapangan
           </label>
-          <textarea class="form-textarea" rows="3" placeholder="Tulis catatan lapangan di sini..." style="font-size:0.75rem; font-family:var(--font-sans); line-height:1.45;" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'notes', this.value)">${this.escapeHtml(v.notes)}</textarea>
+          <textarea class="form-textarea" rows="3" placeholder="Tulis catatan lapangan di sini..." oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'notes', this.value)">${this.escapeHtml(v.notes)}</textarea>
         </div>
       </div>
     `).join('');
@@ -1882,50 +1867,47 @@ export class ReportBuilder {
           </div>
 
           <!-- Metadata & Actions -->
-          <div style="padding:6px 8px; font-size:0.68rem; color:var(--text-muted); line-height:1.35; flex:1; display:flex; flex-direction:column; justify-content:space-between;">
-            <div>
-              <div class="text-truncate" style="font-weight:600; color:var(--text-main); margin-bottom:2px;" title="${this.escapeHtml(p.filename)}">
+          <div class="report-card-body">
+            <div class="report-card-meta">
+              <div class="text-truncate report-card-filename" title="${this.escapeHtml(p.filename)}">
                 ${this.escapeHtml(p.filename)}
               </div>
-              <div class="text-truncate" style="color:#38bdf8; font-weight:600; display:flex; align-items:center; gap:4px;" title="${p.desa || 'Desa'}, ${p.kecamatan || 'Kecamatan'}">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <div class="text-truncate report-card-location" title="${p.desa || 'Desa'}, ${p.kecamatan || 'Kecamatan'}">
                 <span>${p.desa ? 'Desa ' + this.escapeHtml(p.desa) : 'Desa Belum Diatur'} ${p.kecamatan ? '(' + this.escapeHtml(p.kecamatan) + ')' : ''}</span>
               </div>
-              <div class="font-mono text-truncate" style="color:#f59e0b; display:flex; align-items:center; gap:4px;" title="${this.escapeHtml(p.timeStr || '-')}">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <div class="font-mono text-truncate report-card-time" title="${this.escapeHtml(p.timeStr || '-')}">
                 <span>${this.escapeHtml(p.timeStr || 'Belum di-generate')}</span>
               </div>
-              <div class="font-mono text-truncate" style="color:var(--text-dim); display:flex; align-items:center; gap:4px;" title="Lat: ${latFormatted}, Lon: ${lonFormatted}">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <div class="font-mono text-truncate report-card-coords" title="Lat: ${latFormatted}, Lon: ${lonFormatted}">
                 <span>${p.lat ? latFormatted + ', ' + lonFormatted : 'Koordinat menyusul'}</span>
               </div>
             </div>
 
             <!-- Footer Buttons -->
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:4px; margin-top:6px; border-top:1px solid rgba(255,255,255,0.06); padding-top:4px; flex-wrap:wrap;">
+            <div class="report-card-footer">
               <div style="display:flex; gap:3px;">
-                <button type="button" class="btn btn-secondary btn-xs" onclick="window.openPhotoLightbox('${p.id}', 'report')" title="Pratinjau Foto Layar Penuh" style="display:inline-flex; align-items:center; gap:3px;">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Pratinjau
+                <button type="button" class="btn btn-secondary btn-xs" onclick="window.openPhotoLightbox('${p.id}', 'report')" title="Pratinjau Foto Layar Penuh">
+                  Pratinjau
                 </button>
-                <button type="button" class="btn btn-primary btn-xs" onclick="window.reportBuilder.openModal('${p.id}')" title="Edit Stempel & Potong Manual" style="display:inline-flex; align-items:center; gap:3px;">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Edit
+                <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.openModal('${p.id}')" title="Edit Stempel & Potong Manual">
+                  Edit
                 </button>
                 ${p.is_portrait ? `
-                  <button type="button" class="btn btn-warning btn-xs" onclick="window.reportBuilder.normalizeSinglePhotoAspect('${p.id}')" title="Sesuaikan foto portrait ke rasio 4:3 rapi" style="display:inline-flex; align-items:center; gap:3px;">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg> 4:3
+                  <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.normalizeSinglePhotoAspect('${p.id}')" title="Sesuaikan foto portrait ke rasio 4:3 rapi">
+                    4:3
                   </button>
                 ` : ''}
                 ${p.is_cropped ? `
-                  <button type="button" class="btn btn-outline-info btn-xs" onclick="window.reportBuilder.resetSinglePhotoAspect('${p.id}')" title="Kembalikan foto asli sebelum dicrop" style="display:inline-flex; align-items:center; gap:3px;">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Reset
+                  <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.resetSinglePhotoAspect('${p.id}')" title="Kembalikan foto asli sebelum dicrop">
+                    Reset
                   </button>
                 ` : ''}
               </div>
               <div style="display:flex; gap:3px;">
-                <button type="button" class="btn ${isOriginal ? 'btn-warning' : 'btn-outline-secondary'} btn-xs" onclick="window.reportBuilder.toggleSingleKeepOriginal('${p.id}')" title="${isOriginal ? 'Klik untuk memasang stempel' : 'Gunakan foto asli unedited'}" style="display:inline-flex; align-items:center; gap:3px;">
-                  ${isOriginal ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Asli' : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Stempel'}
+                <button type="button" class="btn ${isOriginal ? 'btn-active' : 'btn-secondary'} btn-xs" onclick="window.reportBuilder.toggleSingleKeepOriginal('${p.id}')" title="${isOriginal ? 'Klik untuk memasang stempel' : 'Gunakan foto asli unedited'}">
+                  ${isOriginal ? 'Asli' : 'Stempel'}
                 </button>
-                <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.removePhoto('${p.id}')" title="Hapus foto ini" style="padding:2px 5px;">
+                <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.removePhoto('${p.id}')" title="Hapus foto ini" style="padding:2px 6px;">
                   &times;
                 </button>
               </div>
@@ -2802,14 +2784,13 @@ export class ReportBuilder {
     const toolbarScore = document.getElementById('reportAuditToolbarScore');
     if (toolbarScore) {
       toolbarScore.textContent = `${scorePct}%`;
-      toolbarScore.style.color = scorePct >= 80 ? '#34d399' : (scorePct >= 50 ? '#fbbf24' : '#f87171');
+      toolbarScore.style.color = scorePct >= 80 ? '#34d399' : (scorePct >= 50 ? '#fbbf24' : '#cbd5e1');
     }
 
     // Update Status Toolbar
     const statusText = document.getElementById('reportStatusSummary');
     if (statusText) {
-      const pelaksanaCount = this.includePelaksana ? this.pelaksanaList.filter(Boolean).length : 0;
-      statusText.textContent = `${validVillages.length} Desa • ${pelaksanaCount > 0 ? pelaksanaCount + ' Pelaksana' : 'Tanpa Pelaksana'} • ${this.photos.length} Foto • Kelengkapan ${scorePct}%`;
+      statusText.textContent = `${validVillages.length} Desa • ${this.photos.length} Foto Dokumentasi`;
     }
 
     // Update Card jika card sedang terbuka
