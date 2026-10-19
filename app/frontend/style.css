@@ -2613,5 +2613,94 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   box-shadow: 0 0 20px rgba(56, 189, 248, 0.3) !important;
 }
 
+/* =========================================================
+   CUSTOM AUTOCOMPLETE DROPDOWN STYLES
+   ========================================================= */
+.autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-surface-elevated, #1a2234);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.75), 0 0 16px rgba(56, 189, 248, 0.15);
+  max-height: 290px;
+  overflow-y: auto;
+  z-index: 1050;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  backdrop-filter: blur(12px);
+}
+
+.autocomplete-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+.autocomplete-dropdown::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 4px;
+}
+.autocomplete-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.25);
+  border-radius: 4px;
+}
+.autocomplete-dropdown::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.45);
+}
+
+.autocomplete-item {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.45);
+  transform: translateX(2px);
+}
+
+.autocomplete-item-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-main, #f8fafc);
+  gap: 6px;
+}
+
+.autocomplete-item-sub {
+  font-size: 0.68rem;
+  color: var(--text-muted, #94a3b8);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.autocomplete-highlight {
+  background: rgba(245, 158, 11, 0.28);
+  color: #fbbf24;
+  font-weight: 700;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.autocomplete-empty {
+  padding: 12px;
+  font-size: 0.73rem;
+  color: var(--text-dim, #64748b);
+  text-align: center;
+  font-style: italic;
+}
+
+
 
 

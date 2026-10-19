@@ -140,10 +140,9 @@
                 </div>
               </div>
               <div style="display:grid; grid-template-columns: 1fr 90px 1.2fr; gap:8px;">
-                <div class="form-group" style="margin-bottom:0;">
+                <div class="form-group" style="margin-bottom:0; position:relative;">
                   <label class="form-label" style="font-size:0.7rem;">Kabupaten</label>
-                  <input type="text" id="reportKabupaten" list="reportKabupatenList" class="form-input form-input-sm" value="" placeholder="Ketik kabupaten...">
-                  <datalist id="reportKabupatenList"></datalist>
+                  <input type="text" id="reportKabupaten" class="form-input form-input-sm" value="" placeholder="Ketik kabupaten..." autocomplete="off">
                 </div>
                 <div class="form-group" style="margin-bottom:0;">
                   <label class="form-label" style="font-size:0.7rem;">Tahun</label>
@@ -188,8 +187,7 @@
                 <!-- Baris Ramping Tunggal: Pencarian & Auto-Add Pelaksana (One-Click) -->
                 <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;">
                   <div style="position:relative; flex:1;">
-                    <input type="text" id="reportPersonelInput" list="reportPersonelDatalist" class="form-input form-input-sm" placeholder="Ketik nama personel, Enter untuk tambah..." style="width:100%; font-size:0.75rem; padding-left:10px;" oninput="window.reportBuilder.onPersonelInput(event)" onchange="window.reportBuilder.onPersonelInput(event)" onkeydown="window.reportBuilder.onPersonelKeydown(event)">
-                    <datalist id="reportPersonelDatalist"></datalist>
+                    <input type="text" id="reportPersonelInput" class="form-input form-input-sm" placeholder="Ketik nama personel, Enter untuk tambah..." style="width:100%; font-size:0.75rem; padding-left:10px;" autocomplete="off" onkeydown="window.reportBuilder.onPersonelKeydown(event)">
                   </div>
                   <button type="button" class="btn btn-primary btn-xs" onclick="window.reportBuilder.addPelaksanaFromInput()" title="Tambahkan nama (atau tekan Enter)" style="padding:5px 12px; font-weight:600; font-size:0.73rem; white-space:nowrap;">
                     + Tambah
@@ -219,9 +217,6 @@
                   + Tambah Desa
                 </button>
               </div>
-
-              <!-- Global Datalist for Desa Autofill -->
-              <datalist id="reportDesaDatalist"></datalist>
 
               <!-- Container of Village Cards -->
               <div id="reportVillagesContainer"></div>
