@@ -85,7 +85,7 @@ export class Autocomplete {
 
     // Event listeners
     this.input.addEventListener('input', this.boundOnInput);
-    this.input.addEventListener('keydown', this.boundOnKeyDown);
+    this.input.addEventListener('keydown', this.boundOnKeyDown, { capture: true });
     this.input.addEventListener('focus', this.boundOnFocus);
     this.input.addEventListener('click', this.boundOnClick);
     this.input.addEventListener('blur', this.boundOnBlur);
@@ -182,9 +182,10 @@ export class Autocomplete {
 
   onKeyDown(e) {
     if (!this.isOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-      if (this.input.value.trim().length >= this.minChars) {
-        this.updateSuggestions(this.input.value);
+      if ((this.input.value || '').trim().length >= this.minChars) {
+        this.updateSuggestions(this.input.value || '');
         e.preventDefault();
+        e.stopPropagation();
       }
       return;
     }
@@ -193,12 +194,14 @@ export class Autocomplete {
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      e.stopPropagation();
       if (this.items.length > 0) {
         this.selectedIndex = (this.selectedIndex + 1) % this.items.length;
         this.updateActiveItem();
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      e.stopPropagation();
       if (this.items.length > 0) {
         this.selectedIndex = (this.selectedIndex - 1 + this.items.length) % this.items.length;
         this.updateActiveItem();
@@ -207,6 +210,9 @@ export class Autocomplete {
       if (this.items.length > 0) {
         e.preventDefault();
         e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+          e.stopImmediatePropagation();
+        }
         const chosen = this.selectedIndex >= 0 && this.selectedIndex < this.items.length
           ? this.items[this.selectedIndex]
           : this.items[0];
@@ -214,6 +220,7 @@ export class Autocomplete {
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       this.close();
     } else if (e.key === 'Tab') {
       this.close();
@@ -251,7 +258,7 @@ export class Autocomplete {
   destroy() {
     if (this.input) {
       this.input.removeEventListener('input', this.boundOnInput);
-      this.input.removeEventListener('keydown', this.boundOnKeyDown);
+      this.input.removeEventListener('keydown', this.boundOnKeyDown, { capture: true });
       this.input.removeEventListener('focus', this.boundOnFocus);
       this.input.removeEventListener('click', this.boundOnClick);
       this.input.removeEventListener('blur', this.boundOnBlur);

@@ -226,6 +226,14 @@ def api_report_draft_narrative():
             extra_data=extra_data,
             api_key=api_key
         )
+        if not res.get("success") or res.get("fallback"):
+            response.status = 503
+            response.content_type = "application/json"
+            return json.dumps({
+                "success": False,
+                "offline": True,
+                "error": res.get("error") or "Koneksi internet tidak terhubung atau layanan AI sedang tidak dapat dijangkau."
+            })
         response.content_type = "application/json"
         return json.dumps(res)
     except Exception as e:
@@ -249,36 +257,25 @@ def api_report_generate_docx():
             notes = (v.get("notes") or "").strip()
             narrative = (v.get("narrative") or "").strip()
             if notes and (not narrative or narrative == notes or len(narrative) < 60):
-                try:
-                    res_draft = draft_village_narrative(
-                        notes=notes,
-                        desa=v.get("desa", ""),
-                        kecamatan=v.get("kecamatan", ""),
-                        kabupaten=kab,
-                        tanggal=tgl,
-                        tahun=thn
-                    )
-                    if res_draft.get("success") and res_draft.get("narrative"):
-                        v["narrative"] = res_draft["narrative"]
-                    else:
-                        v["narrative"] = build_structured_monev_narrative_local(
-                            notes=notes,
-                            desa=v.get("desa", ""),
-                            kecamatan=v.get("kecamatan", ""),
-                            kabupaten=kab,
-                            tanggal=tgl,
-                            tahun=thn
-                        )
-                except Exception as ex:
-                    log_error("auto_draft_village_narrative", ex)
-                    v["narrative"] = build_structured_monev_narrative_local(
-                        notes=notes,
-                        desa=v.get("desa", ""),
-                        kecamatan=v.get("kecamatan", ""),
-                        kabupaten=kab,
-                        tanggal=tgl,
-                        tahun=thn
-                    )
+                res_draft = draft_village_narrative(
+                    notes=notes,
+                    desa=v.get("desa", ""),
+                    kecamatan=v.get("kecamatan", ""),
+                    kabupaten=kab,
+                    tanggal=tgl,
+                    tahun=thn
+                )
+                if res_draft.get("success") and res_draft.get("narrative"):
+                    v["narrative"] = res_draft["narrative"]
+                else:
+                    err_msg = res_draft.get("error") or "Koneksi internet tidak terhubung atau layanan AI sedang tidak dapat dijangkau. Pembuatan laporan dihentikan."
+                    response.status = 503
+                    response.content_type = "application/json"
+                    return json.dumps({
+                        "success": False,
+                        "offline": True,
+                        "error": err_msg
+                    })
 
             if v.get("narrative"):
                 v["narrative"] = sanitize_pamsimas_text(v["narrative"])

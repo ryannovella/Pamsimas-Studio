@@ -3169,6 +3169,27 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   justify-content: space-between;
 }
 
+.report-toast-warning {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  line-height: 1.45;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.err-toast.warning {
+  background: linear-gradient(135deg, #451a03, #291203);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fef3c7;
+}
+
 .report-audit-panel {
   margin-bottom: 16px;
   padding: 14px 18px;

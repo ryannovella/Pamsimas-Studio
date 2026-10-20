@@ -271,6 +271,23 @@ def build_structured_monev_narrative_local(
         det_tindak = m_tindak.group(1).strip()
         bullets.append(f"* **Tindak lanjut & rekomendasi:** {det_tindak}. Tim pelaksana bersama fasilitator dan pemerintah desa mengawal implementasi langkah penyelesaian tersebut.")
 
+    # 8. Sisa / Temuan Lapangan Lainnya yang belum tercakup di butir terstruktur di atas
+    # Bagi catatan menjadi kalimat-kalimat untuk memeriksa temuan yang belum masuk
+    raw_sentences = [s.strip() for s in re.split(r"[.\n]+", notes_clean) if len(s.strip()) > 3]
+    uncovered = []
+    for s in raw_sentences:
+        s_low = s.lower()
+        # Cek apakah kalimat ini sudah tercakup di salah satu butir
+        already_in_bullets = any(s_low in b.lower() or any(w in b.lower() for w in s_low.split() if len(w) > 5) for b in bullets)
+        if not already_in_bullets:
+            uncovered.append(s)
+
+    if uncovered:
+        temuan_text = ". ".join(uncovered).strip()
+        if not temuan_text.endswith("."):
+            temuan_text += "."
+        bullets.append(f"* **Catatan temuan lapangan:** {temuan_text}")
+
     # Jika catatan berupa temuan narasi umum tanpa butir kategori di atas, elaborasi temuan tersebut langsung
     if not bullets:
         bullets.append(f"* **Temuan teknis lapangan:** {notes_clean}")
@@ -335,59 +352,58 @@ def draft_village_narrative(
         },
         "generationConfig": {
             "temperature": 0.2,
-            "maxOutputTokens": 2048,
-            "thinkingConfig": {
-                "thinkingBudget": 0
-            }
+            "maxOutputTokens": 2048
         }
     }
 
-    # Model cepat dan stabil
-    models_to_try = ["gemini-3.1-flash-lite", "gemini-3.1-flash-image", "gemini-3.5-flash-lite", "gemini-3.8-flash"]
+    # Urutan model fallback sesuai preferensi
+    models_to_try = [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.6-flash",
+        "gemini-flash-lite-latest",
+        "gemma-4-26b-a4b-it",
+        "gemini-3.1-flash-lite"
+    ]
     last_err = ""
 
     for m in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
         try:
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
+            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
                 candidates = data.get("candidates", [])
                 if candidates:
                     part = candidates[0].get("content", {}).get("parts", [{}])[0]
                     text = part.get("text", "").strip()
-                    # Post-processing Anti-Slop & KBBI enforcement
-                    text = sanitize_pamsimas_text(text)
-                    usage = data.get("usageMetadata", {})
-                    return {
-                        "success": True,
-                        "narrative": text,
-                        "model_used": m,
-                        "token_usage": usage
-                    }
-            elif resp.status_code in (503, 429):
-                last_err = f"Status {resp.status_code}: {resp.text}"
-                continue
+                    if text:
+                        # Post-processing Anti-Slop & KBBI enforcement
+                        text = sanitize_pamsimas_text(text)
+                        usage = data.get("usageMetadata", {})
+                        return {
+                            "success": True,
+                            "narrative": text,
+                            "model_used": m,
+                            "token_usage": usage
+                        }
             else:
-                last_err = f"API Error ({resp.status_code}): {resp.text}"
+                last_err = f"Model {m} status {resp.status_code}: {resp.text[:120]}"
+                continue
         except Exception as e:
-            last_err = str(e)
-            log_error("draft_village_narrative_attempt", e)
+            last_err = f"Model {m} error: {str(e)}"
+            continue
 
-    # RESILIENT FALLBACK: Jika seluruh model AI terkendala, susun narasi terstruktur baku lokal
-    fallback_text = build_structured_monev_narrative_local(
-        notes=notes,
-        desa=desa,
-        kecamatan=kecamatan,
-        kabupaten=kabupaten,
-        tanggal=tanggal,
-        tahun=tahun
-    )
+    # RESILIENT FALLBACK: Jika seluruh model AI terkendala (koneksi internet offline / kuota habis),
+    # hentikan pembuatan laporan dan kembalikan status kegagalan koneksi agar tidak menghasilkan laporan kosong/kurang lengkap.
     return {
-        "success": True,
-        "narrative": fallback_text,
-        "model_used": "deterministic-engine",
-        "fallback": True
+        "success": False,
+        "narrative": "",
+        "model_used": "none",
+        "fallback": True,
+        "error": "Koneksi internet tidak terhubung atau layanan AI sedang tidak dapat dijangkau. Pembuatan laporan dihentikan agar catatan lapangan dapat diolah secara lengkap."
     }
 
 
@@ -907,24 +923,13 @@ def generate_monev_docx(
                 if res_draft.get("success") and res_draft.get("narrative"):
                     narrative = res_draft["narrative"]
                 else:
-                    narrative = build_structured_monev_narrative_local(
-                        notes=notes_raw,
-                        desa=desa_name,
-                        kecamatan=kec_name,
-                        kabupaten=kabupaten_full,
-                        tanggal=tanggal_laporan,
-                        tahun=tahun
-                    )
+                    err_msg = res_draft.get("error") or "Koneksi internet tidak terhubung atau layanan AI sedang tidak dapat dijangkau. Pembuatan laporan dihentikan."
+                    raise ConnectionError(err_msg)
+            except ConnectionError:
+                raise
             except Exception as ex:
                 log_error("auto_draft_village_in_docx", ex)
-                narrative = build_structured_monev_narrative_local(
-                    notes=notes_raw,
-                    desa=desa_name,
-                    kecamatan=kec_name,
-                    kabupaten=kabupaten_full,
-                    tanggal=tanggal_laporan,
-                    tahun=tahun
-                )
+                raise ConnectionError(str(ex))
 
         # Sanitasi ketat: eliminasi kata 'proyek'/'program'/'program pamsimas' & standarisasi KBBI
         narrative = sanitize_pamsimas_text(narrative)

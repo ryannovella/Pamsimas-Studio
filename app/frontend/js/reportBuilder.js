@@ -655,6 +655,9 @@ export class ReportBuilder {
 
   onPersonelKeydown(event) {
     if (event.key === 'Enter') {
+      if (this.personelAutocomplete && this.personelAutocomplete.isOpen && this.personelAutocomplete.items.length > 0) {
+        return;
+      }
       event.preventDefault();
       this.addPelaksanaFromInput();
     }
@@ -665,7 +668,6 @@ export class ReportBuilder {
     if (!inp) return;
     const val = inp.value.trim();
     if (!val) {
-      alert('Silakan ketik atau pilih nama personel terlebih dahulu.');
       return;
     }
     // Jika cocok dengan master personel (menggunakan pencarian cerdas prefix/nama), gunakan format master agar gelar rapi
@@ -678,6 +680,20 @@ export class ReportBuilder {
   }
 
   bindStaticEvents() {
+    // Personel input Enter key
+    const personelInput = document.getElementById('reportPersonelInput');
+    if (personelInput) {
+      personelInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          if (this.personelAutocomplete && this.personelAutocomplete.isOpen && this.personelAutocomplete.items.length > 0) {
+            return;
+          }
+          e.preventDefault();
+          this.addPelaksanaFromInput();
+        }
+      });
+    }
+
     // Kabupaten change & Enter Autocomplete
     const kabInput = document.getElementById('reportKabupaten');
     if (kabInput) {
@@ -919,7 +935,7 @@ export class ReportBuilder {
     this.tripEndTime = tEndStr;
 
     if (showToast) {
-      alert(`Jam dinas lapangan berhasil divariasikan:\n- Mulai: ${tStartStr} WIB\n- Selesai: ${tEndStr} WIB\n(Semua menit & detik berupa angka non-mainstream alami)`);
+      alert(`Rentang jam kegiatan disesuaikan: ${tStartStr.slice(0, 5)} - ${tEndStr.slice(0, 5)} WIB.`);
     }
   }
 
@@ -928,13 +944,13 @@ export class ReportBuilder {
   // =========================================================
   autoGenerateAllTimestamps() {
     if (this.photos.length === 0) {
-      alert('Silakan unggah foto dokumentasi terlebih dahulu.');
+      alert('Belum ada foto yang diunggah.');
       return;
     }
 
     const validVillages = this.villages.filter(v => v.desa && v.desa.trim());
     if (validVillages.length === 0) {
-      alert('Harap isi minimal 1 Nama Desa pada Section 3 (Data Desa & Catatan Lapangan) terlebih dahulu agar alokasi stempel tepat sasaran.');
+      alert('Harap isi minimal satu nama desa terlebih dahulu.');
       return;
     }
 
@@ -960,7 +976,7 @@ export class ReportBuilder {
     });
 
     if (!schedule || schedule.length === 0) {
-      alert('Gagal menghasilkan jadwal foto.');
+      alert('Gagal mengatur jadwal foto.');
       return;
     }
 
@@ -990,8 +1006,7 @@ export class ReportBuilder {
     this.renderPhotos();
     this.updateBatchBar();
 
-    const vNames = validVillages.map(v => v.desa).join(' & ');
-    alert(`Sukses men-generate Timestamp Otomatis untuk ${this.photos.length} foto!\n- Desa: Dibagi merata untuk ${validVillages.length} desa (${vNames})\n- Tanggal: ${formatIndonesianDateOnly(startIso)}${endIso && endIso !== startIso ? ' s/d ' + formatIndonesianDateOnly(endIso) : ''}\n- Jam: Urut & merata (${startTimeStr.slice(0, 5)} - ${endTimeStr.slice(0, 5)} WIB)\n- Koordinat: GPS Jitter terarah unik per foto di wilayah desa masing-masing\n- Live Stamp seketika aktif pada seluruh kartu foto!`);
+    alert(`Waktu dan koordinat berhasil diterapkan ke ${this.photos.length} foto.`);
   }
 
   getVillageCoordinates(desaName, kabName) {
@@ -1400,14 +1415,14 @@ export class ReportBuilder {
 
   applyQuickSetup(target = 'all') {
     if (this.photos.length === 0) {
-      alert('Belum ada foto dokumentasi yang diunggah. Silakan unggah foto terlebih dahulu.');
+      alert('Belum ada foto dokumentasi yang diunggah.');
       return;
     }
 
     let targetPhotos = [];
     if (target === 'selected') {
       if (this.selectedPhotoIds.size === 0) {
-        alert('Pilih minimal satu foto dengan mencentang kotak pada foto terlebih dahulu!');
+        alert('Pilih minimal satu foto terlebih dahulu.');
         return;
       }
       targetPhotos = this.photos.filter(p => this.selectedPhotoIds.has(p.id));
@@ -1486,7 +1501,7 @@ export class ReportBuilder {
 
     this.renderPhotos();
     this.updateBatchBar();
-    alert(`Berhasil menerapkan pengaturan lanjutan ke ${targetPhotos.length} foto!`);
+    alert(`Pengaturan berhasil diterapkan ke ${targetPhotos.length} foto.`);
   }
 
   // =========================================================
@@ -1887,7 +1902,7 @@ export class ReportBuilder {
             <div class="report-card-footer">
               <div style="display:flex; gap:3px;">
                 <button type="button" class="btn btn-secondary btn-xs" onclick="window.openPhotoLightbox('${p.id}', 'report')" title="Pratinjau Foto Layar Penuh">
-                  Pratinjau
+                  Preview
                 </button>
                 <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.openModal('${p.id}')" title="Edit Stempel & Potong Manual">
                   Edit
@@ -2239,7 +2254,7 @@ export class ReportBuilder {
 
   async modalApplyCrop() {
     if (!this.activePhotoId || !this.activeCropPixels) {
-      alert('Silakan tarik kotak seleksi pada foto terlebih dahulu.');
+      alert('Tentukan area potong pada foto terlebih dahulu.');
       return;
     }
     const p = this.photos.find(item => item.id === this.activePhotoId);
@@ -2344,7 +2359,7 @@ export class ReportBuilder {
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.docx')) {
-      alert('Harap pilih berkas dokumen Microsoft Word (.docx).');
+      alert('Pilih file dokumen Word (.docx).');
       event.target.value = '';
       return;
     }
@@ -2836,7 +2851,7 @@ export class ReportBuilder {
     if (this.isGenerating) return;
 
     if (this.villages.length === 0) {
-      alert('Tambahkan minimal 1 desa.');
+      alert('Tambahkan minimal satu desa.');
       return;
     }
 
@@ -2846,7 +2861,7 @@ export class ReportBuilder {
       b.disabled = true;
       b.innerHTML = `
         <span class="spinner-border spinner-border-sm" role="status" style="width:14px; height:14px; border-width:2px; display:inline-block; border-radius:50%; border-top-color:#fff; animation:spin 0.6s linear infinite; margin-right:6px;"></span>
-        Menyusun Narasi & Menyiapkan Dokumen...
+        Membuat Dokumen Word...
       `;
     });
 
@@ -2898,12 +2913,17 @@ export class ReportBuilder {
         body: JSON.stringify(payload)
       });
 
-      if (!res.ok) {
-        throw new Error(`Server returned error: ${res.status}`);
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data || !data.success) {
+        const errText = data?.error || (res.status === 503
+          ? 'Koneksi internet tidak terhubung atau layanan AI sedang tidak dapat dijangkau. Pembuatan laporan dihentikan agar catatan lapangan dapat diolah secara lengkap.'
+          : `Gagal membuat dokumen (Status ${res.status}).`);
+        this.showWarningNotice(errText);
+        return;
       }
 
-      const data = await res.json();
-      if (data.success && data.download_url) {
+      if (data.download_url) {
         if (data.villages && Array.isArray(data.villages)) {
           data.villages.forEach((retV, i) => {
             if (this.villages[i] && retV.narrative) {
@@ -2919,6 +2939,9 @@ export class ReportBuilder {
         a.click();
         document.body.removeChild(a);
 
+        const warningEl = document.getElementById('reportWarningNotice');
+        if (warningEl) warningEl.style.display = 'none';
+
         const noticeEl = document.getElementById('reportSuccessNotice');
         if (noticeEl) {
           noticeEl.style.display = 'flex';
@@ -2927,17 +2950,36 @@ export class ReportBuilder {
             noticeEl.style.display = 'none';
           }, 6000);
         }
-      } else {
-        alert('Gagal menghasilkan dokumen: ' + (data.error || 'Terjadi kesalahan sistem'));
       }
     } catch (e) {
-      alert('Error saat membuat berkas Word: ' + e.message);
+      this.showWarningNotice('Gagal menghubungi server: ' + (e.message || 'Periksa koneksi internet Anda.'));
     } finally {
       this.isGenerating = false;
       genButtons.forEach((b, idx) => {
         b.disabled = false;
         b.innerHTML = originalTexts[idx];
       });
+    }
+  }
+
+  showWarningNotice(msg) {
+    const successNotice = document.getElementById('reportSuccessNotice');
+    if (successNotice) successNotice.style.display = 'none';
+
+    const warningEl = document.getElementById('reportWarningNotice');
+    const warningText = document.getElementById('reportWarningText');
+    const defaultMsg = 'Koneksi internet tidak terhubung atau layanan AI sedang tidak dapat dijangkau. Pembuatan laporan dihentikan agar catatan lapangan dapat diolah secara lengkap.';
+    const finalMsg = msg || defaultMsg;
+
+    if (warningText) {
+      warningText.textContent = finalMsg;
+    }
+    if (warningEl) {
+      warningEl.style.display = 'flex';
+      warningEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    if (window.errorCatcher && typeof window.errorCatcher.showToast === 'function') {
+      window.errorCatcher.showToast(finalMsg, 'warning');
     }
   }
 
