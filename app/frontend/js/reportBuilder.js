@@ -780,6 +780,7 @@ export class ReportBuilder {
         if (e.target.files && e.target.files.length > 0) {
           this.handlePhotoFiles(Array.from(e.target.files));
         }
+        e.target.value = '';
       });
     }
 
@@ -1005,6 +1006,8 @@ export class ReportBuilder {
 
     this.renderPhotos();
     this.updateBatchBar();
+    this.updateSummaryBadge();
+    this.evaluateRealtimeAudit();
 
     alert(`Waktu dan koordinat berhasil diterapkan ke ${this.photos.length} foto.`);
   }
@@ -1536,8 +1539,11 @@ export class ReportBuilder {
   async handlePhotoFiles(fileList) {
     if (!fileList || fileList.length === 0) return;
 
-    const validFiles = fileList.filter(f => f.type.startsWith('image/'));
-    if (validFiles.length === 0) return;
+    const validFiles = fileList.filter(f => (f.type && f.type.startsWith('image/')) || /\.(jpe?g|png|webp|bmp|gif|tiff?|heic|jfif)$/i.test(f.name || ''));
+    if (validFiles.length === 0) {
+      alert('Berkas yang dipilih bukan berkas foto/gambar yang didukung (JPG, PNG, WEBP).');
+      return;
+    }
 
     const newlyLoadedPhotos = [];
 
@@ -1610,6 +1616,8 @@ export class ReportBuilder {
       this.updateSummaryBadge();
       this.updateBatchBar();
     }
+    this.updateSummaryBadge();
+    this.evaluateRealtimeAudit();
   }
 
   async normalizePhotoAspect(photoItem, targetRatio = 4 / 3) {
@@ -1770,6 +1778,7 @@ export class ReportBuilder {
       }
     });
     this.renderPhotos();
+    this.updateSummaryBadge();
   }
 
   toggleSingleKeepOriginal(photoId) {
@@ -1785,6 +1794,7 @@ export class ReportBuilder {
       this.imageCache.delete(p.id);
     }
     this.renderPhotos();
+    this.updateSummaryBadge();
   }
 
   jitterPhotosTime() {
@@ -1799,6 +1809,7 @@ export class ReportBuilder {
       }
     });
     this.renderPhotos();
+    this.updateSummaryBadge();
   }
 
   jitterPhotosGps() {
@@ -1814,6 +1825,7 @@ export class ReportBuilder {
       p.lon = jittered.lon;
     });
     this.renderPhotos();
+    this.updateSummaryBadge();
   }
 
   removePhoto(photoId) {

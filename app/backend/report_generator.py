@@ -80,11 +80,31 @@ def sanitize_pamsimas_text(text: str) -> str:
     if not text:
         return ""
 
+    # Normalisasi tanda baca & diksi KBBI
     # Ganti em dash
     text = text.replace("—", ", ")
 
-    # Normalisasi typo baku 'kementrian' -> 'kementerian'
+    # Ejaan baku kata umum sesuai KBBI
     text = re.sub(r"(?i)\bkementrian\b", "Kementerian", text)
+    text = re.sub(r"(?i)\bdikarenakan\b", "karena", text)
+    text = re.sub(r"(?i)\bmerubah\b", "mengubah", text)
+    text = re.sub(r"(?i)\bmempengaruhi\b", "memengaruhi", text)
+    text = re.sub(r"(?i)\bmensosialisasikan\b", "menyosialisasikan", text)
+    text = re.sub(r"(?i)\bmengkordinasikan\b", "mengoordinasikan", text)
+    text = re.sub(r"(?i)\bstandard\b", "standar", text)
+    text = re.sub(r"(?i)\bkwalitas\b", "kualitas", text)
+    text = re.sub(r"(?i)\bdebet\b", "debit", text)
+    text = re.sub(r"(?i)\bpraktek\b", "praktik", text)
+    text = re.sub(r"(?i)\bresiko\b", "risiko", text)
+    text = re.sub(r"(?i)\bjadual\b", "jadwal", text)
+    text = re.sub(r"(?i)\banalisa\b", "analisis", text)
+    text = re.sub(r"(?i)\befektip\b", "efektif", text)
+    text = re.sub(r"(?i)\befisiend\b", "efisien", text)
+    text = re.sub(r"(?i)\baksesoris\b", "aksesori", text)
+    text = re.sub(r"(?i)\bnon\s+fisik\b", "nonfisik", text)
+    text = re.sub(r"(?i)\bnon\s+teknis\b", "nonteknis", text)
+    text = re.sub(r"(?i)\bPJ(?:\.|\b)(?=\s+(?:Kepala\s+Desa|Kades|Bupati|Gubernur|Walikota|Wali\s+Kota))", "Pj.", text)
+    text = re.sub(r"(?i)\bPLT(?:\.|\b)", "Plt.", text)
 
     # 1. Hindari kata 'program pamsimas' / 'proyek pamsimas'
     text = re.sub(r"(?i)\bprogram\s+pamsimas\b", "Kegiatan Pamsimas", text)
@@ -147,13 +167,16 @@ def sanitize_pamsimas_text(text: str) -> str:
     text = re.sub(r"\bprogram(?:-program)?\b", replace_program, text, flags=re.I)
 
     # 5. Normalisasi tanda baca sesuai KBBI:
-    # 5a. Spasi setelah titik dua (selalu beri spasi kecuali format jam HH:MM(:SS) atau URL)
-    text = re.sub(r'(?<!\d):(?!\s)|:(?!\s)(?!\d{2}(?::|\s|$))', ': ', text)
+    # 5a. Hapus spasi sebelum titik dua, titik koma, koma, dan titik
+    text = re.sub(r'[ \t]+([:;,.])', r'\1', text)
 
-    # 5b. Format desimal persen koma sesuai KBBI (misal 23.12% -> 23,12%)
+    # 5b. Spasi setelah titik dua (selalu beri spasi kecuali format jam HH:MM(:SS) atau URL)
+    text = re.sub(r'(?<!\d):(?![\s\d/])|:(?![\s/])(?!\d{2}(?::|\s|$))', ': ', text)
+
+    # 5c. Format desimal persen koma sesuai KBBI (misal 23.12% -> 23,12%)
     text = re.sub(r'(\d+)\.(\d+)\s*%', r'\1,\2%', text)
 
-    # 5c. Spasi setelah koma jika menempel pada huruf
+    # 5d. Spasi setelah koma jika menempel pada huruf
     text = re.sub(r',([a-zA-Z])', r', \1', text)
 
     # 5d. Bersihkan sisa heading B. HASIL YANG DICAPAI jika model tak sengaja menyertakannya
@@ -447,7 +470,8 @@ def make_xml_paragraph(
     space_before_pt: float = 0,
     space_after_pt: float = 0,
     bold_prefix: str = "",
-    indent_left_dxa: Optional[int] = None
+    indent_left_dxa: Optional[int] = None,
+    indent_right_dxa: Optional[int] = None
 ):
     """Creates a native Word oxml paragraph with high precision official formatting and pure black text."""
     p = OxmlElement('w:p')
@@ -459,9 +483,12 @@ def make_xml_paragraph(
         pStyle.set(qn('w:val'), clean_style)
         pPr.append(pStyle)
 
-    if indent_left_dxa is not None:
+    if indent_left_dxa is not None or indent_right_dxa is not None:
         ind = OxmlElement('w:ind')
-        ind.set(qn('w:left'), str(indent_left_dxa))
+        if indent_left_dxa is not None:
+            ind.set(qn('w:left'), str(indent_left_dxa))
+        if indent_right_dxa is not None:
+            ind.set(qn('w:right'), str(indent_right_dxa))
         pPr.append(ind)
 
     spacing = OxmlElement('w:spacing')
@@ -809,7 +836,7 @@ def generate_monev_docx(
         v0 = villages[0]
         v_desa = v0.get("desa") or v0.get("nama_desa") or ""
         v_kec = v0.get("kecamatan") or ""
-        loc_str = f" ({v_desa} Kec. {v_kec})" if v_desa else ""
+        loc_str = f" (Desa {v_desa}, Kecamatan {v_kec})" if v_desa else ""
         p_umum3.text = (
             f"Kegiatan Monitoring dan Evaluasi (Monev) Pamsimas Tahun Anggaran {tahun} di {kabupaten_full} "
             f"dilaksanakan untuk memperoleh gambaran kondisi dan kemajuan pelaksanaan kegiatan di tingkat desa{loc_str}, "
@@ -828,6 +855,18 @@ def generate_monev_docx(
         r.font.size = Pt(11)
         r.font.color.rgb = RGBColor(0, 0, 0)
 
+    # Update P09 (2. Maksud dan Tujuan)
+    for p_chk in doc.paragraphs[:15]:
+        if "dimaksudkan sebagai upaya pengendalian" in p_chk.text:
+            p_chk.text = f"Kegiatan Monitoring dan Evaluasi dimaksudkan sebagai upaya pengendalian dan pengawasan terhadap pelaksanaan Kegiatan Pamsimas TA {tahun} di tingkat desa."
+            p_chk.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p_chk.paragraph_format.line_spacing = 1.5
+            for r in p_chk.runs:
+                r.font.name = "Arial"
+                r.font.size = Pt(11)
+                r.font.color.rgb = RGBColor(0, 0, 0)
+            break
+
     # 4. Update P18 (3. Ruang Lingkup point 1)
     p_lingkup1 = doc.paragraphs[18]
     p_lingkup1.text = f"Monitoring dan Evaluasi pelaksanaan Kegiatan Pamsimas Tahun Anggaran {tahun} di tingkat {kabupaten_full}."
@@ -839,7 +878,7 @@ def generate_monev_docx(
 
     # 5. Update P23 (4. Dasar Pelaksanaan)
     p_spt = doc.paragraphs[23]
-    spt_line = f"Kegiatan Monitoring dan Evaluasi dilaksanakan berdasarkan Surat Perintah Tugas Nomor : {nomor_spt}"
+    spt_line = f"Kegiatan Monitoring dan Evaluasi dilaksanakan berdasarkan Surat Perintah Tugas Nomor: {nomor_spt}"
     if tanggal_spt:
         spt_line += f" tanggal {tanggal_spt}"
     p_spt.text = spt_line
@@ -851,7 +890,7 @@ def generate_monev_docx(
 
     # 6. Update P28 (A. Kegiatan yang Dilaksanakan point 2)
     p_keg2 = doc.paragraphs[28]
-    p_keg2.text = f"Monitoring dan evaluasi progres pelaksanaan Kegiatan Pamsimas TA {tahun} di {kabupaten_full};"
+    p_keg2.text = f"Monitoring dan Evaluasi progres pelaksanaan Kegiatan Pamsimas TA {tahun} di {kabupaten_full}."
     p_keg2.paragraph_format.line_spacing = 1.5
     for r in p_keg2.runs:
         r.font.name = "Arial"
@@ -1019,22 +1058,34 @@ def generate_monev_docx(
 
     # 9. Penutup Laporan Resmi
     # Bagian 'Dibuat di Semarang\npada tanggal  [tanggal_laporan]\nPembuat Laporan,'
-    # Wajib DIBOLD, warna HITAM, dan berada di SEBELAH KANAN ATAS dari si tabel daftar pelaksana monev
-    p_penutup1 = make_xml_paragraph(text="Dibuat di Semarang", bold=True, font_name="Arial", font_size_pt=11.0, line_spacing=1.5, space_before_pt=12, space_after_pt=2, indent_left_dxa=5400)
-    p_penutup2 = make_xml_paragraph(text=f"pada tanggal  {tanggal_laporan}", bold=True, font_name="Arial", font_size_pt=11.0, line_spacing=1.5, space_after_pt=2, indent_left_dxa=5400)
-    p_penutup3 = make_xml_paragraph(text="Pembuat Laporan,", bold=True, font_name="Arial", font_size_pt=11.0, line_spacing=1.5, space_after_pt=8, indent_left_dxa=5400)
+    # Wajib DIBOLD, warna HITAM, rata tengah pada ketiga baris tersebut (center aligned relative to each other),
+    # dan tetap berada di sebelah kanan-atas daripada tabel personel (sejajar di atas kolom tanda tangan).
+    p_penutup1 = make_xml_paragraph(text="Dibuat di Semarang", bold=True, font_name="Arial", font_size_pt=11.0, alignment="center", line_spacing=1.5, space_before_pt=12, space_after_pt=2, indent_left_dxa=5472, indent_right_dxa=0)
+    p_penutup2 = make_xml_paragraph(text=f"pada tanggal  {tanggal_laporan}", bold=True, font_name="Arial", font_size_pt=11.0, alignment="center", line_spacing=1.5, space_before_pt=2, space_after_pt=2, indent_left_dxa=5472, indent_right_dxa=0)
+    p_penutup3 = make_xml_paragraph(text="Pembuat Laporan,", bold=True, font_name="Arial", font_size_pt=11.0, alignment="center", line_spacing=1.5, space_before_pt=2, space_after_pt=8, indent_left_dxa=5472, indent_right_dxa=0)
     insert_before_target(p_penutup1)
     insert_before_target(p_penutup2)
     insert_before_target(p_penutup3)
 
     # 10. Tabel Pelaksana Monev (HANYA JIKA DIISI USER)
-    # nomor: align center. nama: align center left. space tanda tangan: align center.
+    # Kolom nomor kecil saja (0.32 in), kolom nama personel cukup leluasa (3.48 in),
+    # dan kolom tanda tangan (1.25 in masing-masing)
     table_p = None
     if pelaksana:
         table_p = doc.add_table(rows=len(pelaksana), cols=4)
         table_p.alignment = WD_TABLE_ALIGNMENT.CENTER
-        # Lebar proporsional simetris total 6.5 inci (9360 dxa) sejajar margin
-        col_widths = [Inches(0.45), Inches(3.05), Inches(1.50), Inches(1.50)]
+        table_p.autofit = False
+        col_widths = [Inches(0.32), Inches(3.48), Inches(1.25), Inches(1.25)]
+
+        existing_grid = table_p._tbl.xpath('./w:tblGrid')
+        if existing_grid:
+            table_p._tbl.remove(existing_grid[0])
+        tblGrid = OxmlElement('w:tblGrid')
+        for w in col_widths:
+            gc = OxmlElement('w:gridCol')
+            gc.set(qn('w:w'), str(int(w.inches * 1440)))
+            tblGrid.append(gc)
+        table_p._tbl.insert(1, tblGrid)
 
         for p_idx, nama in enumerate(pelaksana):
             row = table_p.rows[p_idx]
@@ -1044,14 +1095,20 @@ def generate_monev_docx(
             row.cells[1].text = nama
 
             if p_idx % 2 == 0:
-                row.cells[2].text = f"{p_idx + 1}. \u2026\u2026\u2026\u2026\u2026\u2026"
+                row.cells[2].text = f"{p_idx + 1}. …………"
                 row.cells[3].text = ""
             else:
                 row.cells[2].text = ""
-                row.cells[3].text = f"{p_idx + 1}. \u2026\u2026\u2026\u2026\u2026\u2026"
+                row.cells[3].text = f"{p_idx + 1}. …………"
 
             for c_i, c in enumerate(row.cells):
                 c.width = col_widths[c_i]
+                tcPr = c._tc.get_or_add_tcPr()
+                tcW = OxmlElement('w:tcW')
+                tcW.set(qn('w:w'), str(int(col_widths[c_i].inches * 1440)))
+                tcW.set(qn('w:type'), 'dxa')
+                tcPr.append(tcW)
+
                 set_cell_borders(
                     c,
                     top={'val': 'single', 'sz': 4, 'color': 'auto'},
@@ -1060,7 +1117,6 @@ def generate_monev_docx(
                     right={'val': 'single', 'sz': 4, 'color': 'auto'}
                 )
                 # Set vertical alignment center (align center secara vertikal)
-                tcPr = c._tc.get_or_add_tcPr()
                 vAlign = OxmlElement('w:vAlign')
                 vAlign.set(qn('w:val'), 'center')
                 tcPr.append(vAlign)
