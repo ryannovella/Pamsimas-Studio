@@ -24,27 +24,77 @@ import csv
 # Master location database indexed by village key, subdistrict key, and composite keys
 KNOWN_LOCATIONS = []
 KNOWN_COORDS = {
-    "jambewangi": ("-7.451824", "110.331825", "Pakis", "Kabupaten Magelang"),
-    "tanjungsari": ("-7.422850", "110.133040", "Windusari", "Kabupaten Magelang"),
-    "ketawang": ("-7.408820", "110.324540", "Grabag", "Kabupaten Magelang"),
-    "genito": ("-7.397820", "110.156540", "Windusari", "Kabupaten Magelang"),
-    "jati": ("-7.510160", "110.380950", "Sawangan", "Kabupaten Magelang"),
-    "baleagung": ("-7.391520", "110.312050", "Grabag", "Kabupaten Magelang"),
-    "karanggayam": ("-7.585210", "109.612450", "Karanggayam", "Kabupaten Kebumen"),
+    "masaran": ("-7.419200", "109.641500", "Bawang", "Kabupaten Banjarnegara"),
+    "pejawaran": ("-7.246800", "109.782400", "Pejawaran", "Kabupaten Banjarnegara"),
+    "bandingan": ("-7.412600", "109.528300", "Rakit", "Kabupaten Banjarnegara"),
+    "sawangan": ("-7.418500", "109.086400", "Ajibarang", "Kabupaten Banyumas"),
+    "kasegeran": ("-7.431200", "109.146800", "Cilongok", "Kabupaten Banyumas"),
+    "rempoah": ("-7.358400", "109.236200", "Baturraden", "Kabupaten Banyumas"),
+    "karangkedawung": ("-7.452300", "109.286500", "Sokaraja", "Kabupaten Banyumas"),
+    "gandatapa": ("-7.349600", "109.274100", "Sumbang", "Kabupaten Banyumas"),
+    "mojosari": ("-7.371420", "110.712350", "Karanggede", "Kabupaten Boyolali"),
+    "pegadingan": ("-7.428500", "108.764200", "Cipari", "Kabupaten Cilacap"),
+    "kertajaya": ("-7.521400", "108.856300", "Gandrungmangu", "Kabupaten Cilacap"),
+    "jeruklegi kulon": ("-7.581200", "109.004500", "Jeruklegi", "Kabupaten Cilacap"),
+    "sumingkir": ("-7.564800", "109.031200", "Jeruklegi", "Kabupaten Cilacap"),
+    "karangpucung": ("-7.411600", "108.898400", "Karangpucung", "Kabupaten Cilacap"),
+    "surusunda": ("-7.392400", "108.871500", "Karangpucung", "Kabupaten Cilacap"),
+    "bener": ("-7.314200", "108.732600", "Majenang", "Kabupaten Cilacap"),
+    "cibeunying": ("-7.291800", "108.761400", "Majenang", "Kabupaten Cilacap"),
+    "jenang": ("-7.298500", "108.754200", "Majenang", "Kabupaten Cilacap"),
+    "sidamukti": ("-7.592400", "108.758300", "Patimuan", "Kabupaten Cilacap"),
+    "kunci": ("-7.468200", "108.791500", "Sidareja", "Kabupaten Cilacap"),
+    "purwasari": ("-7.336400", "108.678200", "Wanareja", "Kabupaten Cilacap"),
+    "sidomukti": ("-7.541800", "111.124600", "Jenawi", "Kabupaten Karanganyar"),
     "gempolan": ("-7.558320", "111.084530", "Kerjo", "Kabupaten Karanganyar"),
-    "bukuran": ("-7.426210", "110.978120", "Kalijambe", "Kabupaten Sragen"),
-    "gabus": ("-7.362140", "111.045230", "Ngrampal", "Kabupaten Sragen"),
-    "aditirto": ("-7.683412", "109.641238", "Pejagoan", "Kabupaten Kebumen"),
+    "kebak": ("-7.638400", "110.964200", "Jumantono", "Kabupaten Karanganyar"),
+    "pendem": ("-7.539200", "111.028400", "Mojogedang", "Kabupaten Karanganyar"),
+    "pojok": ("-7.526800", "111.014500", "Mojogedang", "Kabupaten Karanganyar"),
     "tlogosari": ("-7.625124", "109.684125", "Ayah", "Kabupaten Kebumen"),
+    "karanggayam": ("-7.585210", "109.612450", "Karanggayam", "Kabupaten Kebumen"),
+    "aditirto": ("-7.683412", "109.641238", "Pejagoan", "Kabupaten Kebumen"),
+    "seboro": ("-7.524600", "109.718500", "Sadang", "Kabupaten Kebumen"),
+    "baleagung": ("-7.391520", "110.312050", "Grabag", "Kabupaten Magelang"),
+    "ketawang": ("-7.408820", "110.324540", "Grabag", "Kabupaten Magelang"),
+    "jati": ("-7.510160", "110.380950", "Sawangan", "Kabupaten Magelang"),
+    "jambewangi": ("-7.451824", "110.331825", "Pakis", "Kabupaten Magelang"),
+    "genito": ("-7.397820", "110.156540", "Windusari", "Kabupaten Magelang"),
+    "tanjungsari": ("-7.422850", "110.133040", "Windusari", "Kabupaten Magelang"),
+    "karangcengis": ("-7.431600", "109.428500", "Bukateja", "Kabupaten Purbalingga"),
+    "pelumutan": ("-7.468400", "109.371200", "Kemangkon", "Kabupaten Purbalingga"),
+    "tlahab kidul": ("-7.258400", "109.336500", "Karangreja", "Kabupaten Purbalingga"),
+    "limbangan": ("-7.349200", "109.321800", "Kutasari", "Kabupaten Purbalingga"),
+    "lambur": ("-7.331500", "109.354200", "Mrebet", "Kabupaten Purbalingga"),
+    "arenan": ("-7.378400", "109.412600", "Kaligondang", "Kabupaten Purbalingga"),
+    "pengadegan": ("-7.416200", "109.451800", "Pengadegan", "Kabupaten Purbalingga"),
+    "panusupan": ("-7.294600", "109.498200", "Rembang", "Kabupaten Purbalingga"),
+    "mayungsari": ("-7.612400", "110.048600", "Bener", "Kabupaten Purworejo"),
+    "rimun": ("-7.658200", "110.054200", "Loano", "Kabupaten Purworejo"),
+    "bukuran": ("-7.426210", "110.978120", "Kalijambe", "Kabupaten Sragen"),
+    "ngebung": ("-7.448600", "110.849200", "Kalijambe", "Kabupaten Sragen"),
+    "gabus": ("-7.362140", "111.045230", "Ngrampal", "Kabupaten Sragen"),
+    "sambi": ("-7.486200", "111.084600", "Sambirejo", "Kabupaten Sragen"),
+    "sigit": ("-7.324800", "111.061500", "Tangen", "Kabupaten Sragen"),
+    "kembangsari": ("-7.258600", "110.198400", "Kandangan", "Kabupaten Temanggung"),
+    "kemiri": ("-7.241200", "110.246800", "Kaloran", "Kabupaten Temanggung"),
+    "gentingsari": ("-7.284500", "110.056200", "Bansari", "Kabupaten Temanggung"),
+    "dlimoyo": ("-7.239400", "110.068400", "Ngadirejo", "Kabupaten Temanggung"),
+    "gondangwinangun": ("-7.251800", "110.074200", "Ngadirejo", "Kabupaten Temanggung"),
+    "pulutan wetan": ("-7.896400", "110.864200", "Wuryantoro", "Kabupaten Wonogiri"),
+    "gebangharjo": ("-8.041200", "110.812600", "Pracimantoro", "Kabupaten Wonogiri"),
+    "sembukan": ("-7.824500", "111.028400", "Sidoharjo", "Kabupaten Wonogiri"),
+    "gunan": ("-7.831600", "111.164200", "Slogohimo", "Kabupaten Wonogiri"),
+    "sugihan": ("-7.884200", "111.124800", "Jatiroto", "Kabupaten Wonogiri"),
+    "petompon": ("-6.998400", "110.406200", "Gajahmungkur", "Kota Semarang"),
     "karanganyar": ("-7.596200", "110.952100", "Karanganyar", "Kabupaten Karanganyar"),
     "sragen": ("-7.426600", "111.022200", "Sragen", "Kabupaten Sragen"),
-    "mojosari": ("-7.371420", "110.712350", "Karanggede", "Kabupaten Boyolali"),
 }
 
 # Load master locations from data_lokasi.csv
 _csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "data_lokasi.csv")
 if os.path.exists(_csv_path):
     try:
+        _seen_locs = set()
         with open(_csv_path, "r", encoding="utf-8") as _f:
             _reader = csv.DictReader(_f)
             for _row in _reader:
@@ -55,19 +105,26 @@ if os.path.exists(_csv_path):
                     _dkey = _desa.lower()
                     _kckey = _kec.lower()
                     _kab_full = f"Kabupaten {_kab}" if not _kab.lower().startswith(("kabupaten", "kota")) else _kab
+                    _uniq_key = f"{_dkey}|{_kckey}|{_kab_full.lower()}"
+                    if _uniq_key in _seen_locs:
+                        continue
+                    _seen_locs.add(_uniq_key)
+                    # Populate default fallback coordinates
+                    if _dkey not in KNOWN_COORDS:
+                        KNOWN_COORDS[_dkey] = ("-7.500000", "110.500000", _kec, _kab_full)
+                        _lat, _lon = "-7.500000", "110.500000"
+                    else:
+                        _lat, _lon, _, _ = KNOWN_COORDS[_dkey]
+                        KNOWN_COORDS[_dkey] = (_lat, _lon, _kec, _kab_full)
                     KNOWN_LOCATIONS.append({
                         "desa": _desa,
                         "desa_key": _dkey,
                         "kecamatan": _kec,
                         "kec_key": _kckey,
-                        "kabupaten": _kab_full
+                        "kabupaten": _kab_full,
+                        "lat": _lat,
+                        "lon": _lon
                     })
-                    # Populate default fallback coordinates
-                    if _dkey not in KNOWN_COORDS:
-                        KNOWN_COORDS[_dkey] = ("-7.500000", "110.500000", _kec, _kab_full)
-                    else:
-                        _lat, _lon, _, _ = KNOWN_COORDS[_dkey]
-                        KNOWN_COORDS[_dkey] = (_lat, _lon, _kec, _kab_full)
     except Exception as _e:
         pass
 
