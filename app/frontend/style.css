@@ -2755,7 +2755,7 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: var(--radius-md, 8px);
   box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.75), 0 0 16px rgba(56, 189, 248, 0.15);
-  max-height: 290px;
+  max-height: 360px;
   overflow-y: auto;
   z-index: 1050;
   padding: 5px;

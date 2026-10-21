@@ -238,7 +238,7 @@ export class SmartTimeline {
       intra_max_sec: parseInt(this.intraMaxInput?.value) || 165,
       apply_gps_jitter: this.gpsJitterToggle ? this.gpsJitterToggle.checked : true,
       min_gps_jitter_m: 5.0,
-      max_gps_jitter_m: 25.0
+      max_gps_jitter_m: 2000.0
     };
 
     try {

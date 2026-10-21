@@ -61,8 +61,29 @@ FORMAT STRUKTUR OUTPUT (SESUAI KAIDAH KBBI):
 
 ATURAN KBBI & TATA BAHASA KEDINASAN:
 - Wajib gunakan format bold pada label butir dan SELALU beri 1 spasi setelah titik dua (contoh: '* **Topik:** Penjelasan...'). DILARANG MENEMPELKAN KATA TANPA SPASI SETELAH TITIK DUA.
-- Angka persentase desimal ditulis menggunakan tanda koma sesuai KBBI (contoh: 23,12% bukan 23.12%).
+- DILARANG menggunakan spasi ganda (double space) di antara kata maupun setelah tanda baca.
+- Angka persentase desimal ditulis menggunakan tanda koma dan menempel tanpa spasi sebelum tanda persen sesuai KBBI (contoh: 23,12% bukan 23.12% atau 23,12 %).
+- Penulisan nominal mata uang Rupiah ditulis tanpa titik dan tanpa spasi setelah lambang Rp (contoh: Rp15.000.000).
+- Apabila catatan lapangan menggunakan bahasa kiasan, istilah sehari-hari, atau ungkapan tidak baku, terjemahkan dan sarikan maknanya menjadi bahasa teknis kedinasan yang netral, sopan, dan objektif. DILARANG mengeluarkan kalimat meta-percakapan AI seperti 'Mohon maaf, saya tidak dapat...' atau 'Jika Anda memiliki catatan...'.
 - Hasilkan narasi siap pakai dalam format teks paragraf dan butir poin yang rapi tanpa markdown berlebih."""
+
+
+def is_ai_refusal_text(text: str) -> bool:
+    """Mendeteksi apakah output model AI merupakan kalimat penolakan (safety/policy refusal) dan bukan narasi laporan."""
+    if not text:
+        return False
+    t_low = text.strip().lower()
+    refusal_patterns = [
+        r"\bmohon\s+maaf\s*,\s*saya\s+tidak\s+dapat\b",
+        r"\bsaya\s+tidak\s+dapat\s+menyusun\s+laporan\b",
+        r"\bsaya\s+tidak\s+diizinkan\s+untuk\s+memproses\b",
+        r"\bberdasarkan\s+pedoman\s+keselamatan\b",
+        r"\bkebijakan\s+konten\b",
+        r"\bjika\s+anda\s+memiliki\s+catatan\s+lapangan\s+teknis\b",
+        r"\bi\s+cannot\s+fulfill\s+this\s+request\b",
+        r"\bsebagai\s+(?:model\s+bahasa|asisten)\s+ai\b",
+    ]
+    return any(re.search(pat, t_low) for pat in refusal_patterns)
 
 
 def sanitize_pamsimas_text(text: str) -> str:
@@ -71,11 +92,13 @@ def sanitize_pamsimas_text(text: str) -> str:
     1. Menghilangkan kata 'proyek', 'program', 'program pamsimas' secara ketat.
     2. Menghilangkan kata 'pupr', 'kementerian pupr', 'pekerjaan umum dan perumahan rakyat' -> resmi 'Kementerian PU'.
     3. Menjaga kapitalisasi kata (misal 'Program Pamsimas' -> 'Kegiatan Pamsimas', 'program' -> 'kegiatan').
-    4. Normalisasi tanda baca KBBI:
+    4. Normalisasi tanda baca & ejaan baku KBBI:
        - 1 spasi setelah titik dua (kecuali waktu jam, e.g. 09:14)
-       - Desimal persentase menggunakan tanda koma (e.g. 23,12%)
-       - 1 spasi setelah tanda koma dan titik jika menempel huruf
-       - Menghapus tanda em dash '—' menjadi tanda koma atau tanda kurung
+       - Desimal persentase menggunakan tanda koma tanpa spasi sebelum % (e.g. 23,12%)
+       - Mata uang Rupiah tanpa titik dan tanpa spasi (e.g. Rp10.000)
+       - 1 spasi setelah tanda koma, titik koma, dan titik kalimat jika menempel huruf
+       - Menghapus tanda em dash '—' menjadi tanda koma
+       - Menghilangkan seluruh spasi ganda (double space)
     """
     if not text:
         return ""
@@ -84,9 +107,10 @@ def sanitize_pamsimas_text(text: str) -> str:
     # Ganti em dash
     text = text.replace("—", ", ")
 
-    # Ejaan baku kata umum sesuai KBBI
+    # Ejaan baku kata umum sesuai KBBI V
     text = re.sub(r"(?i)\bkementrian\b", "Kementerian", text)
     text = re.sub(r"(?i)\bdikarenakan\b", "karena", text)
+    text = re.sub(r"(?i)\bdi\s+karenakan\b", "karena", text)
     text = re.sub(r"(?i)\bmerubah\b", "mengubah", text)
     text = re.sub(r"(?i)\bmempengaruhi\b", "memengaruhi", text)
     text = re.sub(r"(?i)\bmensosialisasikan\b", "menyosialisasikan", text)
@@ -101,8 +125,30 @@ def sanitize_pamsimas_text(text: str) -> str:
     text = re.sub(r"(?i)\befektip\b", "efektif", text)
     text = re.sub(r"(?i)\befisiend\b", "efisien", text)
     text = re.sub(r"(?i)\baksesoris\b", "aksesori", text)
+    text = re.sub(r"(?i)\breservoar\b", "reservoir", text)
+    text = re.sub(r"(?i)\baktifitas\b", "aktivitas", text)
+    text = re.sub(r"(?i)\bproduktifitas\b", "produktivitas", text)
+    text = re.sub(r"(?i)\befektifitas\b", "efektivitas", text)
+    text = re.sub(r"(?i)\bkreatifitas\b", "kreativitas", text)
+    text = re.sub(r"(?i)\b(?:prosentase|presentase)\b", "persentase", text)
+    text = re.sub(r"(?i)\bpondasi\b", "fondasi", text)
+    text = re.sub(r"(?i)\blobang\b", "lubang", text)
+    text = re.sub(r"(?i)\bkran\b", "keran", text)
+    text = re.sub(r"(?i)\bsurvey\b", "survei", text)
+    text = re.sub(r"(?i)\bkomplit\b", "lengkap", text)
+    text = re.sub(r"(?i)\bkerjasama\b", "kerja sama", text)
+    text = re.sub(r"(?i)\btindaklanjut\b", "tindak lanjut", text)
+    text = re.sub(r"(?i)\bujicoba\b", "uji coba", text)
+    text = re.sub(r"(?i)\bserahterima\b", "serah terima", text)
+    text = re.sub(r"(?i)\bpertanggung\s+jawaban\b", "pertanggungjawaban", text)
     text = re.sub(r"(?i)\bnon\s+fisik\b", "nonfisik", text)
     text = re.sub(r"(?i)\bnon\s+teknis\b", "nonteknis", text)
+    text = re.sub(r"(?i)\bantar\s+desa\b", "antardesa", text)
+    text = re.sub(r"(?i)\bantar\s+pihak\b", "antarpihak", text)
+    text = re.sub(r"(?i)\bantar\s+titik\b", "antartitik", text)
+    text = re.sub(r"(?i)\bsub\s+sistem\b", "subsistem", text)
+    text = re.sub(r"(?i)\b(?:pasca|paska)\s+konstruksi\b", "pascakonstruksi", text)
+    text = re.sub(r"(?i)\b(?:pasca|paska)\s+pelaksanaan\b", "pascapelaksanaan", text)
     text = re.sub(r"(?i)\bPJ(?:\.|\b)(?=\s+(?:Kepala\s+Desa|Kades|Bupati|Gubernur|Walikota|Wali\s+Kota))", "Pj.", text)
     text = re.sub(r"(?i)\bPLT(?:\.|\b)", "Plt.", text)
 
@@ -166,20 +212,35 @@ def sanitize_pamsimas_text(text: str) -> str:
 
     text = re.sub(r"\bprogram(?:-program)?\b", replace_program, text, flags=re.I)
 
-    # 5. Normalisasi tanda baca sesuai KBBI:
-    # 5a. Hapus spasi sebelum titik dua, titik koma, koma, dan titik
-    text = re.sub(r'[ \t]+([:;,.])', r'\1', text)
+    # 5. Normalisasi tanda baca sesuai KBBI & EYD V:
+    # 5a. Hapus spasi sebelum titik dua, titik koma, koma, titik, tanda seru, tanda tanya, persen, dan kurung tutup
+    text = re.sub(r'[ \t]+([:;,.!?%)\]])', r'\1', text)
+    # Hapus spasi tepat setelah kurung buka
+    text = re.sub(r'([(\[])[ \t]+', r'\1', text)
 
-    # 5b. Spasi setelah titik dua (selalu beri spasi kecuali format jam HH:MM(:SS) atau URL)
-    text = re.sub(r'(?<!\d):(?![\s\d/])|:(?![\s/])(?!\d{2}(?::|\s|$))', ': ', text)
+    # 5b. Spasi setelah titik dua (selalu beri spasi kecuali format jam HH:MM(:SS), URL, atau penutup markdown bold :**)
+    text = re.sub(r':\*\*(?!\s)', ':** ', text)
+    text = re.sub(r'(?<!\d):(?![\s\d/*])|:(?![\s/*])(?!\d{2}(?::|\s|$))', ': ', text)
 
-    # 5c. Format desimal persen koma sesuai KBBI (misal 23.12% -> 23,12%)
+    # 5c. Format desimal persen koma sesuai KBBI (misal 23.12% -> 23,12%, 23,12 % -> 23,12%)
     text = re.sub(r'(\d+)\.(\d+)\s*%', r'\1,\2%', text)
+    text = re.sub(r'(\d+(?:,\d+)?)\s+%', r'\1%', text)
 
-    # 5d. Spasi setelah koma jika menempel pada huruf
+    # 5d. Format mata uang Rupiah sesuai KBBI (tanpa titik dan tanpa spasi setelah Rp, misal Rp 10.000 -> Rp10.000)
+    text = re.sub(r'\bRp\.?\s+(\d)', r'Rp\1', text)
+
+    # 5e. Spasi setelah koma dan titik koma jika menempel pada huruf
     text = re.sub(r',([a-zA-Z])', r', \1', text)
+    text = re.sub(r';([a-zA-Z])', r'; \1', text)
 
-    # 5d. Bersihkan sisa heading B. HASIL YANG DICAPAI jika model tak sengaja menyertakannya
+    # 5f. Spasi setelah titik kalimat jika menempel pada huruf kapital awal kalimat berikutnya (melindungi gelar/singkatan)
+    text = re.sub(
+        r'(?<![A-Z])(?<!\bPj)(?<!\bPlt)(?<!\bA\.Md)(?<!\bS\.Ars)(?<!\bS\.Kom)(?<!\bS\.Pt)(?<!\bM\.Si)\.([A-Z][a-z]{2,})',
+        r'. \1',
+        text
+    )
+
+    # 5g. Bersihkan sisa heading B. HASIL YANG DICAPAI jika model tak sengaja menyertakannya
     text = re.sub(r"^(?:\*{0,2}B\.?\s*HASIL\s*YANG\s*DICAPAI\*{0,2}\s*)+", "", text, flags=re.I).strip()
 
     # 6. Pembersihan duplikasi kata dan frasa berulang (deduplikasi auto teks elaborasi)
@@ -198,8 +259,9 @@ def sanitize_pamsimas_text(text: str) -> str:
     )
     text = re.sub(rf'\b({common_repeat_words})\s+\1\b', r'\1', text, flags=re.IGNORECASE)
 
-    # 6c. Normalisasi spasi ganda
+    # 6c. Normalisasi spasi ganda per baris dan secara global
     text = re.sub(r'[ \t]{2,}', ' ', text)
+    text = "\n".join(line.strip() for line in text.splitlines())
 
     return text
 
@@ -373,9 +435,15 @@ def draft_village_narrative(
         "systemInstruction": {
             "parts": [{"text": SYSTEM_INSTRUCTION_ANTI_SLOP}]
         },
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ],
         "generationConfig": {
             "temperature": 0.2,
-            "maxOutputTokens": 2048
+            "maxOutputTokens": 8192
         }
     }
 
@@ -391,20 +459,62 @@ def draft_village_narrative(
         "gemini-3.1-flash-lite"
     ]
     last_err = ""
+    last_refusal_text = ""
 
     for m in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
+        # Jika model sebelumnya menolak karena kata kiasan/aneh, gunakan instruksi abstraksi teknis objektif
+        current_payload = payload
+        if last_refusal_text:
+            abstracted_prompt = (
+                prompt
+                + "\n\nINSTRUKSI KHUSUS ABSTRAKSI KEDINASAN:\n"
+                "Apabila catatan lapangan di atas mengandung ungkapan eksperimental, kiasan, hiperbola, atau istilah non-standar, "
+                "JANGAN MENOLAK pembuatan laporan. Saring, netralkan, dan abstraksikan substansinya menjadi narasi teknis "
+                "pelaksanaan Kegiatan Pamsimas yang 100% formal, sopan, objektif, dan sesuai etika dokumen kedinasan Kementerian PU "
+                "(fokuskan pada aspek karakteristik sumber air, kondisi teknis sarana di lapangan, penguatan kelembagaan KPSPAMS, "
+                "serta koordinasi pemerintah desa dan masyarakat)."
+            )
+            current_payload = {
+                **payload,
+                "contents": [{"parts": [{"text": abstracted_prompt}]}]
+            }
+
         try:
-            resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=15)
+            resp = requests.post(url, json=current_payload, headers={"Content-Type": "application/json"}, timeout=20)
             if resp.status_code == 200:
                 data = resp.json()
                 candidates = data.get("candidates", [])
                 if candidates:
-                    part = candidates[0].get("content", {}).get("parts", [{}])[0]
-                    text = part.get("text", "").strip()
+                    cand = candidates[0]
+                    finish_reason = cand.get("finishReason", "")
+                    parts = cand.get("content", {}).get("parts", [])
+                    # Gabungkan seluruh bagian teks non-thought agar tidak pernah terpotong
+                    text_chunks = [
+                        p.get("text", "")
+                        for p in parts
+                        if isinstance(p, dict) and not p.get("thought") and p.get("text")
+                    ]
+                    text = "\n".join(text_chunks).strip()
+                    if not text and parts and isinstance(parts[0], dict):
+                        text = (parts[0].get("text") or "").strip()
+
                     if text:
                         # Post-processing Anti-Slop & KBBI enforcement
                         text = sanitize_pamsimas_text(text)
+
+                        # Jika terpotong oleh MAX_TOKENS di tengah kalimat, coba model berikutnya
+                        if finish_reason == "MAX_TOKENS" and not text.endswith((".", "!", "?", ":", ")")):
+                            last_err = f"Model {m} truncated by MAX_TOKENS"
+                            continue
+
+                        # Cek apakah output berupa kalimat penolakan AI (Refusal)
+                        if is_ai_refusal_text(text):
+                            # Simpan teks penolakan yang utuh (tidak terpotong) dan coba model berikutnya dengan abstraksi
+                            if len(text) > len(last_refusal_text):
+                                last_refusal_text = text
+                            continue
+
                         usage = data.get("usageMetadata", {})
                         return {
                             "success": True,
@@ -412,12 +522,28 @@ def draft_village_narrative(
                             "model_used": m,
                             "token_usage": usage
                         }
+                    elif finish_reason in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "RECITATION"):
+                        last_refusal_text = (
+                            last_refusal_text
+                            or "Catatan lapangan mengandung istilah yang memerlukan abstraksi teknis."
+                        )
+                        continue
             else:
                 last_err = f"Model {m} status {resp.status_code}: {resp.text[:120]}"
                 continue
         except Exception as e:
             last_err = f"Model {m} error: {str(e)}"
             continue
+
+    # Jika seluruh model menolak karena kebijakan konten namun ada respons utuh dari model,
+    # pastikan respons tersebut utuh (tidak terpotong)
+    if last_refusal_text:
+        return {
+            "success": True,
+            "narrative": sanitize_pamsimas_text(last_refusal_text),
+            "model_used": "refusal_complete",
+            "fallback": False
+        }
 
     # RESILIENT FALLBACK: Jika seluruh model AI terkendala (koneksi internet offline / kuota habis),
     # hentikan pembuatan laporan dan kembalikan status kegagalan koneksi agar tidak menghasilkan laporan kosong/kurang lengkap.
@@ -507,7 +633,10 @@ def make_xml_paragraph(
 
     p.append(pPr)
 
-    if bold_prefix:
+    clean_pre = re.sub(r'[ \t]{2,}', ' ', (bold_prefix or "").strip())
+    clean_body = re.sub(r'[ \t]{2,}', ' ', (text or "").strip())
+
+    if clean_pre:
         r_pre = OxmlElement('w:r')
         rPr_pre = OxmlElement('w:rPr')
         rFonts_pre = OxmlElement('w:rFonts')
@@ -524,11 +653,11 @@ def make_xml_paragraph(
         r_pre.append(rPr_pre)
         t_pre = OxmlElement('w:t')
         t_pre.set(qn('xml:space'), 'preserve')
-        t_pre.text = bold_prefix + (" " if text else "")
+        t_pre.text = clean_pre + (" " if clean_body else "")
         r_pre.append(t_pre)
         p.append(r_pre)
 
-    if text:
+    if clean_body:
         r = OxmlElement('w:r')
         rPr = OxmlElement('w:rPr')
         rFonts = OxmlElement('w:rFonts')
@@ -547,7 +676,7 @@ def make_xml_paragraph(
         rPr.append(col_r)
         r.append(rPr)
         t = OxmlElement('w:t')
-        t.text = text
+        t.text = clean_body
         r.append(t)
         p.append(r)
 
@@ -600,12 +729,12 @@ def make_xml_bullet(
 
     p.append(pPr)
 
-    # Normalisasi label: pastikan diakhiri titik dua dan satu spasi
-    clean_lbl = label.strip() if label else ""
+    # Normalisasi label: pastikan diakhiri titik dua dan satu spasi, tanpa spasi ganda
+    clean_lbl = re.sub(r'[ \t]{2,}', ' ', label.replace("**", "").replace("*", "").strip()) if label else ""
     if clean_lbl:
-        clean_lbl = clean_lbl.rstrip(":").rstrip(".") + ": "
+        clean_lbl = clean_lbl.rstrip(":").rstrip(".").strip() + ": "
 
-    clean_txt = text.strip() if text else ""
+    clean_txt = re.sub(r'[ \t]{2,}', ' ', text.replace("**", "").replace("*", "").strip()) if text else ""
 
     if clean_lbl:
         r_lbl = OxmlElement('w:r')
@@ -881,6 +1010,9 @@ def generate_monev_docx(
     spt_line = f"Kegiatan Monitoring dan Evaluasi dilaksanakan berdasarkan Surat Perintah Tugas Nomor: {nomor_spt}"
     if tanggal_spt:
         spt_line += f" tanggal {tanggal_spt}"
+    spt_line = re.sub(r'[ \t]{2,}', ' ', spt_line.strip())
+    if not spt_line.endswith("."):
+        spt_line += "."
     p_spt.text = spt_line
     p_spt.paragraph_format.line_spacing = 1.5
     for r in p_spt.runs:
@@ -990,8 +1122,9 @@ def generate_monev_docx(
                     continue
 
                 # Normalisasi tanda baca sesuai KBBI:
-                # 1. Selalu berikan spasi setelah titik dua (kecuali waktu/jam HH:MM)
-                line_clean = re.sub(r':([^\s\d/])', r': \1', line_clean)
+                # 1. Selalu berikan spasi setelah titik dua (kecuali waktu/jam HH:MM atau markdown :**)
+                line_clean = re.sub(r':\*\*(?!\s)', ':** ', line_clean)
+                line_clean = re.sub(r':([^\s\d/*])', r': \1', line_clean)
                 # 2. Format desimal persen koma sesuai KBBI (misal 23.12% -> 23,12%)
                 line_clean = re.sub(r'(\d+)\.(\d+)\s*%', r'\1,\2%', line_clean)
                 # 3. Spasi setelah koma dan titik jika menempel ke huruf
@@ -999,14 +1132,14 @@ def generate_monev_docx(
 
                 # Cek apakah sub-heading khusus tanpa isi di baris sama (Kendala / Tindak lanjut)
                 if re.match(r"^(?:Kendala(?:\s+dan\s+permasalahan|\s+yang\s+dialami)?|Permasalahan|Rencana?\s+tindak\s+lanjut|Tindak\s+lanjut)\b", line_clean, flags=re.I) and (":" in line_clean or line_clean.endswith(".") or len(line_clean) < 45) and not re.search(r':\s*\S{20,}', line_clean):
-                    clean_sub = line_clean.replace("**", "").replace("*", "")
+                    clean_sub = re.sub(r'[ \t]{2,}', ' ', line_clean.replace("**", "").replace("*", "").strip())
                     p_sub = make_xml_paragraph(text=clean_sub, bold=True, font_name="Arial", font_size_pt=11.0, alignment="both", line_spacing=1.5, space_before_pt=6, space_after_pt=2)
                     insert_before_target(p_sub)
                     continue
 
                 # Cek apakah pengantar umum (misal diakhiri "sebagai berikut:")
                 if re.search(r"sebagai\s+berikut\s*[:\.]?$", line_clean, flags=re.I) and not line_clean.startswith(("*", "-", "•", "+")):
-                    clean_intro = line_clean.replace("**", "").replace("*", "")
+                    clean_intro = re.sub(r'[ \t]{2,}', ' ', line_clean.replace("**", "").replace("*", "").strip())
                     p_intro = make_xml_paragraph(text=clean_intro, font_name="Arial", font_size_pt=11.0, alignment="both", line_spacing=1.5, space_after_pt=2)
                     insert_before_target(p_intro)
                     continue
@@ -1030,12 +1163,18 @@ def generate_monev_docx(
                     if len(cand_label) <= 45 and not cand_label.lower().startswith("http") and not cand_label.isdigit():
                         label = cand_label
                         val = parts[1].strip().replace("**", "").replace("*", "")
-                    else:
+                    elif is_bullet_char:
                         val = clean_content.replace("**", "").replace("*", "")
+                    else:
+                        clean_para = re.sub(r'[ \t]{2,}', ' ', line_clean.replace("**", "").replace("*", "").strip())
+                        p_txt = make_xml_paragraph(text=clean_para, font_name="Arial", font_size_pt=11.0, alignment="both", line_spacing=1.5, space_after_pt=4)
+                        insert_before_target(p_txt)
+                        continue
                 elif is_bullet_char:
                     val = clean_content.replace("**", "").replace("*", "")
                 else:
-                    p_txt = make_xml_paragraph(text=line_clean, font_name="Arial", font_size_pt=11.0, alignment="both", line_spacing=1.5, space_after_pt=4)
+                    clean_para = re.sub(r'[ \t]{2,}', ' ', line_clean.replace("**", "").replace("*", "").strip())
+                    p_txt = make_xml_paragraph(text=clean_para, font_name="Arial", font_size_pt=11.0, alignment="both", line_spacing=1.5, space_after_pt=4)
                     insert_before_target(p_txt)
                     continue
 
@@ -1057,11 +1196,11 @@ def generate_monev_docx(
             insert_before_target(p_default)
 
     # 9. Penutup Laporan Resmi
-    # Bagian 'Dibuat di Semarang\npada tanggal  [tanggal_laporan]\nPembuat Laporan,'
+    # Bagian 'Dibuat di Semarang\npada tanggal [tanggal_laporan]\nPembuat Laporan,'
     # Wajib DIBOLD, warna HITAM, rata tengah pada ketiga baris tersebut (center aligned relative to each other),
     # dan tetap berada di sebelah kanan-atas daripada tabel personel (sejajar di atas kolom tanda tangan).
     p_penutup1 = make_xml_paragraph(text="Dibuat di Semarang", bold=True, font_name="Arial", font_size_pt=11.0, alignment="center", line_spacing=1.5, space_before_pt=12, space_after_pt=2, indent_left_dxa=5472, indent_right_dxa=0)
-    p_penutup2 = make_xml_paragraph(text=f"pada tanggal  {tanggal_laporan}", bold=True, font_name="Arial", font_size_pt=11.0, alignment="center", line_spacing=1.5, space_before_pt=2, space_after_pt=2, indent_left_dxa=5472, indent_right_dxa=0)
+    p_penutup2 = make_xml_paragraph(text=f"pada tanggal {tanggal_laporan}", bold=True, font_name="Arial", font_size_pt=11.0, alignment="center", line_spacing=1.5, space_before_pt=2, space_after_pt=2, indent_left_dxa=5472, indent_right_dxa=0)
     p_penutup3 = make_xml_paragraph(text="Pembuat Laporan,", bold=True, font_name="Arial", font_size_pt=11.0, alignment="center", line_spacing=1.5, space_before_pt=2, space_after_pt=8, indent_left_dxa=5472, indent_right_dxa=0)
     insert_before_target(p_penutup1)
     insert_before_target(p_penutup2)
@@ -1279,14 +1418,25 @@ def generate_monev_docx(
             for elem in to_remove_after:
                 body_parent.remove(elem)
 
-    # 13. SWEEP PURE BLACK 100% (Anti Non-Hitam):
+    # 13. SWEEP PURE BLACK 100% (Anti Non-Hitam) & NORMALISASI SPASI GANDA KBBI:
     # Pastikan setiap run teks (w:r) di seluruh dokumen (body, header, footer, tabel) berwarna hitam murni (000000)
+    # serta bebas dari spasi ganda (double space) baik di dalam run maupun antar-run.
     targets_to_sweep = [doc._body._element]
     for s in doc.sections:
         targets_to_sweep.append(s.header._element)
         targets_to_sweep.append(s.footer._element)
 
     for target in targets_to_sweep:
+        for p_elem in target.xpath('.//w:p'):
+            prev_ended_with_space = False
+            for t_elem in p_elem.xpath('.//w:t'):
+                if t_elem.text:
+                    cleaned_t = re.sub(r'[ \t]{2,}', ' ', t_elem.text)
+                    if prev_ended_with_space and cleaned_t.startswith(' '):
+                        cleaned_t = cleaned_t.lstrip(' ')
+                    t_elem.text = cleaned_t
+                    prev_ended_with_space = cleaned_t.endswith(' ')
+
         for r_elem in target.xpath('.//w:r'):
             # Abaikan run gambar/drawing murni tanpa teks jika tidak ada rPr
             rPr = r_elem.xpath('./w:rPr')

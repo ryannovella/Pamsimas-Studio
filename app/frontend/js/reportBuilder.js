@@ -13,7 +13,7 @@ import {
   getNextDayIso,
   toIndonesianDateText
 } from './dateUtils.js';
-import { KNOWN_COORDS_FRONTEND } from './config.js';
+import { KNOWN_COORDS_FRONTEND, KABUPATEN_COORDS_FRONTEND } from './config.js';
 import { renderStampedPhoto } from './canvasRenderer.js';
 import { Autocomplete, highlightText } from './autocomplete.js';
 
@@ -136,10 +136,6 @@ export class ReportBuilder {
     this.quickFontScale = document.getElementById('reportQuickFontScale');
     this.quickGpsJitter = document.getElementById('reportQuickGpsJitter');
 
-    if (this.quickDate && !this.quickDate.value) {
-      this.quickDate.value = this.getSurveyIsoDate();
-    }
-
     // Modal elements
     this.modal = document.getElementById('docEditModal');
     this.modalTitle = document.getElementById('modalTitle');
@@ -166,19 +162,20 @@ export class ReportBuilder {
   initTripPanel() {
     const sInput = document.getElementById('reportTripStartDate');
     const eInput = document.getElementById('reportTripEndDate');
-    const tStart = document.getElementById('reportTripStartTime');
-    const tEnd = document.getElementById('reportTripEndTime');
 
-    const defaultIso = this.getSurveyIsoDate();
-    if (sInput && !sInput.value) {
-      sInput.value = defaultIso;
-      this.tripStartDate = defaultIso;
+    // Jangan otomatis mengisi Tgl Mulai saat pertama kali membuka WebUI
+    if (sInput) {
+      sInput.value = '';
     }
-    if (eInput && !eInput.value) {
-      this.tripEndDate = '';
+    this.tripStartDate = '';
+
+    if (eInput) {
+      eInput.value = '';
     }
-    if (tStart) this.tripStartTime = tStart.value || '09:14:23';
-    if (tEnd) this.tripEndTime = tEnd.value || '15:47:38';
+    this.tripEndDate = '';
+
+    // Randomize Jam Mulai (~09:xx) & Jam Selesai (~15:xx s/d 16:xx) setiap launch
+    this.randomizeWorkHours(false);
 
     // Tanggal SPT & Tanggal Laporan default kosong saat webui baru dibuka
     if (!this.tanggalSpt) {
@@ -572,7 +569,7 @@ export class ReportBuilder {
     this.personelAutocomplete = new Autocomplete({
       input: inputEl,
       minChars: 0,
-      maxResults: 15,
+      maxResults: 100,
       getItems: (query) => this.searchPersonel(query),
       renderItem: (name, query) => {
         return `
@@ -595,9 +592,9 @@ export class ReportBuilder {
     if (!this.personelMaster || this.personelMaster.length === 0) return [];
     const q = (query || '').trim().toLowerCase();
 
-    // KASUS 1: Query kosong (User klik kolom personel)
+    // KASUS 1: Query kosong (User klik kolom personel) -> Tampilkan SEMUA nama di dropdown
     if (!q) {
-      return this.personelMaster.slice(0, 15);
+      return [...this.personelMaster];
     }
 
     // KASUS 2: Query terisi (Pencarian per-huruf mengerucut)
@@ -628,7 +625,7 @@ export class ReportBuilder {
       return a.name.localeCompare(b.name);
     });
 
-    return matches.slice(0, 15).map(m => m.name);
+    return matches.map(m => m.name);
   }
 
   onPersonelInput(event) {
@@ -882,13 +879,28 @@ export class ReportBuilder {
     const eInput = document.getElementById('reportTripEndDate');
     const badge = document.getElementById('reportTripDurationBadge');
 
-    const sVal = sInput?.value || this.getSurveyIsoDate();
-    const eVal = eInput?.value || '';
+    const sVal = (sInput?.value || '').trim();
+    const eVal = (eInput?.value || '').trim();
 
     this.tripStartDate = sVal;
     this.tripEndDate = eVal;
 
-    if (!badge) return;
+    if (sVal && this.quickDate && !this.quickDate.value) {
+      this.quickDate.value = sVal;
+    }
+
+    if (!badge) {
+      this.evaluateRealtimeAudit();
+      return;
+    }
+
+    if (!sVal) {
+      badge.textContent = 'Belum Diatur';
+      badge.style.background = 'rgba(148,163,184,0.12)';
+      badge.style.color = '#94a3b8';
+      this.evaluateRealtimeAudit();
+      return;
+    }
 
     if (!eVal || eVal === sVal) {
       badge.textContent = `1 Hari (${formatIndonesianDateOnly(sVal)})`;
@@ -905,23 +917,37 @@ export class ReportBuilder {
       badge.style.background = 'rgba(16,185,129,0.18)';
       badge.style.color = '#34d399';
     }
+    this.evaluateRealtimeAudit();
   }
 
   randomizeWorkHours(showToast = true) {
-    // Generate natural non-round start hour: 08:35 - 09:25 (avoid multiples of 5)
-    const startHourPool = [8, 9];
-    const sH = startHourPool[Math.floor(Math.random() * startHourPool.length)];
-    const sMPool = sH === 8 ? [37, 41, 46, 48, 52, 56] : [7, 11, 14, 18, 22, 26];
+    // Jam mulai: selalu di sekitaran jam 9-an (09:02 s/d 09:49, hindari kelipatan 5)
+    const sH = 9;
+    const sMPool = [];
+    for (let m = 2; m <= 49; m++) {
+      if (m % 5 !== 0) sMPool.push(m);
+    }
     const sM = sMPool[Math.floor(Math.random() * sMPool.length)];
-    const sSPool = [17, 21, 23, 27, 34, 38, 42, 47, 53];
+    const sSPool = [];
+    for (let s = 11; s <= 58; s++) {
+      if (s % 5 !== 0) sSPool.push(s);
+    }
     const sS = sSPool[Math.floor(Math.random() * sSPool.length)];
 
-    // Generate natural non-round end hour: 15:15 - 16:20 (avoid multiples of 5)
+    // Jam selesai: selalu di sekitaran jam 15 sampai 16-an (15:04 s/d 16:48, hindari kelipatan 5)
     const endHourPool = [15, 16];
     const eH = endHourPool[Math.floor(Math.random() * endHourPool.length)];
-    const eMPool = eH === 15 ? [33, 37, 42, 47, 52, 58] : [6, 12, 17, 23];
+    const eMPool = [];
+    const minEndM = eH === 15 ? 4 : 1;
+    const maxEndM = eH === 15 ? 58 : 48;
+    for (let m = minEndM; m <= maxEndM; m++) {
+      if (m % 5 !== 0) eMPool.push(m);
+    }
     const eM = eMPool[Math.floor(Math.random() * eMPool.length)];
-    const eSPool = [19, 23, 28, 32, 38, 43, 49, 54];
+    const eSPool = [];
+    for (let s = 11; s <= 58; s++) {
+      if (s % 5 !== 0) eSPool.push(s);
+    }
     const eS = eSPool[Math.floor(Math.random() * eSPool.length)];
 
     const tStartStr = `${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}:${String(sS).padStart(2, '0')}`;
@@ -931,6 +957,14 @@ export class ReportBuilder {
     const tEnd = document.getElementById('reportTripEndTime');
     if (tStart) tStart.value = tStartStr;
     if (tEnd) tEnd.value = tEndStr;
+
+    if (this.quickTime) this.quickTime.value = tStartStr;
+    if (this.quickEndTime) this.quickEndTime.value = tEndStr;
+
+    const stStart = document.getElementById('stStartTime');
+    const stEnd = document.getElementById('stEndTime');
+    if (stStart) stStart.value = tStartStr;
+    if (stEnd) stEnd.value = tEndStr;
 
     this.tripStartTime = tStartStr;
     this.tripEndTime = tEndStr;
@@ -943,15 +977,15 @@ export class ReportBuilder {
   // =========================================================
   // ONE-CLICK AUTO GENERATE TIMESTAMPS FOR ALL PHOTOS
   // =========================================================
-  autoGenerateAllTimestamps() {
+  autoGenerateAllTimestamps(silent = false) {
     if (this.photos.length === 0) {
-      alert('Belum ada foto yang diunggah.');
+      if (!silent) alert('Belum ada foto yang diunggah.');
       return;
     }
 
     const validVillages = this.villages.filter(v => v.desa && v.desa.trim());
     if (validVillages.length === 0) {
-      alert('Harap isi minimal satu nama desa terlebih dahulu.');
+      if (!silent) alert('Harap isi minimal satu nama desa terlebih dahulu.');
       return;
     }
 
@@ -977,11 +1011,11 @@ export class ReportBuilder {
     });
 
     if (!schedule || schedule.length === 0) {
-      alert('Gagal mengatur jadwal foto.');
+      if (!silent) alert('Gagal mengatur jadwal foto.');
       return;
     }
 
-    // 2. Terapkan jadwal, koordinat acak terarah, dan wilayah ke tiap foto
+    // 2. Terapkan jadwal, koordinat acak terarah (5 meter s/d 2 KM sekitar desa), dan wilayah ke tiap foto
     this.photos.forEach((photo, idx) => {
       const item = schedule[idx] || schedule[0];
       const targetVillage = item.village || validVillages[0];
@@ -992,9 +1026,9 @@ export class ReportBuilder {
       photo.kabupaten = this.kabupaten || 'Magelang';
       photo.provinsi = 'Jawa Tengah';
 
-      // Titik koordinat acak terarah di area desa terkait
+      // Titik koordinat acak terarah di sekitaran daerah desa terkait (rentang 5 meter s/d 2 KM)
       const baseCoords = this.getVillageCoordinates(photo.desa, photo.kabupaten);
-      const jittered = applyGpsJitter(baseCoords.lat, baseCoords.lon, 8, 35);
+      const jittered = applyGpsJitter(baseCoords.lat, baseCoords.lon, 5, 2000);
       photo.lat = jittered.lat;
       photo.lon = jittered.lon;
 
@@ -1009,11 +1043,32 @@ export class ReportBuilder {
     this.updateSummaryBadge();
     this.evaluateRealtimeAudit();
 
-    alert(`Waktu dan koordinat berhasil diterapkan ke ${this.photos.length} foto.`);
+    if (!silent) {
+      alert(`Waktu dan koordinat (radius 5m – 2km) berhasil diterapkan ke ${this.photos.length} foto.`);
+    }
   }
 
   getVillageCoordinates(desaName, kabName) {
-    const cleanDesa = (desaName || '').trim().toLowerCase().replace(/^desa\s+/, '');
+    const cleanDesa = (desaName || '').trim().toLowerCase().replace(/^(?:desa|kelurahan)\s+/i, '');
+    const cleanKab = (kabName || this.kabupaten || '').trim().toLowerCase().replace(/^(?:kabupaten|kota)\s+/i, '');
+
+    // 1. Cari pada master lokasi dari backend (data_lokasi.csv + KNOWN_COORDS)
+    if (cleanDesa && this.locations && this.locations.length > 0) {
+      const locMatch = this.locations.find(loc => {
+        const dKey = (loc.desa || '').trim().toLowerCase();
+        const kKey = (loc.kabupaten || '').trim().toLowerCase().replace(/^(?:kabupaten|kota)\s+/i, '');
+        if (cleanKab) {
+          return dKey === cleanDesa && (kKey === cleanKab || kKey.includes(cleanKab) || cleanKab.includes(kKey));
+        }
+        return dKey === cleanDesa;
+      }) || this.locations.find(loc => (loc.desa || '').trim().toLowerCase() === cleanDesa);
+
+      if (locMatch && locMatch.lat && locMatch.lon && locMatch.lat !== '-7.500000') {
+        return { lat: String(locMatch.lat), lon: String(locMatch.lon) };
+      }
+    }
+
+    // 2. Cari pada KNOWN_COORDS_FRONTEND
     if (cleanDesa && KNOWN_COORDS_FRONTEND && KNOWN_COORDS_FRONTEND[cleanDesa]) {
       return {
         lat: KNOWN_COORDS_FRONTEND[cleanDesa].lat,
@@ -1021,20 +1076,21 @@ export class ReportBuilder {
       };
     }
 
-    const cleanKab = (kabName || this.kabupaten || '').trim().toLowerCase();
-    if (cleanKab.includes('wonogiri')) {
-      return { lat: '-7.813600', lon: '110.925400' };
-    } else if (cleanKab.includes('magelang')) {
-      return { lat: '-7.585500', lon: '110.297400' };
-    } else if (cleanKab.includes('kebumen')) {
-      return { lat: '-7.669800', lon: '109.652100' };
-    } else if (cleanKab.includes('purbalingga')) {
-      return { lat: '-7.388500', lon: '109.363800' };
-    } else if (cleanKab.includes('banjarnegara')) {
-      return { lat: '-7.398700', lon: '109.697400' };
-    } else if (cleanKab.includes('boyolali')) {
-      return { lat: '-7.536000', lon: '110.596000' };
+    // 3. Fallback ke koordinat Kabupaten/Kota di Jawa Tengah
+    if (cleanKab && KABUPATEN_COORDS_FRONTEND) {
+      if (KABUPATEN_COORDS_FRONTEND[cleanKab]) {
+        return {
+          lat: KABUPATEN_COORDS_FRONTEND[cleanKab].lat,
+          lon: KABUPATEN_COORDS_FRONTEND[cleanKab].lon
+        };
+      }
+      for (const [k, coords] of Object.entries(KABUPATEN_COORDS_FRONTEND)) {
+        if (cleanKab.includes(k) || k.includes(cleanKab)) {
+          return { lat: coords.lat, lon: coords.lon };
+        }
+      }
     }
+
     return { lat: '-7.500000', lon: '110.500000' };
   }
 
@@ -1270,7 +1326,26 @@ export class ReportBuilder {
     }
 
     this.updateQuickVillageTargetOptions();
+    this.syncPhotosToVillages();
     this.updateSummaryBadge();
+  }
+
+  syncPhotosToVillages() {
+    if (!this.photos || this.photos.length === 0) return;
+    const validVillages = this.villages.filter(v => v.desa && v.desa.trim());
+    if (validVillages.length === 0) return;
+
+    this.photos.forEach((p, idx) => {
+      const targetV = validVillages[idx % validVillages.length] || validVillages[0];
+      p.desa = targetV.desa || p.desa || '';
+      p.kecamatan = targetV.kecamatan || p.kecamatan || '';
+      p.kabupaten = this.kabupaten || p.kabupaten || 'Magelang';
+      const baseCoords = this.getVillageCoordinates(p.desa, p.kabupaten);
+      const jittered = applyGpsJitter(baseCoords.lat, baseCoords.lon, 5, 2000);
+      p.lat = jittered.lat;
+      p.lon = jittered.lon;
+    });
+    this.renderPhotos();
   }
 
   onVillageFieldChange(id, field, value) {
@@ -1317,6 +1392,9 @@ export class ReportBuilder {
           titleEl.textContent = `${v.desa ? 'Desa ' + v.desa : 'Desa Baru'}${v.kecamatan ? ' (' + v.kecamatan + ')' : ''}`;
         }
         this.updateQuickVillageTargetOptions();
+        if (field === 'desa' && v.desa && this.getLocationMatch(v.desa)) {
+          this.syncPhotosToVillages();
+        }
       }
       this.updateSummaryBadge();
     }
@@ -1492,13 +1570,18 @@ export class ReportBuilder {
 
       if (lat && lon) {
         if (doGpsJitter) {
-          const jittered = applyGpsJitter(lat, lon, 6, 22);
+          const jittered = applyGpsJitter(lat, lon, 5, 2000);
           p.lat = jittered.lat;
           p.lon = jittered.lon;
         } else {
           p.lat = lat;
           p.lon = lon;
         }
+      } else if (doGpsJitter) {
+        const baseCoords = this.getVillageCoordinates(p.desa || desa, p.kabupaten || kab);
+        const jittered = applyGpsJitter(baseCoords.lat, baseCoords.lon, 5, 2000);
+        p.lat = jittered.lat;
+        p.lon = jittered.lon;
       }
     });
 
@@ -1564,6 +1647,11 @@ export class ReportBuilder {
       const isPortrait = imgInfo.height > imgInfo.width;
       const photoId = 'p_' + Math.random().toString(36).substr(2, 9);
 
+      const initDesa = this.villages[0]?.desa || '';
+      const initKec = this.villages[0]?.kecamatan || '';
+      const baseCoords = this.getVillageCoordinates(initDesa, this.kabupaten);
+      const initJittered = applyGpsJitter(baseCoords.lat, baseCoords.lon, 5, 2000);
+
       const photoItem = {
         id: photoId,
         filename: file.name,
@@ -1573,10 +1661,10 @@ export class ReportBuilder {
         naturalHeight: imgInfo.height,
         is_portrait: isPortrait,
         timeStr: '',
-        lat: '',
-        lon: '',
-        desa: this.villages[0]?.desa || '',
-        kecamatan: this.villages[0]?.kecamatan || '',
+        lat: initJittered.lat,
+        lon: initJittered.lon,
+        desa: initDesa,
+        kecamatan: initKec,
         kabupaten: this.kabupaten,
         provinsi: 'Jawa Tengah',
         dusun: '',
@@ -1610,7 +1698,7 @@ export class ReportBuilder {
     // Otomatis jalankan generate timestamp merata jika desa sudah terisi
     const validVillages = this.villages.filter(v => v.desa && v.desa.trim());
     if (validVillages.length > 0) {
-      this.autoGenerateAllTimestamps();
+      this.autoGenerateAllTimestamps(true);
     } else {
       this.renderPhotos();
       this.updateSummaryBadge();
@@ -1820,7 +1908,7 @@ export class ReportBuilder {
 
     targets.forEach((p) => {
       const baseCoords = this.getVillageCoordinates(p.desa, p.kabupaten);
-      const jittered = applyGpsJitter(p.lat || baseCoords.lat, p.lon || baseCoords.lon, 8, 35);
+      const jittered = applyGpsJitter(baseCoords.lat, baseCoords.lon, 5, 2000);
       p.lat = jittered.lat;
       p.lon = jittered.lon;
     });
@@ -2357,7 +2445,12 @@ export class ReportBuilder {
 
   jitterModalCoords() {
     if (!this.modalLat || !this.modalLon) return;
-    const jittered = applyGpsJitter(this.modalLat.value, this.modalLon.value, 6, 20);
+    const p = this.photos.find(item => item.id === this.activePhotoId);
+    const baseCoords = this.getVillageCoordinates(
+      this.modalDesa?.value || p?.desa,
+      this.modalKabupaten?.value || p?.kabupaten
+    );
+    const jittered = applyGpsJitter(baseCoords.lat, baseCoords.lon, 5, 2000);
     this.modalLat.value = jittered.lat;
     this.modalLon.value = jittered.lon;
     this.updateModalLivePreview();

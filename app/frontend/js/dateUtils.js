@@ -243,11 +243,12 @@ export function applyTimeJitter(timeStr, jitterMinSec = -47, jitterMaxSec = 47) 
 
 /**
  * Adds realistic GPS coordinate jitter to prevent identical coordinates ("plek ketiplek sama").
- * Strictly avoids multiples of 5 for the drift distance in meters (e.g. produces 7.3m, 11.4m, 16.8m, 22.3m).
+ * Default range: 5 meters to 2,000 meters (2 KM) around the village center.
+ * Strictly avoids multiples of 5 for the drift distance in meters.
  * 1 meter approx = 0.000009 degrees latitude.
  * Returns { lat: string, lon: string } formatted with 6 decimal places.
  */
-export function applyGpsJitter(lat, lon, minMeters = 6, maxMeters = 24) {
+export function applyGpsJitter(lat, lon, minMeters = 5, maxMeters = 2000) {
   let latNum = parseFloat(String(lat).replace(',', '.'));
   let lonNum = parseFloat(String(lon).replace(',', '.'));
 
@@ -255,16 +256,16 @@ export function applyGpsJitter(lat, lon, minMeters = 6, maxMeters = 24) {
     return { lat: String(lat), lon: String(lon) };
   }
 
-  // Meter distance strictly avoiding multiples of 5 (e.g. never 5, 10, 15, 20, 25)
-  const validMetersPool = [];
-  for (let m = Math.ceil(minMeters); m <= Math.floor(maxMeters); m++) {
-    if (m % 5 !== 0) validMetersPool.push(m);
-  }
-  const baseM = validMetersPool.length > 0 
-    ? validMetersPool[Math.floor(Math.random() * validMetersPool.length)]
-    : 13;
+  const minM = Math.max(5, Math.ceil(minMeters));
+  const maxM = Math.max(minM + 2, Math.floor(maxMeters));
 
-  // Add irregular fractional meter offset (e.g. 0.17, 0.38, 0.74; avoiding .0 and .5)
+  // Pick random integer meter distance in [minM, maxM] strictly avoiding multiples of 5
+  let baseM = minM + Math.floor(Math.random() * (maxM - minM + 1));
+  if (baseM % 5 === 0) {
+    baseM = (baseM + 2 <= maxM) ? baseM + 2 : Math.max(minM, baseM - 1);
+  }
+
+  // Add irregular fractional meter offset (e.g. 0.13, 0.27, 0.38, 0.42, 0.63, 0.74, 0.86; avoiding .0 and .5)
   const fracPool = [0.13, 0.27, 0.38, 0.42, 0.63, 0.74, 0.86];
   const radius = baseM + fracPool[Math.floor(Math.random() * fracPool.length)];
   const angle = Math.random() * 2 * Math.PI;
