@@ -212,6 +212,8 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
                 "id": str(p.get("id", uuid.uuid4().hex[:8])),
                 "filename": p.get("filename", ""),
                 "url": p.get("url", ""),
+                "width": p.get("width", 0),
+                "height": p.get("height", 0),
                 "desa": p.get("desa", ""),
                 "kecamatan": p.get("kecamatan", ""),
                 "dusun": p.get("dusun", ""),

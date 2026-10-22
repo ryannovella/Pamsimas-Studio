@@ -14,7 +14,7 @@ import datetime as _dt_module
 
 from typing import Dict, List, Tuple, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
-from PIL import Image
+from PIL import Image, ImageOps
 from app.backend.config import DOCX_MEDIA_DIR, DOCX_UPLOADS_DIR, BACKUP_DIR, DEFAULT_DOCX, BASE_DIR
 from app.backend.stamper import apply_stamp
 from app.backend.stamp_detector import detect_timestamp, crop_image_bottom
@@ -1182,10 +1182,21 @@ def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[
             has_existing_stamp = det_res.get("has_timestamp", False)
             suggested_crop = det_res.get("suggested_crop_bottom", 0.18)
 
+            img_w = 0
+            img_h = 0
+            try:
+                with Image.open(out_path) as dim_img:
+                    dim_img = ImageOps.exif_transpose(dim_img)
+                    img_w, img_h = dim_img.size
+            except Exception:
+                pass
+
             photos.append({
                 "id": img_num,
                 "filename": bname,
                 "url": f"/temp_media/{doc_token}/{bname}?t={int(doc_stat.st_mtime)}",
+                "width": img_w,
+                "height": img_h,
                 "desa": desa_clean,
                 "kecamatan": final_kec,
                 "dusun": dusun_val,

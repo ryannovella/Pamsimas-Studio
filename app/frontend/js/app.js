@@ -79,6 +79,12 @@ class App {
     window.modalQuickCropAspect43 = () => {
       this.reportBuilder.modalQuickCropAspect43();
     };
+    window.rotateActivePhoto = (deg) => {
+      this.reportBuilder.rotateActivePhoto(deg);
+    };
+    window.flipActivePhoto = (dir) => {
+      this.reportBuilder.flipActivePhoto(dir);
+    };
     window.onActiveModalKeepOriginalChange = (checked) => {
       this.reportBuilder.updateModalLivePreview();
     };

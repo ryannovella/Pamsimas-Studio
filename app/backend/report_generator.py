@@ -5,7 +5,7 @@ import json
 import requests
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from PIL import Image
+from PIL import Image, ImageOps
 
 import docx
 from docx.shared import Inches, Pt, RGBColor
@@ -783,12 +783,18 @@ def normalize_image_aspect_ratio(img: Image.Image, target_ratio: float = 4 / 3) 
     """
     Normalizes portrait or mismatched images to a balanced landscape aspect ratio (default 4:3)
     using high-quality centered cropping so that table grid rows remain perfectly aligned and symmetrical.
+    Also handles EXIF orientation transposition if present.
     """
+    try:
+        img = ImageOps.exif_transpose(img)
+    except Exception:
+        pass
+
     w, h = img.size
     current_ratio = w / h
 
-    # If image is portrait (h > w) or substantially narrower than 4:3
-    if current_ratio < 1.0:
+    # If image is portrait (h > w) or substantially narrower than 4:3 (margin toleransi ketat agar landscape panjang tidak terpangkas)
+    if current_ratio < 0.98:
         # Portrait to Landscape 4:3 center crop
         target_h = int(w / target_ratio)
         if target_h <= h:

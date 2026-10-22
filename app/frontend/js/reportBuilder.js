@@ -61,6 +61,14 @@ export class ReportBuilder {
     this.cropStart = null;
     this.activeCropPixels = null;
     this.currentLoadedDocxName = '';
+
+    // Segment Locks (Administrasi, Pelaksana, Villages, Photos)
+    this.lockedSegments = {
+      administrasi: false,
+      pelaksana: false,
+      villages: false,
+      photos: false
+    };
   }
 
   findBestMatch(query, candidates, keyExtractor = null) {
@@ -110,6 +118,11 @@ export class ReportBuilder {
     this.renderPhotos();
     this.updateDocumentTitlePreview();
     this.updateSummaryBadge();
+
+    // Inisialisasi status kunci segmen UI
+    ['administrasi', 'pelaksana', 'villages', 'photos'].forEach(key => {
+      this.applySegmentLockUI(key);
+    });
   }
 
   initQuickSetupElements() {
@@ -661,6 +674,10 @@ export class ReportBuilder {
   }
 
   addPelaksanaFromInput() {
+    if (this.lockedSegments.pelaksana) {
+      alert('Segmen Tim Pelaksana sedang terkunci.');
+      return;
+    }
     const inp = document.getElementById('reportPersonelInput');
     if (!inp) return;
     const val = inp.value.trim();
@@ -850,6 +867,15 @@ export class ReportBuilder {
   onTanggalSptChange(val) {
     this.setReportTanggalSpt(val);
     if (val) {
+      // 1. Tanggal Mulai Kegiatan otomatis disamakan dengan Tanggal SPT
+      const sInput = document.getElementById('reportTripStartDate');
+      if (sInput && (!this.lockedSegments.administrasi)) {
+        sInput.value = val;
+        this.tripStartDate = val;
+        this.onTripDatesChange();
+      }
+
+      // 2. Tanggal Laporan otomatis H+1 dari Tanggal SPT
       const hPlus1 = getNextDayIso(val);
       if (hPlus1) {
         this.setReportTanggalLaporan(hPlus1, false);
@@ -978,6 +1004,10 @@ export class ReportBuilder {
   // ONE-CLICK AUTO GENERATE TIMESTAMPS FOR ALL PHOTOS
   // =========================================================
   autoGenerateAllTimestamps(silent = false) {
+    if (this.lockedSegments.photos) {
+      if (!silent) alert('Segmen Foto sedang terkunci. Buka kunci segmen foto terlebih dahulu untuk memperbarui.');
+      return;
+    }
     if (this.photos.length === 0) {
       if (!silent) alert('Belum ada foto yang diunggah.');
       return;
@@ -1109,12 +1139,20 @@ export class ReportBuilder {
   }
 
   removePelaksana(index) {
+    if (this.lockedSegments.pelaksana) {
+      alert('Segmen Tim Pelaksana sedang terkunci.');
+      return;
+    }
     this.pelaksanaList.splice(index, 1);
     this.renderPelaksanaList();
     this.updateSummaryBadge();
   }
 
   clearPelaksana() {
+    if (this.lockedSegments.pelaksana) {
+      alert('Segmen Tim Pelaksana sedang terkunci.');
+      return;
+    }
     this.pelaksanaList = [];
     this.renderPelaksanaList();
     this.updateSummaryBadge();
@@ -1158,6 +1196,10 @@ export class ReportBuilder {
   // VILLAGES MANAGEMENT
   // =========================================================
   addVillage(data = null) {
+    if (this.lockedSegments.villages) {
+      alert('Segmen Data Desa sedang terkunci.');
+      return;
+    }
     const vId = 'v_' + Math.random().toString(36).substr(2, 9);
     const v = data || {
       id: vId,
@@ -1174,6 +1216,10 @@ export class ReportBuilder {
   }
 
   removeVillage(id) {
+    if (this.lockedSegments.villages) {
+      alert('Segmen Data Desa sedang terkunci.');
+      return;
+    }
     if (this.villages.length <= 1) {
       alert('Dokumen minimal harus memuat satu desa.');
       return;
@@ -1430,6 +1476,7 @@ export class ReportBuilder {
   toggleQuickPanel() {
     if (!this.quickPanel) return;
     const isCollapsed = this.quickPanel.classList.toggle('collapsed');
+    this.quickPanel.style.display = isCollapsed ? 'none' : 'block';
     if (this.quickToggleText) {
       this.quickToggleText.textContent = isCollapsed ? 'Pengaturan Lanjutan' : 'Tutup Pengaturan';
     }
@@ -1644,7 +1691,9 @@ export class ReportBuilder {
         img.src = dataUrl;
       });
 
-      const isPortrait = imgInfo.height > imgInfo.width;
+      // Deteksi rasio asli foto: jika naturalWidth > naturalHeight (landscape), pastikan BUKAN portrait
+      // Foto hanya portrait jika tinggi benar-benar lebih besar daripada lebar secara signifikan
+      const isPortrait = (imgInfo.height > imgInfo.width * 1.05);
       const photoId = 'p_' + Math.random().toString(36).substr(2, 9);
 
       const initDesa = this.villages[0]?.desa || '';
@@ -1775,7 +1824,7 @@ export class ReportBuilder {
     p.is_cropped = false;
     const img = new Image();
     img.onload = () => {
-      p.is_portrait = img.naturalHeight > img.naturalWidth;
+      p.is_portrait = img.naturalHeight > img.naturalWidth * 1.05;
       this.imageCache.delete(p.id);
       this.renderPhotos();
     };
@@ -1940,15 +1989,17 @@ export class ReportBuilder {
     if (!gridEl) return;
 
     if (this.photos.length === 0) {
-      gridEl.innerHTML = `
-        <div class="empty-hint" style="grid-column: 1 / -1; padding:20px; text-align:center; color:var(--text-muted); border:1px dashed var(--border-color); border-radius:8px;">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:6px; opacity:0.6;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          <p style="margin:0; font-size:0.8rem;">Belum ada foto dokumentasi lapangan. Seret foto ke kotak di atas atau klik tombol <strong>Pilih Berkas Foto</strong>.</p>
-        </div>
-      `;
+      gridEl.innerHTML = '';
+      gridEl.style.display = 'none';
+      const batchBar = document.getElementById('reportBatchBar');
+      if (batchBar) batchBar.style.display = 'none';
       this.updateBatchBar();
       return;
     }
+
+    gridEl.style.display = 'grid';
+    const batchBar = document.getElementById('reportBatchBar');
+    if (batchBar) batchBar.style.display = 'flex';
 
     gridEl.innerHTML = this.photos.map((p, idx) => {
       const isSelected = this.selectedPhotoIds.has(p.id);
@@ -1977,7 +2028,7 @@ export class ReportBuilder {
 
             <!-- Status Badge -->
             <span class="doc-live-badge ${isOriginal ? 'badge-raw' : ''}" style="display:inline-flex; align-items:center; gap:4px;">
-              ${isOriginal ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Original' : (isCropped ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> Dicrop' : '● Live Stamp')}
+              ${isOriginal ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Foto Asli' : (isCropped ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> Disesuaikan' : 'Watermark')}
             </span>
           </div>
 
@@ -2431,6 +2482,200 @@ export class ReportBuilder {
     await this.renderCardStamp(p.id);
   }
 
+  // =========================================================
+  // ROTATE & FLIP OPERATIONS FOR ACTIVE MODAL PHOTO
+  // =========================================================
+  async rotateActivePhoto(deg) {
+    if (!this.activePhotoId) return;
+    const p = this.photos.find(item => item.id === this.activePhotoId);
+    if (!p) return;
+
+    try {
+      if (!p.originalDataUrl) {
+        p.originalDataUrl = p.dataUrl;
+      }
+      const baseImg = new Image();
+      baseImg.src = p.dataUrl;
+      await new Promise((res, rej) => {
+        baseImg.onload = res;
+        baseImg.onerror = rej;
+      });
+
+      const w = baseImg.naturalWidth;
+      const h = baseImg.naturalHeight;
+      const rad = (deg * Math.PI) / 180;
+      const is90 = Math.abs(deg % 180) === 90;
+
+      const c = document.createElement('canvas');
+      c.width = is90 ? h : w;
+      c.height = is90 ? w : h;
+      const ctx = c.getContext('2d');
+      ctx.translate(c.width / 2, c.height / 2);
+      ctx.rotate(rad);
+      ctx.drawImage(baseImg, -w / 2, -h / 2);
+
+      p.dataUrl = c.toDataURL('image/jpeg', 0.95);
+      p.is_cropped = true;
+      p.naturalWidth = c.width;
+      p.naturalHeight = c.height;
+      p.is_portrait = c.height > c.width * 1.05;
+
+      this.imageCache.delete(p.id);
+      const btnResetCrop = document.getElementById('btnModalResetCrop');
+      if (btnResetCrop) btnResetCrop.style.display = 'inline-flex';
+
+      await this.updateModalLivePreview();
+      await this.renderCardStamp(p.id);
+    } catch (e) {
+      console.error('Gagal merotasi foto:', e);
+    }
+  }
+
+  async flipActivePhoto(dir = 'h') {
+    if (!this.activePhotoId) return;
+    const p = this.photos.find(item => item.id === this.activePhotoId);
+    if (!p) return;
+
+    try {
+      if (!p.originalDataUrl) {
+        p.originalDataUrl = p.dataUrl;
+      }
+      const baseImg = new Image();
+      baseImg.src = p.dataUrl;
+      await new Promise((res, rej) => {
+        baseImg.onload = res;
+        baseImg.onerror = rej;
+      });
+
+      const w = baseImg.naturalWidth;
+      const h = baseImg.naturalHeight;
+
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.translate(dir === 'h' ? w : 0, dir === 'v' ? h : 0);
+      ctx.scale(dir === 'h' ? -1 : 1, dir === 'v' ? -1 : 1);
+      ctx.drawImage(baseImg, 0, 0);
+
+      p.dataUrl = c.toDataURL('image/jpeg', 0.95);
+      p.is_cropped = true;
+      this.imageCache.delete(p.id);
+
+      const btnResetCrop = document.getElementById('btnModalResetCrop');
+      if (btnResetCrop) btnResetCrop.style.display = 'inline-flex';
+
+      await this.updateModalLivePreview();
+      await this.renderCardStamp(p.id);
+    } catch (e) {
+      console.error('Gagal membalik (flip) foto:', e);
+    }
+  }
+
+  // =========================================================
+  // SEGMENT LOCK MANAGEMENT
+  // =========================================================
+  toggleSegmentLock(segmentKey) {
+    if (this.lockedSegments[segmentKey] === undefined) return;
+    this.lockedSegments[segmentKey] = !this.lockedSegments[segmentKey];
+    this.applySegmentLockUI(segmentKey);
+  }
+
+  setSegmentLock(segmentKey, isLocked) {
+    this.lockedSegments[segmentKey] = !!isLocked;
+    this.applySegmentLockUI(segmentKey);
+  }
+
+  applySegmentLockUI(segmentKey) {
+    const isLocked = !!this.lockedSegments[segmentKey];
+    let panelId = '';
+    let btnId = '';
+
+    if (segmentKey === 'administrasi') {
+      panelId = 'panelAdministrasi';
+      btnId = 'btnLockAdministrasi';
+    } else if (segmentKey === 'pelaksana') {
+      panelId = 'panelPelaksana';
+      btnId = 'btnLockPelaksana';
+    } else if (segmentKey === 'villages') {
+      panelId = 'panelVillages';
+      btnId = 'btnLockVillages';
+    } else if (segmentKey === 'photos') {
+      panelId = 'panelPhotos';
+      btnId = 'btnLockPhotos';
+    }
+
+    const panel = document.getElementById(panelId);
+    const btn = document.getElementById(btnId);
+
+    if (btn) {
+      if (isLocked) {
+        btn.classList.add('is-locked');
+        const lbl = btn.querySelector('.lock-label');
+        if (lbl) lbl.textContent = 'Terkunci';
+        btn.title = 'Segmen ini terkunci (klik untuk membuka)';
+      } else {
+        btn.classList.remove('is-locked');
+        const lbl = btn.querySelector('.lock-label');
+        if (lbl) lbl.textContent = 'Buka';
+        btn.title = 'Kunci segmen ini agar tidak berubah';
+      }
+    }
+
+    if (panel) {
+      if (isLocked) {
+        panel.classList.add('is-locked');
+      } else {
+        panel.classList.remove('is-locked');
+      }
+
+      // Disabled / Readonly state for inputs inside panel
+      const inputs = panel.querySelectorAll('input, select, textarea');
+      inputs.forEach(el => {
+        // Jangan disable tombol lock itu sendiri
+        if (el.closest('.btn-segment-lock')) return;
+        el.disabled = isLocked;
+      });
+
+      // Disabled state for buttons inside panel (except lock button)
+      const buttons = panel.querySelectorAll('button');
+      buttons.forEach(b => {
+        if (b.classList.contains('btn-segment-lock')) return;
+        b.disabled = isLocked;
+      });
+    }
+
+    // Refresh audit card if open to sync status
+    const card = document.getElementById('reportAuditCard');
+    if (card && card.style.display !== 'none') {
+      this.evaluateRealtimeAudit();
+    }
+  }
+
+  lockAllCompleteSegments() {
+    // Kunci otomatis setiap segmen yang statusnya sudah terisi lengkap
+    if (this.kabupaten && this.nomorSpt && this.tanggalSpt) {
+      this.setSegmentLock('administrasi', true);
+    }
+    if (this.pelaksanaList && this.pelaksanaList.filter(Boolean).length > 0) {
+      this.setSegmentLock('pelaksana', true);
+    }
+    const validV = this.villages.filter(v => v.desa && (v.notes || v.narrative));
+    if (validV.length > 0) {
+      this.setSegmentLock('villages', true);
+    }
+    if (this.photos && this.photos.length > 0) {
+      this.setSegmentLock('photos', true);
+    }
+  }
+
+  unlockAllSegments() {
+    this.setSegmentLock('administrasi', false);
+    this.setSegmentLock('pelaksana', false);
+    this.setSegmentLock('villages', false);
+    this.setSegmentLock('photos', false);
+  }
+
   jitterModalTime() {
     if (!this.modalTimeStr) return;
     const current = this.modalTimeStr.value;
@@ -2500,123 +2745,131 @@ export class ReportBuilder {
       const rep = data.report_data || {};
 
       // 1. Administrasi & SPT
-      this.kabupaten = rep.kabupaten || '';
-      this.tahun = rep.tahun || '2026';
-      this.nomorSpt = rep.nomor_spt || '';
-      this.tanggalSpt = rep.tanggal_spt || '';
-      this.tanggalLaporan = rep.tanggal_laporan || '';
-      this.tempatPembuatan = rep.tempat_pembuatan || 'Semarang';
+      if (!this.lockedSegments.administrasi) {
+        this.kabupaten = rep.kabupaten || '';
+        this.tahun = rep.tahun || '2026';
+        this.nomorSpt = rep.nomor_spt || '';
+        this.tanggalSpt = rep.tanggal_spt || '';
+        this.tanggalLaporan = rep.tanggal_laporan || '';
+        this.tempatPembuatan = rep.tempat_pembuatan || 'Semarang';
 
-      const kabInp = document.getElementById('reportKabupaten');
-      if (kabInp) kabInp.value = this.kabupaten;
-      const thnInp = document.getElementById('reportTahun');
-      if (thnInp) thnInp.value = this.tahun;
-      const sptInp = document.getElementById('reportNomorSpt');
-      if (sptInp) sptInp.value = this.nomorSpt;
-      this.setReportTanggalSpt(this.tanggalSpt);
+        const kabInp = document.getElementById('reportKabupaten');
+        if (kabInp) kabInp.value = this.kabupaten;
+        const thnInp = document.getElementById('reportTahun');
+        if (thnInp) thnInp.value = this.tahun;
+        const sptInp = document.getElementById('reportNomorSpt');
+        if (sptInp) sptInp.value = this.nomorSpt;
+        this.setReportTanggalSpt(this.tanggalSpt);
 
-      // 2. Jadwal Dinas & Tanggal Laporan
-      this.tripStartDate = rep.trip_start_date || '';
-      this.tripEndDate = rep.trip_end_date || '';
-      const sTrip = document.getElementById('reportTripStartDate');
-      if (sTrip) sTrip.value = this.tripStartDate;
-      const eTrip = document.getElementById('reportTripEndDate');
-      if (eTrip) eTrip.value = this.tripEndDate;
+        // 2. Jadwal Dinas & Tanggal Laporan
+        this.tripStartDate = rep.trip_start_date || '';
+        this.tripEndDate = rep.trip_end_date || '';
+        const sTrip = document.getElementById('reportTripStartDate');
+        if (sTrip) sTrip.value = this.tripStartDate;
+        const eTrip = document.getElementById('reportTripEndDate');
+        if (eTrip) eTrip.value = this.tripEndDate;
 
-      if (this.tanggalLaporan) {
-        this.setReportTanggalLaporan(this.tanggalLaporan, false);
-      } else {
-        this.onTripDatesChange();
+        if (this.tanggalLaporan) {
+          this.setReportTanggalLaporan(this.tanggalLaporan, false);
+        } else {
+          this.onTripDatesChange();
+        }
       }
 
       // 3. Pelaksana Kedinasan
-      this.includePelaksana = rep.include_pelaksana !== false;
-      this.pelaksanaList = Array.isArray(rep.pelaksana) ? [...rep.pelaksana] : [];
-      const chkPelaksana = document.getElementById('reportIncludePelaksana');
-      if (chkPelaksana) chkPelaksana.checked = this.includePelaksana;
-      const pContainer = document.getElementById('reportPelaksanaContainer');
-      if (pContainer) pContainer.style.display = this.includePelaksana ? 'block' : 'none';
-      this.renderPelaksanaList();
+      if (!this.lockedSegments.pelaksana) {
+        this.includePelaksana = rep.include_pelaksana !== false;
+        this.pelaksanaList = Array.isArray(rep.pelaksana) ? [...rep.pelaksana] : [];
+        const chkPelaksana = document.getElementById('reportIncludePelaksana');
+        if (chkPelaksana) chkPelaksana.checked = this.includePelaksana;
+        const pContainer = document.getElementById('reportPelaksanaContainer');
+        if (pContainer) pContainer.style.display = this.includePelaksana ? 'block' : 'none';
+        this.renderPelaksanaList();
+      }
 
       // 4. Data Desa & Narasi / Catatan Lapangan
-      if (rep.villages && rep.villages.length > 0) {
-        this.villages = rep.villages.map(v => ({
-          id: 'v_' + Math.random().toString(36).substr(2, 9),
-          desa: v.desa || '',
-          kecamatan: v.kecamatan || '',
-          notes: v.notes || '',
-          narrative: v.narrative || ''
-        }));
-      } else {
-        this.villages = [
-          {
-            id: 'v_init',
-            desa: '',
-            kecamatan: '',
-            notes: '',
-            narrative: ''
-          }
-        ];
+      if (!this.lockedSegments.villages) {
+        if (rep.villages && rep.villages.length > 0) {
+          this.villages = rep.villages.map(v => ({
+            id: 'v_' + Math.random().toString(36).substr(2, 9),
+            desa: v.desa || '',
+            kecamatan: v.kecamatan || '',
+            notes: v.notes || '',
+            narrative: v.narrative || ''
+          }));
+        } else {
+          this.villages = [
+            {
+              id: 'v_init',
+              desa: '',
+              kecamatan: '',
+              notes: '',
+              narrative: ''
+            }
+          ];
+        }
+        this.renderVillages();
+        this.updateQuickVillageTargetOptions();
       }
-      this.renderVillages();
-      this.updateQuickVillageTargetOptions();
 
       // 5. Galeri Foto & Timestamp Status
-      this.photos = [];
-      this.selectedPhotoIds.clear();
-      this.imageCache.clear();
+      if (!this.lockedSegments.photos) {
+        this.photos = [];
+        this.selectedPhotoIds.clear();
+        this.imageCache.clear();
 
-      if (data.photos && data.photos.length > 0) {
-        for (const p of data.photos) {
-          const pId = 'p_' + Math.random().toString(36).substr(2, 9);
-          const hasTs = !!p.has_timestamp;
-          this.photos.push({
-            id: pId,
-            filename: p.filename || 'foto.jpg',
-            dataUrl: p.dataUrl || p.url || '',
-            originalDataUrl: p.dataUrl || p.url || '',
-            naturalWidth: p.width || 0,
-            naturalHeight: p.height || 0,
-            is_portrait: !!(p.height && p.width && p.height > p.width),
-            timeStr: p.time_str || p.timeStr || '',
-            lat: p.lat || '',
-            lon: p.lon || '',
-            desa: p.desa || (this.villages[0]?.desa || ''),
-            kecamatan: p.kecamatan || (this.villages[0]?.kecamatan || ''),
-            kabupaten: p.kabupaten || this.kabupaten,
-            provinsi: p.provinsi || 'Jawa Tengah',
-            dusun: p.dusun || '',
-            customAddress: p.custom_address || '',
-            address_mode: p.address_mode || 'natural',
-            font_scale: p.font_scale || 1.0,
-            alreadyStamped: hasTs,
-            has_timestamp: hasTs,
-            is_original: hasTs,
-            is_cropped: false
-          });
-        }
-        this.renderPhotos();
+        if (data.photos && data.photos.length > 0) {
+          for (const p of data.photos) {
+            const pId = 'p_' + Math.random().toString(36).substr(2, 9);
+            const hasTs = !!p.has_timestamp;
+            this.photos.push({
+              id: pId,
+              filename: p.filename || 'foto.jpg',
+              dataUrl: p.dataUrl || p.url || '',
+              originalDataUrl: p.dataUrl || p.url || '',
+              naturalWidth: p.width || 0,
+              naturalHeight: p.height || 0,
+              is_portrait: !!(p.height && p.width && p.height > p.width * 1.05),
+              timeStr: p.time_str || p.timeStr || '',
+              lat: p.lat || '',
+              lon: p.lon || '',
+              desa: p.desa || (this.villages[0]?.desa || ''),
+              kecamatan: p.kecamatan || (this.villages[0]?.kecamatan || ''),
+              kabupaten: p.kabupaten || this.kabupaten,
+              provinsi: p.provinsi || 'Jawa Tengah',
+              dusun: p.dusun || '',
+              customAddress: p.custom_address || '',
+              address_mode: p.address_mode || 'natural',
+              font_scale: p.font_scale || 1.0,
+              alreadyStamped: hasTs,
+              has_timestamp: hasTs,
+              is_original: hasTs,
+              is_cropped: false
+            });
+          }
+          this.renderPhotos();
 
-        // Cek foto portrait
-        const portraitPhotos = this.photos.filter(p => p.is_portrait);
-        if (portraitPhotos.length > 0) {
-          setTimeout(async () => {
-            const confirmCrop = confirm(
-              `Terdeteksi ${portraitPhotos.length} foto berorientasi Portrait (Tegak) pada dokumen ini.\n\n` +
-              `Format tabel foto resmi Kementerian PU menggunakan rasio Landscape (4:3) agar tampilan seragam dan sejajar.\n\n` +
-              `Klik 'OK' untuk menyesuaikan otomatis (Center-Crop ke 4:3) pada foto-foto tersebut.\n` +
-              `Klik 'Cancel' untuk mempertahankan rasio asli.`
-            );
-            if (confirmCrop) {
-              for (const p of portraitPhotos) {
-                await this.normalizePhotoAspect(p, 4 / 3);
+          // Cek foto portrait
+          const portraitPhotos = this.photos.filter(p => p.is_portrait);
+          if (portraitPhotos.length > 0) {
+            setTimeout(async () => {
+              const confirmCrop = confirm(
+                `Terdeteksi ${portraitPhotos.length} foto berorientasi Portrait (Tegak) pada dokumen ini.\n\n` +
+                `Format tabel foto resmi Kementerian PU menggunakan rasio Landscape (4:3) agar tampilan seragam dan sejajar.\n\n` +
+                `Klik 'OK' untuk menyesuaikan otomatis (Center-Crop ke 4:3) pada foto-foto tersebut.\n` +
+                `Klik 'Cancel' untuk mempertahankan rasio asli.`
+              );
+              if (confirmCrop) {
+                for (const p of portraitPhotos) {
+                  await this.normalizePhotoAspect(p, 4 / 3);
+                }
+                this.renderPhotos();
               }
-              this.renderPhotos();
-            }
-          }, 400);
+            }, 400);
+          }
+        } else {
+          this.renderPhotos();
         }
-      } else {
-        this.renderPhotos();
       }
 
       // Update Preview UI
@@ -2671,9 +2924,36 @@ export class ReportBuilder {
       }
     }
 
+    // Quick Audit Actions Bar (Kunci Segmen Lengkap & Buka Kunci)
+    const actionsBarHtml = `
+      <div class="report-audit-actions-bar">
+        <div style="font-size:0.75rem; color:var(--text-dim); display:flex; align-items:center; gap:6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span>Perlindungan Data: Kunci segmen yang sudah lengkap agar tidak terubah saat pengolahan lanjutan.</span>
+        </div>
+        <div class="report-audit-actions-group">
+          <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.lockAllCompleteSegments()" title="Kunci semua segmen data yang sudah lengkap">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Kunci Segmen Lengkap
+          </button>
+          <button type="button" class="btn btn-ghost btn-xs text-dim" onclick="window.reportBuilder.unlockAllSegments()" title="Buka seluruh kunci segmen">
+            Buka Semua Kunci
+          </button>
+        </div>
+      </div>
+    `;
+
     const summaryEl = document.getElementById('reportAuditSummary');
     if (summaryEl) {
       summaryEl.textContent = auditReport.summary || '';
+    }
+
+    let existingBar = card.querySelector('.report-audit-actions-bar');
+    if (!existingBar) {
+      const summaryNode = document.getElementById('reportAuditSummary');
+      if (summaryNode && summaryNode.parentNode) {
+        summaryNode.insertAdjacentHTML('afterend', actionsBarHtml);
+      }
     }
 
     const grid = document.getElementById('reportAuditGrid');
@@ -2683,14 +2963,36 @@ export class ReportBuilder {
         const cardBg = isComplete ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)';
         const cardBorder = isComplete ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.35)';
         const statusBadge = isComplete
-          ? `<span style="color:#34d399; font-weight:700; font-size:0.68rem; display:inline-flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> SUDAH ADA</span>`
-          : `<span style="color:#fbbf24; font-weight:700; font-size:0.68rem; display:inline-flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> BELUM ADA / PERLU DILENGKAPI</span>`;
+          ? `<span style="color:#34d399; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; background:rgba(16, 185, 129, 0.15); border:1px solid rgba(16, 185, 129, 0.35); border-radius:4px;" title="Lengkap"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>`
+          : `<span style="color:#f87171; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.35); border-radius:4px;" title="Belum Lengkap"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>`;
+
+        let targetSegKey = '';
+        if (['kabupaten', 'tahun', 'nomor_spt', 'tanggal_spt', 'tanggal_laporan', 'trip_dates'].includes(it.field)) {
+          targetSegKey = 'administrasi';
+        } else if (it.field === 'pelaksana') {
+          targetSegKey = 'pelaksana';
+        } else if (['villages', 'notes'].includes(it.field)) {
+          targetSegKey = 'villages';
+        } else if (it.field === 'photos') {
+          targetSegKey = 'photos';
+        }
+
+        const isSegLocked = targetSegKey ? !!this.lockedSegments[targetSegKey] : false;
+        const lockActionBtn = (isComplete && targetSegKey) ? `
+          <button type="button" class="btn btn-ghost btn-xs" onclick="window.reportBuilder.toggleSegmentLock('${targetSegKey}')" style="padding:2px 6px; font-size:0.65rem; color:${isSegLocked ? '#facc15' : 'var(--text-dim)'}; display:inline-flex; align-items:center; gap:3px;" title="${isSegLocked ? 'Buka kunci segmen ini' : 'Kunci segmen ini'}">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${isSegLocked ? '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' : '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>'}</svg>
+            <span>${isSegLocked ? 'Terkunci' : 'Kunci'}</span>
+          </button>
+        ` : '';
 
         return `
           <div style="background:${cardBg}; border:1px solid ${cardBorder}; border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; gap:4px; transition:all 0.2s ease;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <strong style="font-size:0.8rem; color:var(--text-main);">${idx + 1}. ${this.escapeHtml(it.label)}</strong>
-              ${statusBadge}
+              <div style="display:flex; align-items:center; gap:6px;">
+                ${lockActionBtn}
+                ${statusBadge}
+              </div>
             </div>
             <div style="font-size:0.75rem; color:#cbd5e1; line-height:1.35; margin-top:2px;">
               ${this.escapeHtml(it.message)}

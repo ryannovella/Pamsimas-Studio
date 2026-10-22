@@ -507,7 +507,10 @@ body {
 }
 
 .doc-quick-setup-panel.collapsed {
-  padding: 10px 16px;
+  display: none !important;
+  padding: 0;
+  margin: 0 !important;
+  border: none !important;
 }
 
 .quick-setup-header {
@@ -1402,14 +1405,14 @@ textarea.form-input::placeholder {
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
+  background: #2563eb;
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 .btn-primary:hover {
-  background: linear-gradient(180deg, #6d70f5 0%, #5850ec 100%);
-  box-shadow: 0 3px 10px rgba(79, 70, 229, 0.35);
+  background: #1d4ed8;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.35);
   transform: translateY(-1px);
 }
 .btn-primary:active {
@@ -1417,13 +1420,13 @@ textarea.form-input::placeholder {
 }
 
 .btn-success {
-  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  background: #059669;
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 .btn-success:hover {
-  background: linear-gradient(180deg, #34d399 0%, #10b981 100%);
+  background: #047857;
   box-shadow: 0 3px 10px rgba(16, 185, 129, 0.35);
   transform: translateY(-1px);
 }
@@ -2609,7 +2612,6 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 .studio-dropzone-bar.dragover {
   border-color: #38bdf8;
   background: rgba(56, 189, 248, 0.08);
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
 }
 
 .studio-dropzone-bar h3 {
@@ -2739,8 +2741,7 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 
 .studio-dropzone-bar.drag-active {
   border-color: #38bdf8 !important;
-  background: rgba(56, 189, 248, 0.1) !important;
-  box-shadow: 0 0 20px rgba(56, 189, 248, 0.3) !important;
+  background: rgba(56, 189, 248, 0.12) !important;
 }
 
 /* =========================================================
@@ -3041,28 +3042,28 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 /* Primary Generate Button */
 .btn-generate-timestamps {
   width: 100%;
-  padding: 10px 16px;
+  padding: 9px 14px;
   font-weight: 600;
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   letter-spacing: -0.01em;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   margin-bottom: 12px;
-  background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-md);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .btn-generate-timestamps:hover {
-  background: linear-gradient(180deg, #6d70f5 0%, #5850ec 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #fff;
 }
 
 .btn-generate-timestamps:active {
@@ -3197,6 +3198,102 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   background: var(--bg-surface-elevated);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   border-radius: var(--radius-md);
+}
+
+/* =========================================================
+   SEGMENT LOCK UI (CLEAN & NON-AI-SLOP)
+   ========================================================= */
+.btn-segment-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.btn-segment-lock:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--text-main);
+}
+
+.btn-segment-lock.is-locked {
+  background: rgba(234, 179, 8, 0.12);
+  border-color: rgba(234, 179, 8, 0.4);
+  color: #facc15;
+}
+
+.btn-segment-lock.is-locked .lock-icon-open {
+  display: none !important;
+}
+
+.btn-segment-lock.is-locked .lock-icon-closed {
+  display: inline-block !important;
+}
+
+.doc-dashboard-panel.is-locked {
+  border-color: rgba(234, 179, 8, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(234, 179, 8, 0.15), 0 4px 16px rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+
+.doc-dashboard-panel.is-locked::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.doc-dashboard-panel.is-locked input:not([type="checkbox"]),
+.doc-dashboard-panel.is-locked textarea,
+.doc-dashboard-panel.is-locked select {
+  background-color: rgba(0, 0, 0, 0.25) !important;
+  opacity: 0.85;
+}
+
+.village-card.is-locked {
+  border-color: rgba(234, 179, 8, 0.35);
+  background: rgba(234, 179, 8, 0.03);
+}
+
+.village-card.is-locked input,
+.village-card.is-locked textarea {
+  background-color: rgba(0, 0, 0, 0.25) !important;
+  opacity: 0.85;
+}
+
+/* Quick Audit Segment Actions Bar */
+.report-audit-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+
+.report-audit-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 

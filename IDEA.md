@@ -1,1 +1,1 @@
-App webui untuk membuat laporan perjalanan dinas.
+Pamsimas Studio, generate dan edit laporan perjalanan dinas

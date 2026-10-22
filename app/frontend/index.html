@@ -125,12 +125,17 @@
           <div class="studio-col-left">
             
             <!-- SECTION 1: Data Administrasi & SPT (Compact Form) -->
-            <div class="doc-dashboard-panel">
+            <div class="doc-dashboard-panel" id="panelAdministrasi">
               <div class="dashboard-header">
                 <div class="dashboard-title-group">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   <h3 class="section-title">Data Administrasi & SPT</h3>
                 </div>
+                <button type="button" class="btn-segment-lock" id="btnLockAdministrasi" onclick="window.reportBuilder.toggleSegmentLock('administrasi')" title="Kunci data Administrasi agar tidak berubah">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lock-icon-open"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lock-icon-closed" style="display:none;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <span class="lock-label">Buka</span>
+                </button>
               </div>
               <div class="form-grid-admin">
                 <div class="form-group" style="position:relative;">
@@ -164,16 +169,23 @@
             </div>
 
             <!-- SECTION 2: Pelaksana Monev (Default Aktif) -->
-            <div class="doc-dashboard-panel">
+            <div class="doc-dashboard-panel" id="panelPelaksana">
               <div class="dashboard-header">
                 <div class="dashboard-title-group">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
                   <h3 class="section-title">Tim Pelaksana Monev</h3>
                 </div>
-                <label class="checkbox-inline">
-                  <input type="checkbox" id="reportIncludePelaksana" checked>
-                  <span>Sertakan kolom tanda tangan</span>
-                </label>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <button type="button" class="btn-segment-lock" id="btnLockPelaksana" onclick="window.reportBuilder.toggleSegmentLock('pelaksana')" title="Kunci data Tim Pelaksana agar tidak berubah">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lock-icon-open"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lock-icon-closed" style="display:none;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <span class="lock-label">Buka</span>
+                  </button>
+                  <label class="checkbox-inline">
+                    <input type="checkbox" id="reportIncludePelaksana" checked>
+                    <span>Sertakan kolom tanda tangan</span>
+                  </label>
+                </div>
               </div>
 
               <div id="reportPelaksanaContainer" style="display:block;">
@@ -200,15 +212,22 @@
             </div>
 
             <!-- SECTION 3: Data Desa & Narasi Hasil Monev -->
-            <div class="doc-dashboard-panel">
+            <div class="doc-dashboard-panel" id="panelVillages">
               <div class="dashboard-header">
                 <div class="dashboard-title-group">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
                   <h3 class="section-title">Data Desa & Catatan Lapangan</h3>
                 </div>
-                <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.addVillage()">
-                  + Tambah Desa
-                </button>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <button type="button" class="btn-segment-lock" id="btnLockVillages" onclick="window.reportBuilder.toggleSegmentLock('villages')" title="Kunci data Desa & Narasi agar tidak berubah">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lock-icon-open"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lock-icon-closed" style="display:none;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <span class="lock-label">Buka</span>
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.addVillage()">
+                    + Tambah Desa
+                  </button>
+                </div>
               </div>
 
               <!-- Container of Village Cards -->
@@ -221,7 +240,7 @@
           <div class="studio-col-right">
             
             <!-- SECTION 4: Dokumentasi Foto Lapangan & Timestamp Maker -->
-            <div class="doc-dashboard-panel">
+            <div class="doc-dashboard-panel" id="panelPhotos">
               <div class="dashboard-header">
                 <div class="dashboard-title-group">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -229,6 +248,11 @@
                   <span class="badge" id="reportPhotosCountBadge">0 Foto</span>
                 </div>
                 <div style="display:flex; align-items:center; gap:6px;">
+                  <button type="button" class="btn-segment-lock" id="btnLockPhotos" onclick="window.reportBuilder.toggleSegmentLock('photos')" title="Kunci seluruh Foto & Timestamp agar tidak berubah">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lock-icon-open"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="lock-icon-closed" style="display:none;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <span class="lock-label">Buka</span>
+                  </button>
                   <button type="button" class="btn btn-secondary btn-xs" id="btnToggleReportQuickPanel" onclick="window.reportBuilder.toggleQuickPanel()">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                     <span id="reportQuickToggleText">Pengaturan Lanjutan</span>
@@ -250,7 +274,10 @@
 
                 <div class="trip-grid">
                   <div class="form-group">
-                    <label class="form-label">Tgl Mulai</label>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                      <label class="form-label" style="margin-bottom:0;">Tgl Mulai</label>
+                      <span class="tag-subtle" title="Otomatis mengikuti Tanggal SPT">(Sama dgn SPT)</span>
+                    </div>
                     <input type="date" id="reportTripStartDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()">
                   </div>
                   <div class="form-group">
@@ -275,10 +302,10 @@
                 </div>
               </div>
 
-              <!-- TOMBOL UTAMA: GENERATE TIMESTAMP OTOMATIS (ONE-CLICK) -->
+              <!-- TOMBOL UTAMA: TERAPKAN WAKTU & WATERMARK OTOMATIS -->
               <button type="button" class="btn-generate-timestamps" id="btnAutoGenerateTimestamps" onclick="window.reportBuilder.autoGenerateAllTimestamps()">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                <span>Generate Timestamp Otomatis</span>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>Terapkan Jadwal & Geotag ke Foto</span>
               </button>
 
               <!-- Photo Upload Dropzone Ramping -->
@@ -290,12 +317,12 @@
                     <polyline points="17 8 12 3 7 8"/>
                     <line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
-                  <span class="dropzone-text">Klik atau drag & drop foto ke sini</span>
+                  <span class="dropzone-text">Pilih atau seret berkas foto dokumentasi ke sini</span>
                 </div>
               </div>
 
               <!-- PANEL PENGATURAN MASSAL STEMPEL (COLLAPSIBLE COMPACT PANEL) -->
-              <div class="doc-quick-setup-panel collapsed" id="reportQuickSetupPanel" style="margin-bottom:10px; background:var(--bg-surface-elevated); border:1px solid var(--border-color); border-radius:var(--radius-sm); overflow:hidden;">
+              <div class="doc-quick-setup-panel collapsed" id="reportQuickSetupPanel" style="display:none; margin-bottom:10px; background:var(--bg-surface-elevated); border:1px solid var(--border-color); border-radius:var(--radius-sm); overflow:hidden;">
                 <div class="quick-setup-body" id="reportQuickSetupBody" style="padding:12px; display:flex; flex-direction:column; gap:10px;">
                   
                   <!-- Section 1: Lokasi & Wilayah Administrasi -->
@@ -442,10 +469,10 @@
                 </div>
                 <div class="doc-batch-actions" style="display:flex; gap:4px; flex-wrap:wrap;">
                   <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.jitterPhotosTime()" title="Atur urutan jam dan menit kegiatan secara realistis">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Time Jitter
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Variasi Waktu
                   </button>
                   <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.jitterPhotosGps()" title="Variasikan koordinat posisi per foto">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> GPS Jitter
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> Variasi Koordinat
                   </button>
                   <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.batchSetKeepOriginal(true)" title="Gunakan foto asli tanpa watermark">
                     Foto Asli
@@ -580,17 +607,34 @@
               Foto tidak akan diberi watermark waktu dan koordinat.
             </div>
           </div>
-          <!-- KONTROL CROP MANUAL -->
+          <!-- KONTROL CROP, ROTATE & FLIP -->
           <div id="modalCropBar" style="background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:8px; padding:10px 12px; margin-bottom:14px; display:flex; flex-direction:column; gap:8px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <div style="font-weight:600; color:var(--text-main); font-size:0.82rem; display:flex; align-items:center; gap:6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
-                <span>Potong Foto</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx=\"6\" cy=\"6\" r=\"3\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><line x1=\"20\" y1=\"4\" x2=\"8.12\" y2=\"15.88\"/><line x1=\"14.47\" y1=\"14.48\" x2=\"20\" y2=\"20\"/><line x1=\"8.12\" y1=\"8.12\" x2=\"12\" y2=\"12\"/></svg>
+                <span>Edit Geometri & Orientasi Foto</span>
               </div>
               <span id="modalCropStatusBadge" class="badge" style="font-size:0.68rem;">Siap</span>
             </div>
+            
+            <!-- Toolbar Transformasi: Rotasi & Flip -->
+            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.06);">
+              <button type="button" class="btn btn-secondary btn-xs" onclick="window.rotateActivePhoto(-90)" title="Putar 90° berlawanan arah jarum jam (Kiri)" style="display:inline-flex; align-items:center; gap:4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Putar Kiri
+              </button>
+              <button type="button" class="btn btn-secondary btn-xs" onclick="window.rotateActivePhoto(90)" title="Putar 90° searah jarum jam (Kanan)" style="display:inline-flex; align-items:center; gap:4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg> Putar Kanan
+              </button>
+              <button type="button" class="btn btn-secondary btn-xs" onclick="window.flipActivePhoto('h')" title="Balik Horizontal (Cermin Kiri-Kanan)" style="display:inline-flex; align-items:center; gap:4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/><path d="M4 14h16"/></svg> Balik Horizontal
+              </button>
+              <button type="button" class="btn btn-secondary btn-xs" onclick="window.flipActivePhoto('v')" title="Balik Vertikal (Atas-Bawah)" style="display:inline-flex; align-items:center; gap:4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="m17 7-5-5-5 5"/><path d="m17 17-5 5-5-5"/></svg> Balik Vertikal
+              </button>
+            </div>
+
             <div style="font-size:0.72rem; color:var(--text-dim);" id="modalCropInfoText">
-              Klik tombol <em>Seleksi Potong</em> di bawah foto, lalu seret kursor pada area foto yang ingin dipotong.
+              Gunakan rotasi/flip di atas atau klik <em>Seleksi Potong</em> di bawah foto untuk memotong rasio kustom.
             </div>
             <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
               <button type="button" class="btn btn-secondary btn-xs" id="btnModalApplyCrop" onclick="window.modalApplyCrop()" style="display:none; font-weight:600; align-items:center; gap:3px;">
