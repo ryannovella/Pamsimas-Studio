@@ -32,6 +32,7 @@ from app.backend.report_generator import (
     build_structured_monev_narrative_local, format_to_indonesian_date
 )
 from app.backend.docx_inspector import inspect_and_import_monev_docx
+from app.backend.updater import get_version_info, check_for_updates, apply_update
 
 app = Bottle()
 
@@ -162,6 +163,48 @@ def api_log_client_error():
         return json.dumps({"success": True})
     except Exception as e:
         response.status = 500
+        return json.dumps({"success": False, "error": str(e)})
+
+
+# =========================================================
+# SYSTEM VERSION & GITHUB UPDATE APIS
+# =========================================================
+@app.route("/api/system/version", method="GET")
+def api_system_version():
+    try:
+        data = get_version_info()
+        response.content_type = "application/json"
+        return json.dumps(data)
+    except Exception as e:
+        log_error("api_system_version", e)
+        response.status = 500
+        response.content_type = "application/json"
+        return json.dumps({"success": False, "error": str(e)})
+
+
+@app.route("/api/system/check_update", method=["GET", "POST"])
+def api_system_check_update():
+    try:
+        data = check_for_updates()
+        response.content_type = "application/json"
+        return json.dumps(data)
+    except Exception as e:
+        log_error("api_system_check_update", e)
+        response.status = 500
+        response.content_type = "application/json"
+        return json.dumps({"success": False, "error": str(e)})
+
+
+@app.route("/api/system/apply_update", method="POST")
+def api_system_apply_update():
+    try:
+        data = apply_update()
+        response.content_type = "application/json"
+        return json.dumps(data)
+    except Exception as e:
+        log_error("api_system_apply_update", e)
+        response.status = 500
+        response.content_type = "application/json"
         return json.dumps({"success": False, "error": str(e)})
 
 
