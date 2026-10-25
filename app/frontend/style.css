@@ -3296,6 +3296,201 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   flex-wrap: wrap;
 }
 
+/* =========================================================
+   APP VERSION BADGE & GITHUB UPDATE STYLING
+   ========================================================= */
+.brand-version {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.brand-version:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.update-indicator-dot {
+  width: 7px;
+  height: 7px;
+  background-color: var(--accent-cyan);
+  border-radius: 50%;
+  margin-left: 2px;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
+  flex-shrink: 0;
+}
+
+.update-card-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.update-section-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+.update-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 16px;
+  margin-bottom: 10px;
+}
+
+.update-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.update-meta-label {
+  color: var(--text-dim);
+  min-width: 80px;
+}
+
+.update-meta-val {
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+.update-commit-msg {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+}
+
+.dirty-badge {
+  color: var(--accent-amber);
+  font-weight: 600;
+  font-size: 0.7rem;
+  margin-left: 4px;
+}
+
+.update-status-pill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+}
+
+.update-status-pill.checking {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+}
+
+.update-status-pill.uptodate {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent-emerald);
+}
+
+.update-status-pill.available {
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--accent-cyan);
+}
+
+.update-status-pill.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+}
+
+.update-status-box {
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+.update-status-box.checking {
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #c7d2fe;
+}
+
+.update-status-box.uptodate {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.04);
+  color: #e2e8f0;
+}
+
+.update-status-box.available {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.05);
+  color: #f0f9ff;
+}
+
+.update-status-box.error {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.05);
+  color: #fca5a5;
+}
+
+.update-changelog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.changelog-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.changelog-hash {
+  color: var(--accent-cyan);
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+
+.changelog-date {
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.changelog-msg {
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
 
 
 

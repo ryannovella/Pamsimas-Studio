@@ -11,7 +11,7 @@
   <!-- Leaflet.js for OpenStreetMap & Google Maps Picker -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <link rel="stylesheet" href="/style.css?v=4.0">
+  <link rel="stylesheet" href="/style.css?v=4.1">
 </head>
 <body class="dark-theme">
   <div class="app-layout">
@@ -33,6 +33,7 @@
           <div class="brand-info">
             <h1 class="brand-title">PAMSIMAS <span>STUDIO</span></h1>
             <span class="brand-tag">Laporan Monev</span>
+            <span class="brand-version" id="appVersionHeader" title="Versi aplikasi (Klik untuk periksa pembaruan)">Memuat...</span>
           </div>
         </div>
 
@@ -71,6 +72,13 @@
         <button type="button" class="btn btn-ghost btn-sm text-dim" id="btnViewErrorLogs" onclick="window.viewErrorLogs ? window.viewErrorLogs() : null" title="Log aktivitas sistem">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           <span>Logs</span>
+        </button>
+
+        <!-- App Version & Update -->
+        <button type="button" class="btn btn-ghost btn-sm" id="btnAppUpdate" onclick="window.openUpdateModal ? window.openUpdateModal() : null" title="Versi & Pembaruan Aplikasi">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          <span id="headerVersionText">Update</span>
+          <span class="update-indicator-dot" id="headerUpdateDot" style="display:none;" title="Pembaruan tersedia di GitHub"></span>
         </button>
       </div>
     </header>
@@ -976,10 +984,88 @@
     </div>
   </div>
 
+  <!-- =========================================================
+       MODAL: Update & Versi Aplikasi (GitHub Sync)
+       ========================================================= -->
+  <div class="modal-backdrop" id="updateModal">
+    <div class="modal-card" style="max-width:620px; width:95%;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+          <h3 style="margin:0; font-size:1rem; font-weight:700;">Versi & Pembaruan Aplikasi</h3>
+        </div>
+        <button class="modal-close" onclick="window.closeUpdateModal()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="flex-direction:column; gap:16px; padding:18px;">
+        <!-- Current Local Version Details -->
+        <div class="update-card-section">
+          <div class="update-section-title">Versi Saat Ini (Local)</div>
+          <div class="update-meta-grid">
+            <div class="update-meta-item">
+              <span class="update-meta-label">Versi:</span>
+              <span class="update-meta-val font-mono" id="modalCurrentVersionTag">-</span>
+            </div>
+            <div class="update-meta-item">
+              <span class="update-meta-label">Git Commit:</span>
+              <span class="update-meta-val font-mono" id="modalCurrentCommitHash">-</span>
+            </div>
+            <div class="update-meta-item">
+              <span class="update-meta-label">Tanggal Rilis:</span>
+              <span class="update-meta-val" id="modalCurrentCommitDate">-</span>
+            </div>
+            <div class="update-meta-item">
+              <span class="update-meta-label">Cabang:</span>
+              <span class="update-meta-val font-mono" id="modalCurrentBranch">main</span>
+            </div>
+          </div>
+          <div class="update-commit-msg" id="modalCurrentCommitMsg">Memuat rincian versi...</div>
+        </div>
+
+        <!-- GitHub Remote Status -->
+        <div class="update-card-section">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+            <div class="update-section-title" style="margin:0;">Status Repositori GitHub</div>
+            <span class="update-status-pill" id="modalRemoteStatusPill">Belum diperiksa</span>
+          </div>
+
+          <div id="modalUpdateStatusBox" class="update-status-box idle">
+            <div id="modalUpdateStatusText">Klik tombol <strong>Check for Update</strong> untuk memeriksa apakah terdapat versi yang lebih baru di GitHub.</div>
+          </div>
+
+          <!-- Changelog Container (if updates available) -->
+          <div id="modalChangelogWrap" style="display:none; margin-top:12px;">
+            <div style="font-size:0.75rem; font-weight:600; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em;">Daftar Pembaruan Terbaru:</div>
+            <div id="modalChangelogList" class="update-changelog-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="justify-content:space-between;">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnModalCheckUpdate" onclick="window.checkForAppUpdate()" style="display:inline-flex; align-items:center; gap:6px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          <span id="btnModalCheckUpdateText">Check for Update</span>
+        </button>
+        
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-primary btn-sm" id="btnModalApplyUpdate" onclick="window.applyAppUpdate()" style="display:none; background:#10b981; border-color:#059669;">
+            Update Sekarang
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" id="btnModalReloadApp" onclick="window.location.reload()" style="display:none;">
+            Reload Halaman
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeUpdateModal()">Tutup</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Error Toast Container -->
   <div id="errorToastArea" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px; max-width:400px; pointer-events:none;"></div>
 
   <!-- Modular Application Entry Point -->
-  <script type="module" src="/js/app.js?v=4.0"></script>
+  <script type="module" src="/js/app.js?v=4.1"></script>
 </body>
 </html>

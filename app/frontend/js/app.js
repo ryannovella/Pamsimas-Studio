@@ -5,12 +5,14 @@ import { SmartTimeline } from './smartTimeline.js';
 import { PhotoLightbox } from './lightbox.js';
 import { initErrorCatcher } from './errorCatcher.js';
 import { ReportBuilder } from './reportBuilder.js';
+import { AppUpdater } from './updater.js';
 
 class App {
   constructor() {
     this.reportBuilder = null;
     this.smartTimeline = null;
     this.lightbox = null;
+    this.updater = null;
   }
 
   init() {
@@ -24,11 +26,14 @@ class App {
     this.reportBuilder = new ReportBuilder();
     this.smartTimeline = new SmartTimeline();
     this.lightbox = new PhotoLightbox();
+    this.updater = new AppUpdater();
+    this.updater.init();
 
     // Expose instances for HTML bindings
     window.reportBuilder = this.reportBuilder;
     window.smartTimeline = this.smartTimeline;
     window.photoLightbox = this.lightbox;
+    window.appUpdater = this.updater;
     window.app = this;
 
     // Active context is always 'report' in this standalone app
