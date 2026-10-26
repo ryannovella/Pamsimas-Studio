@@ -29,7 +29,8 @@ from app.backend.geocoding_service import reverse_geocode, search_location
 from app.backend.logger import log_error, get_recent_logs, clear_logs, ERROR_LOG_PATH
 from app.backend.report_generator import (
     draft_village_narrative, generate_monev_docx, sanitize_pamsimas_text,
-    build_structured_monev_narrative_local, format_to_indonesian_date
+    build_structured_monev_narrative_local, format_to_indonesian_date,
+    normalize_personel_title
 )
 from app.backend.docx_inspector import inspect_and_import_monev_docx
 from app.backend.updater import get_version_info, check_for_updates, apply_update
@@ -236,6 +237,7 @@ def api_get_personel():
                     if not line:
                         continue
                     cleaned = re.sub(r"^\d+\.\s*", "", line).strip()
+                    cleaned = normalize_personel_title(cleaned)
                     if cleaned and cleaned not in names:
                         names.append(cleaned)
         response.content_type = "application/json"

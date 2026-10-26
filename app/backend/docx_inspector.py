@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from app.backend.docx_service import parse_document, lookup_location, fuzzy_match_village
 from app.backend.logger import log_error
+from app.backend.report_generator import parse_date_range_str, normalize_personel_title
 
 
 def parse_indo_date_to_iso(text: str) -> str:
@@ -114,11 +115,14 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
         m_spt = re.search(r"\b(CK\d+[A-Za-z0-9\/\-\.]+202\d[A-Za-z0-9\/\-\.]*)\b", t)
         if m_spt and not nomor_spt:
             nomor_spt = m_spt.group(1).strip()
-        m_tspt = re.search(r"tanggal\s+([0-9]{1,2}(?:\s*[-–—]\s*[0-9]{1,2})?\s+[A-Za-z]+\s+[0-9]{4})", t, re.I)
+        m_tspt = re.search(
+            r"tanggal\s+([0-9]{1,2}\s+[A-Za-z]+(?:\s+[0-9]{4})?\s*[-–—]\s*[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|"
+            r"[0-9]{1,2}\s*[-–—]\s*[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|"
+            r"[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})",
+            t, re.I
+        )
         if m_tspt and not tanggal_spt_raw:
             tanggal_spt_raw = m_tspt.group(1).strip()
-
-    tanggal_spt_iso = parse_indo_date_to_iso(tanggal_spt_raw)
 
     # 3. Tanggal Laporan & Dibuat di
     tempat_pembuatan = "Semarang"
@@ -137,24 +141,24 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
     # 4. Tanggal Dinas (Mulai & Selesai)
     trip_start_iso = ""
     trip_end_iso = ""
-    combined_date_src = clean_fn + " " + tanggal_spt_raw
-    m_trip = re.search(r"(\d{1,2})\s*[-–—]\s*(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", combined_date_src)
-    if m_trip:
-        trip_start_iso = parse_indo_date_to_iso(f"{m_trip.group(1)} {m_trip.group(3)} {m_trip.group(4)}")
-        trip_end_iso = parse_indo_date_to_iso(f"{m_trip.group(2)} {m_trip.group(3)} {m_trip.group(4)}")
-    else:
-        m_single = re.search(r"(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", combined_date_src)
-        if m_single:
-            trip_start_iso = parse_indo_date_to_iso(f"{m_single.group(1)} {m_single.group(2)} {m_single.group(3)}")
+    p_start, p_end = parse_date_range_str(tanggal_spt_raw)
+    if not p_start:
+        p_start, p_end = parse_date_range_str(clean_fn)
+    if p_start:
+        trip_start_iso = f"{p_start[0]:04d}-{p_start[1]:02d}-{p_start[2]:02d}"
+    if p_end:
+        trip_end_iso = f"{p_end[0]:04d}-{p_end[1]:02d}-{p_end[2]:02d}"
 
-    # Otomatisasi Tanggal Laporan: Jika belum ada di dokumen, prioritas H+1 dari Tanggal SPT, lalu dari hari terakhir dinas
+    tanggal_spt_iso = trip_start_iso or parse_indo_date_to_iso(tanggal_spt_raw)
+
+    # Otomatisasi Tanggal Laporan: Jika belum ada di dokumen, prioritas H+1 dari hari terakhir dinas, lalu dari Tanggal SPT
     auto_hplus1 = False
     if not tanggal_laporan_iso:
-        if tanggal_spt_iso:
-            tanggal_laporan_iso = get_hplus1_iso(tanggal_spt_iso)
-            auto_hplus1 = True
-        elif trip_end_iso or trip_start_iso:
+        if trip_end_iso or trip_start_iso:
             tanggal_laporan_iso = get_hplus1_iso(trip_end_iso or trip_start_iso)
+            auto_hplus1 = True
+        elif tanggal_spt_iso:
+            tanggal_laporan_iso = get_hplus1_iso(tanggal_spt_iso)
             auto_hplus1 = True
 
     # 5. Tabel Pelaksana
@@ -168,6 +172,7 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
         with open(personel_file, "r", encoding="utf-8") as f:
             for line in f:
                 cl = re.sub(r"^\d+\.\s*", "", line).strip()
+                cl = normalize_personel_title(cl)
                 if cl and cl not in master_personel:
                     master_personel.append(cl)
 
@@ -186,7 +191,7 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
                                 if val.lower() in mp.lower() or mp.lower() in val.lower():
                                     matched = mp
                                     break
-                            pelaksana.append(matched or val)
+                            pelaksana.append(matched or normalize_personel_title(val))
                         break
         elif len(t.columns) == 4 and len(t.rows) >= 1:
             first_row = [c.text.strip() for c in t.rows[0].cells]
@@ -200,7 +205,7 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
                             if name_val.lower() in mp.lower() or mp.lower() in name_val.lower():
                                 matched = mp
                                 break
-                        pelaksana.append(matched or name_val)
+                        pelaksana.append(matched or normalize_personel_title(name_val))
 
     # 6. Parse Photos & Locations using docx_service
     parsed_photos = []

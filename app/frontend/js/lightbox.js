@@ -79,6 +79,18 @@ export class PhotoLightbox {
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       this.navigate(1);
+    } else if (!e.ctrlKey && !e.altKey && (e.key === 'e' || e.key === 'E')) {
+      e.preventDefault();
+      this.openEditor();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault();
+      this.downloadPhoto();
+    } else if (!e.ctrlKey && !e.altKey && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      this.downloadPhoto();
+    } else if (!e.ctrlKey && !e.altKey && (e.key === 'o' || e.key === 'O' || e.code === 'Space')) {
+      e.preventDefault();
+      this.toggleRaw();
     }
   }
 

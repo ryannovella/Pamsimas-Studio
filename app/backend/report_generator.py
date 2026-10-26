@@ -3,9 +3,17 @@ import io
 import re
 import json
 import requests
+import subprocess
+import tempfile
+import shutil
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from PIL import Image, ImageOps
+
+try:
+    import pypdf  # type: ignore
+except ImportError:
+    pypdf = None
 
 import docx
 from docx.shared import Inches, Pt, RGBColor
@@ -834,6 +842,161 @@ def parse_date_parts(date_val: str):
     return None
 
 
+def parse_date_range_str(val: str):
+    """
+    Mengekstrak ((y1, m1, d1), (y2, m2, d2)) atau ((y1, m1, d1), None) dari teks rentang tanggal atau tanggal tunggal.
+    Mendukung format:
+    - Lintas bulan: '28 September 2026 - 2 Oktober 2026' atau '28 September - 2 Oktober 2026'
+    - Bulan sama: '8 - 9 Oktober 2026' atau '05 – 06 Agustus 2026'
+    - Tanggal tunggal: '28 September 2026'
+    """
+    if not val:
+        return None, None
+    val_clean = str(val).strip()
+    indo_map = {
+        'januari': 1, 'jan': 1, 'februari': 2, 'feb': 2, 'maret': 3, 'mar': 3,
+        'april': 4, 'apr': 4, 'mei': 5, 'juni': 6, 'jun': 6, 'juli': 7, 'jul': 7,
+        'agustus': 8, 'agt': 8, 'agust': 8, 'september': 9, 'sep': 9, 'sept': 9,
+        'oktober': 10, 'okt': 10, 'november': 11, 'nov': 11, 'desember': 12, 'des': 12
+    }
+
+    # Format lintas bulan: 28 September 2026 - 2 Oktober 2026 atau 28 September - 2 Oktober 2026
+    m_cross = re.search(r"(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{4}))?\s*[-–—s/d]+\s*(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", val_clean, re.I)
+    if m_cross:
+        y2 = int(m_cross.group(6))
+        m2_str = m_cross.group(5).lower()
+        d2 = int(m_cross.group(4))
+
+        y1 = int(m_cross.group(3)) if m_cross.group(3) else y2
+        m1_str = m_cross.group(2).lower()
+        d1 = int(m_cross.group(1))
+
+        if m1_str in indo_map and m2_str in indo_map:
+            return (y1, indo_map[m1_str], d1), (y2, indo_map[m2_str], d2)
+
+    # Format bulan sama: 8 - 9 Oktober 2026 atau 05 – 06 Agustus 2026
+    m_same = re.search(r"(\d{1,2})\s*[-–—s/d]+\s*(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", val_clean, re.I)
+    if m_same:
+        d1 = int(m_same.group(1))
+        d2 = int(m_same.group(2))
+        m_str = m_same.group(3).lower()
+        y = int(m_same.group(4))
+        if m_str in indo_map:
+            return (y, indo_map[m_str], d1), (y, indo_map[m_str], d2)
+
+    p_single = parse_date_parts(val_clean)
+    return p_single, None
+
+
+def normalize_personel_title(name: str) -> str:
+    """
+    Merapikan penulisan nama dan gelar akademik/profesi personel sesuai kaidah KBBI/EYD:
+    - Setiap unsur singkatan gelar akademik diakhiri tanda titik (e.g. S.T., M.T., S.E., S.Ars., S.A.P., A.Md., dll.)
+    - Singkatan nama depan diakhiri titik (e.g. FX -> F.X.)
+    - Penulisan tanda koma dan spasi sebelum dan antargelar dirapikan (e.g. 'Nama, S.T., M.T.')
+    """
+    if not name:
+        return ""
+    raw = str(name).strip()
+    raw = re.sub(r'^\d+\.\s*', '', raw).strip()
+
+    # Singkatan nama depan: FX -> F.X.
+    raw = re.sub(r'\bFX\b\.?', 'F.X.', raw)
+
+    title_rules = [
+        (r'\bS\.?I\.?Kom\b\.?', 'S.I.Kom.'),
+        (r'\bM\.?I\.?Kom\b\.?', 'M.I.Kom.'),
+        (r'\bS\.?K\.?M\b\.?', 'S.K.M.'),
+        (r'\bM\.?K\.?M\b\.?', 'M.K.M.'),
+        (r'\bS\.?A\.?P\b\.?', 'S.A.P.'),
+        (r'\bM\.?A\.?P\b\.?', 'M.A.P.'),
+        (r'\bS\.?I\.?P\b\.?', 'S.I.P.'),
+        (r'\bM\.?I\.?P\b\.?', 'M.I.P.'),
+        (r'\bA\.?Md\.?Kom\b\.?', 'A.Md.Kom.'),
+        (r'\bA\.?Md\.?T\b\.?', 'A.Md.T.'),
+        (r'\bA\.?Md\b\.?', 'A.Md.'),
+        (r'\bS\.?Ars\b\.?', 'S.Ars.'),
+        (r'\bM\.?Ars\b\.?', 'M.Ars.'),
+        (r'\bS\.?Kom\b\.?', 'S.Kom.'),
+        (r'\bM\.?Kom\b\.?', 'M.Kom.'),
+        (r'\bS\.?Pt\b\.?', 'S.Pt.'),
+        (r'\bM\.?Pt\b\.?', 'M.Pt.'),
+        (r'\bS\.?Pd\b\.?', 'S.Pd.'),
+        (r'\bM\.?Pd\b\.?', 'M.Pd.'),
+        (r'\bS\.?Si\b\.?', 'S.Si.'),
+        (r'\bM\.?Si\b\.?', 'M.Si.'),
+        (r'\bS\.?Sos\b\.?', 'S.Sos.'),
+        (r'\bM\.?Sos\b\.?', 'M.Sos.'),
+        (r'\bS\.?Ked\b\.?', 'S.Ked.'),
+        (r'\bS\.?T\b\.?', 'S.T.'),
+        (r'\bM\.?T\b\.?', 'M.T.'),
+        (r'\bS\.?E\b\.?', 'S.E.'),
+        (r'\bM\.?E\b\.?', 'M.E.'),
+        (r'\bS\.?H\b\.?', 'S.H.'),
+        (r'\bM\.?H\b\.?', 'M.H.'),
+        (r'\bIr\b\.?', 'Ir.'),
+        (r'\bDrs\b\.?', 'Drs.'),
+        (r'\bDra\b\.?', 'Dra.'),
+    ]
+
+    for pat, rep in title_rules:
+        raw = re.sub(pat, rep, raw)
+
+    raw = re.sub(r'\s*,\s*', ', ', raw)
+    raw = re.sub(r'([^,])\s+(S\.[A-Za-z\.]+|M\.[A-Za-z\.]+|A\.Md\.[A-Za-z\.]*|A\.Md\.)', r'\1, \2', raw)
+    raw = re.sub(r'(\b[A-Z][A-Za-z\.]*\.)\s+(S\.[A-Za-z\.]+|M\.[A-Za-z\.]+|A\.Md\.[A-Za-z\.]*|A\.Md\.)', r'\1, \2', raw)
+    raw = re.sub(r'(?:,\s*)+', ', ', raw)
+    raw = re.sub(r'[ \t]{2,}', ' ', raw).strip()
+    return raw
+
+
+def format_spt_full_date(report_data: Dict[str, Any]) -> str:
+    """
+    Menyusun teks tanggal atau rentang tanggal dinas untuk klausul Dasar Pelaksanaan SPT.
+    Mengikuti durasi hari dinas:
+    - 1 Hari: '28 September 2026'
+    - Multi-Hari (Bulan Sama): '8 - 9 Oktober 2026'
+    - Multi-Hari (Beda Bulan): '28 September 2026 - 2 Oktober 2026'
+    - Multi-Hari (Beda Tahun): '30 Desember 2025 - 2 Januari 2026'
+    """
+    indo_months = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+
+    s_raw = (report_data.get("trip_start_date") or "").strip()
+    e_raw = (report_data.get("trip_end_date") or "").strip()
+    tgl_spt_raw = (report_data.get("tanggal_spt") or "").strip()
+
+    # Ekstraksi rentang
+    p_start = parse_date_parts(s_raw) if s_raw else None
+    p_end = parse_date_parts(e_raw) if e_raw else None
+
+    # Fallback jika trip_start_date kosong atau jika tanggal_spt membawa rentang langsung
+    if not p_start and tgl_spt_raw:
+        p_s_range, p_e_range = parse_date_range_str(tgl_spt_raw)
+        p_start = p_s_range
+        if not p_end and p_e_range:
+            p_end = p_e_range
+
+    if p_start and p_end and p_start != p_end:
+        y1, m1, d1 = p_start
+        y2, m2, d2 = p_end
+        m1_name = indo_months[m1] if 1 <= m1 <= 12 else str(m1)
+        m2_name = indo_months[m2] if 1 <= m2 <= 12 else str(m2)
+        if y1 == y2 and m1 == m2:
+            return f"{d1} - {d2} {m1_name} {y1}"
+        else:
+            return f"{d1} {m1_name} {y1} - {d2} {m2_name} {y2}"
+    elif p_start:
+        y1, m1, d1 = p_start
+        m1_name = indo_months[m1] if 1 <= m1 <= 12 else str(m1)
+        return f"{d1} {m1_name} {y1}"
+
+    if tgl_spt_raw:
+        return format_to_indonesian_date(tgl_spt_raw)
+    if s_raw:
+        return format_to_indonesian_date(s_raw)
+    return ""
+
+
 def build_compact_report_filename(report_data: Dict[str, Any], villages: List[Dict[str, Any]]) -> str:
     """
     Menghasilkan nama berkas dokumen Monev yang ringkas dan padat sesuai standar kedinasan:
@@ -848,10 +1011,18 @@ def build_compact_report_filename(report_data: Dict[str, Any], villages: List[Di
 
     s_raw = report_data.get("trip_start_date") or ""
     e_raw = report_data.get("trip_end_date") or ""
+    tgl_spt_raw = report_data.get("tanggal_spt") or ""
     tgl_lap_raw = report_data.get("tanggal_laporan") or ""
 
     p_start = parse_date_parts(s_raw)
     p_end = parse_date_parts(e_raw) if e_raw else None
+
+    # Jika trip_start_date tidak ada atau tanggal_spt membawa rentang langsung
+    if not p_start and tgl_spt_raw:
+        p_s_range, p_e_range = parse_date_range_str(tgl_spt_raw)
+        p_start = p_s_range
+        if not p_end and p_e_range:
+            p_end = p_e_range
 
     # Jika trip_start_date tidak ada, fallback ke tanggal laporan
     if not p_start:
@@ -905,6 +1076,130 @@ def build_compact_report_filename(report_data: Dict[str, Any], villages: List[Di
     return fn
 
 
+def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[List[str]] = None) -> bool:
+    """
+    Memeriksa apakah tabel personel pada dokumen Word terpotong/terpisah di dua halaman berbeda
+    (atau teks penutup laporan terpisah dari tabel tanda tangan).
+    Jika terpotong, secara otomatis menyisipkan page break (w:pageBreakBefore) tepat sebelum butir
+    catatan lapangan 'Tindak lanjut dan rekomendasi' (atau kendala/poin paling cocok sebelumnya)
+    pada desa terakhir sebelum penutup, sehingga seluruh tabel personel dan penutup tampil utuh,
+    rapi, dan berada pada halaman yang sama.
+    Menggunakan WordCraft CLI (ArtCraft) untuk deteksi pagination presisi instan (sub-detik).
+    """
+    if not os.path.exists(docx_path):
+        return False
+
+    wc_cli = r"C:\Program Files\WordCraft\wordcraft-cli.exe"
+    if not os.path.exists(wc_cli):
+        wc_cli = shutil.which("wordcraft-cli") or ""
+    if not wc_cli or not pypdf:
+        return False
+
+    try:
+        doc = docx.Document(docx_path)
+        if not pelaksana_names:
+            pelaksana_names = []
+            for t in doc.tables:
+                if len(t.columns) == 4 and len(t.rows) >= 2:
+                    for r in t.rows:
+                        txt = r.cells[1].text.strip()
+                        if txt and txt not in pelaksana_names:
+                            pelaksana_names.append(txt)
+                    break
+
+        if not pelaksana_names or len(pelaksana_names) < 2:
+            return False
+
+        def check_split_state(doc_obj):
+            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f_d, \
+                 tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f_p:
+                temp_docx = f_d.name
+                temp_pdf = f_p.name
+            try:
+                doc_obj.save(temp_docx)
+                subprocess.run([wc_cli, "convert", temp_docx, temp_pdf], check=True, capture_output=True)
+                reader = pypdf.PdfReader(temp_pdf)  # type: ignore
+                personel_pages = {}
+                pembuat_page = None
+                for p_idx, page in enumerate(reader.pages, 1):
+                    txt = page.extract_text() or ""
+                    if "Pembuat Laporan" in txt and pembuat_page is None:
+                        pembuat_page = p_idx
+                    for name in pelaksana_names:
+                        parts = name.split()
+                        prefix = " ".join(parts[:2]) if len(parts) >= 2 else name
+                        if prefix in txt and name not in personel_pages:
+                            personel_pages[name] = p_idx
+                pages_seen = set(personel_pages.values())
+                if not pages_seen:
+                    return False, set()
+                is_split = (len(pages_seen) > 1) or (pembuat_page is not None and pembuat_page != min(pages_seen))
+                return is_split, pages_seen
+            finally:
+                for f in [temp_docx, temp_pdf]:
+                    if os.path.exists(f):
+                        try:
+                            os.remove(f)
+                        except Exception:
+                            pass
+
+        is_split, pages_seen = check_split_state(doc)
+        if not is_split:
+            return False
+
+        dibuat_idx = -1
+        for idx, p in enumerate(doc.paragraphs):
+            if "Dibuat di" in p.text:
+                dibuat_idx = idx
+                break
+
+        if dibuat_idx == -1:
+            for idx, p in enumerate(doc.paragraphs):
+                if "Pembuat Laporan" in p.text:
+                    dibuat_idx = idx
+                    break
+
+        candidates_tindak = []
+        candidates_kendala = []
+        candidates_other = []
+
+        start_scan = dibuat_idx if dibuat_idx != -1 else len(doc.paragraphs)
+        for idx in range(start_scan - 1, -1, -1):
+            p = doc.paragraphs[idx]
+            txt = p.text.strip()
+            if not txt:
+                continue
+            if re.match(r"^(?:[A-Z]\.|\d+\.\s*Dasar|\d+\.\s*Umum)", txt):
+                break
+            if re.search(r"(?:tindak\s*lanjut|rekomendasi)", txt, re.I):
+                candidates_tindak.append((idx, p, txt))
+            elif re.search(r"(?:kendala|permasalahan)", txt, re.I):
+                candidates_kendala.append((idx, p, txt))
+            elif not re.match(r"^\d+\.\s*Desa\b", txt):
+                candidates_other.append((idx, p, txt))
+            else:
+                candidates_other.append((idx, p, txt))
+                break
+
+        ordered_candidates = candidates_tindak + candidates_kendala + candidates_other
+        for c_idx, p_cand, txt in ordered_candidates:
+            pPr = p_cand._element.get_or_add_pPr()
+            br_elem = OxmlElement("w:pageBreakBefore")
+            pPr.append(br_elem)
+
+            split_after, _ = check_split_state(doc)
+            if not split_after:
+                doc.save(docx_path)
+                return True
+            else:
+                pPr.remove(br_elem)
+
+        return False
+    except Exception as ex:
+        log_error("ensure_personel_table_pagination", ex)
+        return False
+
+
 def generate_monev_docx(
     report_data: Dict[str, Any],
     photos: List[Dict[str, Any]] = None,
@@ -950,9 +1245,9 @@ def generate_monev_docx(
         if isinstance(p, dict):
             p_name = (p.get("nama") or p.get("name") or "").strip()
             if p_name:
-                pelaksana.append(p_name)
+                pelaksana.append(normalize_personel_title(p_name))
         elif isinstance(p, str) and p.strip():
-            pelaksana.append(p.strip())
+            pelaksana.append(normalize_personel_title(p.strip()))
 
     # 2. Update Title P01 (Centered, Arial 12pt Bold, Line Spacing 1.5, Pure Black)
     p_title = doc.paragraphs[1]
@@ -1012,19 +1307,28 @@ def generate_monev_docx(
         r.font.color.rgb = RGBColor(0, 0, 0)
 
     # 5. Update P23 (4. Dasar Pelaksanaan)
-    p_spt = doc.paragraphs[23]
+    p_spt = None
+    for p_chk in doc.paragraphs[:35]:
+        if "Surat Perintah Tugas" in p_chk.text or "dilaksanakan berdasarkan" in p_chk.text:
+            p_spt = p_chk
+            break
+    if p_spt is None and len(doc.paragraphs) > 23:
+        p_spt = doc.paragraphs[23]
+
+    spt_date_text = format_spt_full_date(report_data)
     spt_line = f"Kegiatan Monitoring dan Evaluasi dilaksanakan berdasarkan Surat Perintah Tugas Nomor: {nomor_spt}"
-    if tanggal_spt:
-        spt_line += f" tanggal {tanggal_spt}"
+    if spt_date_text:
+        spt_line += f" tanggal {spt_date_text}"
     spt_line = re.sub(r'[ \t]{2,}', ' ', spt_line.strip())
     if not spt_line.endswith("."):
         spt_line += "."
-    p_spt.text = spt_line
-    p_spt.paragraph_format.line_spacing = 1.5
-    for r in p_spt.runs:
-        r.font.name = "Arial"
-        r.font.size = Pt(11)
-        r.font.color.rgb = RGBColor(0, 0, 0)
+    if p_spt is not None:
+        p_spt.text = spt_line
+        p_spt.paragraph_format.line_spacing = 1.5
+        for r in p_spt.runs:
+            r.font.name = "Arial"
+            r.font.size = Pt(11)
+            r.font.color.rgb = RGBColor(0, 0, 0)
 
     # 6. Update P28 (A. Kegiatan yang Dilaksanakan point 2)
     p_keg2 = doc.paragraphs[28]
@@ -1235,6 +1539,8 @@ def generate_monev_docx(
         for p_idx, nama in enumerate(pelaksana):
             row = table_p.rows[p_idx]
             row.height = Pt(34) # Ruang tanda tangan vertikal nyaman dan simetris
+            trPr = row._tr.get_or_add_trPr()
+            trPr.append(OxmlElement('w:cantSplit'))
 
             row.cells[0].text = f"{p_idx + 1}."
             row.cells[1].text = nama
@@ -1470,5 +1776,12 @@ def generate_monev_docx(
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     doc.save(output_path)
+
+    # 15. Verifikasi dan perbaiki pemisahan tabel personel (Pagination Guard via WordCraft)
+    try:
+        ensure_personel_table_pagination(output_path, pelaksana)
+    except Exception as ex_pg:
+        log_error("ensure_personel_table_pagination_guard", ex_pg)
+
     return output_path
 

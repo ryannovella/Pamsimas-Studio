@@ -686,11 +686,65 @@ export class ReportBuilder {
     }
     // Jika cocok dengan master personel (menggunakan pencarian cerdas prefix/nama), gunakan format master agar gelar rapi
     const matched = this.findBestMatch(val, this.personelMaster || []);
-    this.addPelaksana(matched || val);
+    const finalName = matched || this.normalizePersonelTitle(val);
+    this.addPelaksana(finalName);
     inp.value = '';
     if (this.personelAutocomplete) {
       this.personelAutocomplete.close();
     }
+  }
+
+  normalizePersonelTitle(name) {
+    if (!name) return '';
+    let raw = String(name).trim();
+    raw = raw.replace(/^\d+\.\s*/, '').trim();
+    raw = raw.replace(/\bFX\b\.?/g, 'F.X.');
+
+    const rules = [
+      [/\bS\.?I\.?Kom\b\.?/gi, 'S.I.Kom.'],
+      [/\bM\.?I\.?Kom\b\.?/gi, 'M.I.Kom.'],
+      [/\bS\.?K\.?M\b\.?/gi, 'S.K.M.'],
+      [/\bM\.?K\.?M\b\.?/gi, 'M.K.M.'],
+      [/\bS\.?A\.?P\b\.?/gi, 'S.A.P.'],
+      [/\bM\.?A\.?P\b\.?/gi, 'M.A.P.'],
+      [/\bS\.?I\.?P\b\.?/gi, 'S.I.P.'],
+      [/\bM\.?I\.?P\b\.?/gi, 'M.I.P.'],
+      [/\bA\.?Md\.?Kom\b\.?/gi, 'A.Md.Kom.'],
+      [/\bA\.?Md\.?T\b\.?/gi, 'A.Md.T.'],
+      [/\bA\.?Md\b\.?/gi, 'A.Md.'],
+      [/\bS\.?Ars\b\.?/gi, 'S.Ars.'],
+      [/\bM\.?Ars\b\.?/gi, 'M.Ars.'],
+      [/\bS\.?Kom\b\.?/gi, 'S.Kom.'],
+      [/\bM\.?Kom\b\.?/gi, 'M.Kom.'],
+      [/\bS\.?Pt\b\.?/gi, 'S.Pt.'],
+      [/\bM\.?Pt\b\.?/gi, 'M.Pt.'],
+      [/\bS\.?Pd\b\.?/gi, 'S.Pd.'],
+      [/\bM\.?Pd\b\.?/gi, 'M.Pd.'],
+      [/\bS\.?Si\b\.?/gi, 'S.Si.'],
+      [/\bM\.?Si\b\.?/gi, 'M.Si.'],
+      [/\bS\.?Sos\b\.?/gi, 'S.Sos.'],
+      [/\bM\.?Sos\b\.?/gi, 'M.Sos.'],
+      [/\bS\.?Ked\b\.?/gi, 'S.Ked.'],
+      [/\bS\.?T\b\.?/gi, 'S.T.'],
+      [/\bM\.?T\b\.?/gi, 'M.T.'],
+      [/\bS\.?E\b\.?/gi, 'S.E.'],
+      [/\bM\.?E\b\.?/gi, 'M.E.'],
+      [/\bS\.?H\b\.?/gi, 'S.H.'],
+      [/\bM\.?H\b\.?/gi, 'M.H.'],
+      [/\bIr\b\.?/gi, 'Ir.'],
+      [/\bDrs\b\.?/gi, 'Drs.'],
+      [/\bDra\b\.?/gi, 'Dra.']
+    ];
+
+    for (const [pat, rep] of rules) {
+      raw = raw.replace(pat, rep);
+    }
+
+    raw = raw.replace(/\s*,\s*/g, ', ');
+    raw = raw.replace(/([^,])\s+(S\.[A-Za-z\.]+|M\.[A-Za-z\.]+|A\.Md\.[A-Za-z\.]*|A\.Md\.)/g, '$1, $2');
+    raw = raw.replace(/(\b[A-Z][A-Za-z\.]*\.)\s+(S\.[A-Za-z\.]+|M\.[A-Za-z\.]+|A\.Md\.[A-Za-z\.]*|A\.Md\.)/g, '$1, $2');
+    raw = raw.replace(/(?:,\s*)+/g, ', ');
+    return raw.replace(/[ \t]{2,}/g, ' ').trim();
   }
 
   bindStaticEvents() {
@@ -860,7 +914,17 @@ export class ReportBuilder {
   updateTanggalSptPreview() {
     const previewEl = document.getElementById('reportTanggalSptPreview');
     if (previewEl) {
-      previewEl.textContent = this.tanggalSpt ? formatIndonesianDateOnly(this.tanggalSpt) : '';
+      if (this.tripStartDate && this.tripEndDate && this.tripStartDate !== this.tripEndDate) {
+        const s = formatIndonesianDateOnly(this.tripStartDate);
+        const e = formatIndonesianDateOnly(this.tripEndDate);
+        previewEl.textContent = `${s} - ${e}`;
+      } else if (this.tanggalSpt) {
+        previewEl.textContent = formatIndonesianDateOnly(this.tanggalSpt);
+      } else if (this.tripStartDate) {
+        previewEl.textContent = formatIndonesianDateOnly(this.tripStartDate);
+      } else {
+        previewEl.textContent = '';
+      }
     }
   }
 
@@ -910,6 +974,19 @@ export class ReportBuilder {
 
     this.tripStartDate = sVal;
     this.tripEndDate = eVal;
+
+    // Otomatis sinkronkan Tanggal Laporan ke H+1 dari hari terakhir kegiatan dinas (jika segmen tidak dikunci)
+    if (!this.lockedSegments.administrasi) {
+      const lastTripDate = eVal || sVal;
+      if (lastTripDate) {
+        const hPlus1 = getNextDayIso(lastTripDate);
+        if (hPlus1) {
+          this.setReportTanggalLaporan(hPlus1, false);
+        }
+      }
+    }
+
+    this.updateTanggalSptPreview();
 
     if (sVal && this.quickDate && !this.quickDate.value) {
       this.quickDate.value = sVal;
@@ -1128,7 +1205,7 @@ export class ReportBuilder {
   // PELAKSANA MONEV MANAGEMENT
   // =========================================================
   addPelaksana(name = '') {
-    const cleanName = name.trim();
+    const cleanName = this.normalizePersonelTitle(name);
     if (cleanName && !this.pelaksanaList.includes(cleanName)) {
       this.pelaksanaList.push(cleanName);
     } else if (!cleanName) {
@@ -2132,7 +2209,10 @@ export class ReportBuilder {
     this.toggleCropDrawMode(false);
 
     if (this.modalTitle) {
-      this.modalTitle.innerText = `Edit Stempel Foto — ${p.filename}`;
+      const pIdx = this.photos.findIndex(item => item.id === photoId);
+      const totalPhotos = this.photos.length;
+      const countLabel = totalPhotos > 1 ? ` (${pIdx + 1}/${totalPhotos})` : '';
+      this.modalTitle.innerText = `Edit Stempel Foto — ${p.filename}${countLabel}`;
     }
 
     const parsed = parseIndonesianTimestamp(p.timeStr);
@@ -2176,6 +2256,37 @@ export class ReportBuilder {
       this.modal.classList.remove('active');
     }
     this.activePhotoId = null;
+  }
+
+  async navigateModalPhoto(direction, autoSave = true) {
+    if (!this.activePhotoId || !this.photos || this.photos.length <= 1) return;
+    const curIdx = this.photos.findIndex(p => p.id === this.activePhotoId);
+    if (curIdx === -1) return;
+
+    if (autoSave) {
+      const curPhoto = this.photos[curIdx];
+      if (curPhoto) {
+        if (this.modalTimeStr) curPhoto.timeStr = this.modalTimeStr.value;
+        if (this.modalLat) curPhoto.lat = this.modalLat.value;
+        if (this.modalLon) curPhoto.lon = this.modalLon.value;
+        if (this.modalDusun) curPhoto.dusun = this.modalDusun.value;
+        if (this.modalDesa) curPhoto.desa = this.modalDesa.value;
+        if (this.modalKecamatan) curPhoto.kecamatan = this.modalKecamatan.value;
+        if (this.modalKabupaten) curPhoto.kabupaten = this.modalKabupaten.value;
+        if (this.modalProvinsi) curPhoto.provinsi = this.modalProvinsi.value;
+        if (this.modalCustomAddress) curPhoto.customAddress = this.modalCustomAddress.value;
+        if (this.modalAddressMode) curPhoto.address_mode = this.modalAddressMode.value;
+        if (this.modalFontScale) curPhoto.font_scale = parseFloat(this.modalFontScale.value) || 1.0;
+        const isOrig = this.modalKeepOriginal ? this.modalKeepOriginal.checked : false;
+        curPhoto.alreadyStamped = isOrig;
+        curPhoto.is_original = isOrig;
+        curPhoto.keep_original = isOrig;
+        this.renderPhotos();
+      }
+    }
+
+    const newIdx = (curIdx + direction + this.photos.length) % this.photos.length;
+    await this.openModal(this.photos[newIdx].id);
   }
 
   async saveModalChanges() {
