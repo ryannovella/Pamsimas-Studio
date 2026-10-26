@@ -57,13 +57,13 @@
 
         <!-- Upload Existing Docx -->
         <input type="file" id="reportExistingDocxInput" accept=".docx" style="display:none;" onchange="window.reportBuilder.handleExistingDocxUpload(event)">
-        <button type="button" class="btn btn-secondary btn-sm" id="btnUploadExistingDocx" onclick="document.getElementById('reportExistingDocxInput').click()" title="Upload file laporan Word (.docx)">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnUploadExistingDocx" onclick="document.getElementById('reportExistingDocxInput').click()" title="Upload file laporan Word (.docx) (Ctrl+O)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           <span>Upload .docx</span>
         </button>
 
         <!-- Panduan Modal -->
-        <button type="button" class="btn btn-ghost btn-sm" onclick="window.showHelpModal ? window.showHelpModal() : null" title="Panduan penggunaan">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="window.showHelpModal ? window.showHelpModal() : null" title="Panduan & Pintasan Keyboard (F1 atau ?)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           <span>Panduan</span>
         </button>
@@ -502,7 +502,7 @@
 
               <!-- Primary Workflow CTA: Generate & Download Word (.docx) -->
               <div class="photo-card-download-footer" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-color);">
-                <button type="button" class="btn btn-primary" id="btnGenerateReportDocx" onclick="window.reportBuilder.generateDocx()" style="width:100%; padding:11px 16px; font-size:0.86rem; font-weight:600; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <button type="button" class="btn btn-primary" id="btnGenerateReportDocx" onclick="window.reportBuilder.generateDocx()" title="Download & Susun Laporan Word (.docx) (Ctrl+S)" style="width:100%; padding:11px 16px; font-size:0.86rem; font-weight:600; display:flex; align-items:center; justify-content:center; gap:8px;">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   <span>Download .docx</span>
                 </button>
@@ -577,8 +577,16 @@
       <div class="modal-header">
         <div style="display:flex; align-items:center; gap:10px;">
           <h3 id="modalPhotoTitle" style="margin:0;">Edit Watermark Foto</h3>
+          <div class="modal-photo-nav-group" style="display:inline-flex; align-items:center; gap:4px; margin-left:6px;">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="window.navigateModalPhoto(-1, true)" title="Foto Sebelumnya (Alt+← atau [)" style="padding:2px 7px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <button type="button" class="btn btn-secondary btn-xs" onclick="window.navigateModalPhoto(1, true)" title="Foto Berikutnya (Alt+→ atau ])" style="padding:2px 7px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
         </div>
-        <button class="modal-close" onclick="window.closeActivePhotoModal()">&times;</button>
+        <button class="modal-close" onclick="window.closeActivePhotoModal()" title="Tutup Jendela (Esc)">&times;</button>
       </div>
       <div class="modal-body">
         <div class="modal-preview">
@@ -753,33 +761,230 @@
           </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="window.closeActivePhotoModal()">Batal</button>
-        <button class="btn btn-primary" onclick="window.saveActivePhotoChanges()">Simpan Perubahan</button>
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-size:0.75rem; color:var(--text-dim); display:flex; align-items:center; gap:6px;">
+          <span>Pintasan: <kbd>Esc</kbd> Tutup • <kbd>Ctrl</kbd>+<kbd>S</kbd> Simpan • <kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd> Ganti Foto</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" onclick="window.closeActivePhotoModal()" title="Batal & Tutup (Esc)">Batal</button>
+          <button class="btn btn-primary" onclick="window.saveActivePhotoChanges()" title="Simpan Perubahan (Ctrl+S)">Simpan Perubahan</button>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- =========================================================
-       MODAL: Help / Info
+       MODAL: Help & Keyboard Shortcuts
        ========================================================= -->
   <div class="modal-backdrop" id="helpModal">
-    <div class="modal-card modal-sm">
+    <div class="modal-card" style="max-width:700px; width:95%;">
       <div class="modal-header">
-        <h3>Panduan Laporan Word Monev</h3>
-        <button class="modal-close" onclick="window.closeHelpModal()">&times;</button>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <h3 style="margin:0; font-size:1.05rem;">Panduan & Pintasan Keyboard</h3>
+        </div>
+        <button class="modal-close" onclick="window.closeHelpModal()" title="Tutup (Esc)">&times;</button>
       </div>
-      <div class="modal-body" style="flex-direction:column;">
-        <ul class="help-list">
-          <li><strong>Data Administrasi & SPT</strong>: Isi Kabupaten, Tahun, Nomor SPT, serta Tanggal SPT & Laporan. Tanggal laporan otomatis diset H+1 dari tanggal SPT.</li>
-          <li><strong>Tim Pelaksana</strong>: Tambahkan nama personel dari master data atau ketik nama baru. Tabel tanda tangan dokumen akan disusun otomatis.</li>
-          <li><strong>Data Desa & Catatan</strong>: Tulis temuan di tiap desa untuk diolah menjadi narasi resmi laporan.</li>
-          <li><strong>Dokumentasi Foto</strong>: Unggah foto dan terapkan jadwal kegiatan serta watermark lokasi secara otomatis.</li>
-          <li><strong>Buka Dokumen</strong>: Buka file Word (.docx) laporan yang ada untuk memeriksa dan melengkapi isinya.</li>
-        </ul>
+
+      <!-- Tab Switcher -->
+      <div style="display:flex; border-bottom:1px solid var(--border-color); background:var(--bg-surface-elevated); padding:0 18px; gap:8px;">
+        <button type="button" class="btn btn-ghost btn-sm active" id="tabBtnHelpShortcuts" onclick="window.switchHelpTab('shortcuts')" style="border-radius:0; border-bottom:2px solid var(--accent-cyan); font-weight:600; color:var(--text-main); padding:10px 14px;">
+          Pintasan Keyboard (Shortcuts)
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" id="tabBtnHelpGuide" onclick="window.switchHelpTab('guide')" style="border-radius:0; border-bottom:2px solid transparent; color:var(--text-dim); padding:10px 14px;">
+          Panduan Dokumen Laporan
+        </button>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-primary btn-block" onclick="window.closeHelpModal()">Tutup</button>
+
+      <div class="modal-body" style="flex-direction:column; padding:18px; max-height:480px; overflow-y:auto;">
+        <!-- TAB CONTENT: SHORTCUTS -->
+        <div id="helpTabShortcuts" style="display:flex; flex-direction:column; gap:14px;">
+          
+          <!-- Group 1: Editor Foto -->
+          <div class="shortcuts-group">
+            <div class="shortcuts-group-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              <span>Jendela Editor Foto (docEditModal)</span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Keluar / Tutup jendela editor foto (atau batalkan seleksi potong)</span>
+              <span class="shortcuts-keys"><kbd>Esc</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Simpan perubahan stempel & posisi foto saat ini</span>
+              <span class="shortcuts-keys"><kbd>Ctrl</kbd> + <kbd>S</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Beralih ke foto sebelumnya / berikutnya di galeri</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>←</kbd> / <kbd>→</kbd> <span style="font-size:0.75rem; color:var(--text-dim);">atau</span> <kbd>[</kbd> / <kbd>]</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Terapkan potongan foto (saat kotak potong aktif)</span>
+              <span class="shortcuts-keys"><kbd>Enter</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Putar foto 90° searah jarum jam (Kanan)</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>R</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Putar foto 90° berlawanan arah jarum jam (Kiri)</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>L</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Balik foto horizontal (cermin kiri-kanan)</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>H</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Balik foto vertikal (cermin atas-bawah)</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>V</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Buka pemilih titik koordinat di Google Maps</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>P</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Aktifkan / nonaktifkan mode seleksi potong manual</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>C</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Atur rasio cepat standar 4:3 landscape</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>4</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Beralih tampilan antara foto asli dan stempel</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>O</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Reset potongan kembali ke foto asli</span>
+              <span class="shortcuts-keys"><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd></span>
+            </div>
+          </div>
+
+          <!-- Group 2: Lightbox -->
+          <div class="shortcuts-group">
+            <div class="shortcuts-group-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span>Pratinjau Layar Penuh (Lightbox)</span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Keluar dari pratinjau foto layar penuh</span>
+              <span class="shortcuts-keys"><kbd>Esc</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Navigasi ke foto sebelumnya / berikutnya</span>
+              <span class="shortcuts-keys"><kbd>←</kbd> / <kbd>→</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Buka panel edit stempel untuk foto ini</span>
+              <span class="shortcuts-keys"><kbd>E</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Beralih tampilan antara Foto Asli vs Stempel</span>
+              <span class="shortcuts-keys"><kbd>O</kbd> <span style="font-size:0.75rem; color:var(--text-dim);">atau</span> <kbd>Space</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Download file foto JPG stempel saat ini</span>
+              <span class="shortcuts-keys"><kbd>D</kbd> <span style="font-size:0.75rem; color:var(--text-dim);">atau</span> <kbd>Ctrl</kbd> + <kbd>S</kbd></span>
+            </div>
+          </div>
+
+          <!-- Group 3: Google Maps -->
+          <div class="shortcuts-group">
+            <div class="shortcuts-group-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span>Peta Lokasi Google Maps</span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Tutup jendela pemilih peta lokasi</span>
+              <span class="shortcuts-keys"><kbd>Esc</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Gunakan koordinat & alamat yang sedang dipilih</span>
+              <span class="shortcuts-keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Cari lokasi (saat kursor di kolom pencarian)</span>
+              <span class="shortcuts-keys"><kbd>Enter</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Ganti layer peta (1: Satelit, 2: Jalan, 3: Medan, 4: OSM)</span>
+              <span class="shortcuts-keys"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></span>
+            </div>
+          </div>
+
+          <!-- Group 4: Smart Timeline -->
+          <div class="shortcuts-group">
+            <div class="shortcuts-group-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              <span>Smart Timeline (Jadwal Otomatis)</span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Tutup jendela generator jadwal Smart Timeline</span>
+              <span class="shortcuts-keys"><kbd>Esc</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Terapkan jadwal & koordinat hasil kalkulasi ke seluruh foto</span>
+              <span class="shortcuts-keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Acak ulang sebaran waktu dan koordinat GPS</span>
+              <span class="shortcuts-keys"><kbd>Ctrl</kbd> + <kbd>R</kbd> <span style="font-size:0.75rem; color:var(--text-dim);">atau</span> <kbd>Alt</kbd> + <kbd>R</kbd></span>
+            </div>
+          </div>
+
+          <!-- Group 5: Layar Utama Laporan -->
+          <div class="shortcuts-group">
+            <div class="shortcuts-group-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>Layar Utama Dokumen Laporan</span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Download & susun dokumen laporan Word (.docx)</span>
+              <span class="shortcuts-keys"><kbd>Ctrl</kbd> + <kbd>S</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Buka / upload berkas dokumen Word (.docx) yang ada</span>
+              <span class="shortcuts-keys"><kbd>Ctrl</kbd> + <kbd>O</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Pilih & unggah berkas foto dokumentasi baru</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>U</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Buka jendela generator jadwal Smart Timeline</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>T</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Buka pemilih koordinat peta survei cepat</span>
+              <span class="shortcuts-keys"><kbd>Alt</kbd> + <kbd>P</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Buka jendela panduan & daftar lengkap pintasan keyboard</span>
+              <span class="shortcuts-keys"><kbd>F1</kbd> <span style="font-size:0.75rem; color:var(--text-dim);">atau</span> <kbd>?</kbd></span>
+            </div>
+            <div class="shortcuts-row">
+              <span class="shortcuts-desc">Tutup modal aktif / batalkan dropdown / lepas fokus input</span>
+              <span class="shortcuts-keys"><kbd>Esc</kbd></span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- TAB CONTENT: GUIDE -->
+        <div id="helpTabGuide" style="display:none; flex-direction:column; gap:12px;">
+          <ul class="help-list">
+            <li><strong>Data Administrasi & SPT</strong>: Isi Kabupaten, Tahun, Nomor SPT, serta Tanggal SPT & Laporan. Tanggal laporan otomatis diset H+1 dari tanggal SPT.</li>
+            <li><strong>Tim Pelaksana</strong>: Tambahkan nama personel dari master data atau ketik nama baru. Tabel tanda tangan dokumen akan disusun otomatis.</li>
+            <li><strong>Data Desa & Catatan</strong>: Tulis temuan di tiap desa untuk diolah menjadi narasi resmi laporan.</li>
+            <li><strong>Dokumentasi Foto</strong>: Unggah foto dan terapkan jadwal kegiatan serta watermark lokasi secara otomatis.</li>
+            <li><strong>Buka Dokumen</strong>: Buka file Word (.docx) laporan yang ada untuk memeriksa dan melengkapi isinya.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="justify-content:space-between; align-items:center;">
+        <span style="font-size:0.75rem; color:var(--text-dim);">Tekan <kbd>Esc</kbd> untuk menutup jendela ini</span>
+        <button class="btn btn-primary btn-sm" onclick="window.closeHelpModal()">Tutup</button>
       </div>
     </div>
   </div>
@@ -862,15 +1067,16 @@
         </div>
       </div>
 
-      <div class="modal-footer" style="justify-content:space-between;">
+      <div class="modal-footer" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <div style="display:flex; align-items:center; gap:8px;">
           <button class="btn btn-outline btn-xs" id="stBtnSelectAll">Pilih Semua Foto</button>
           <button class="btn btn-outline btn-xs" id="stBtnDeselectAll">Batal Pilih</button>
           <span class="badge badge-accent" id="stSelectedBadge">Semua Terpilih</span>
         </div>
-        <div style="display:flex; gap:8px;">
-          <button class="btn btn-secondary" id="stBtnClose" onclick="window.closeSmartTimeline()">Batal</button>
-          <button class="btn btn-primary" id="stBtnApply" style="min-width:200px;">Terapkan ke Foto</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:0.75rem; color:var(--text-dim); margin-right:4px;">Pintasan: <kbd>Esc</kbd> Tutup • <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Terapkan</span>
+          <button class="btn btn-secondary" id="stBtnClose" onclick="window.closeSmartTimeline()" title="Batal & Tutup (Esc)">Batal</button>
+          <button class="btn btn-primary" id="stBtnApply" style="min-width:200px;" title="Terapkan ke Foto (Ctrl+Enter)">Terapkan ke Foto</button>
         </div>
       </div>
     </div>
@@ -935,8 +1141,11 @@
           </div>
         </div>
       </div>
-      <div class="modal-footer" style="justify-content:space-between; flex-wrap:wrap; gap:10px;">
-        <button class="btn btn-secondary" onclick="window.closeMapPicker()">Batal</button>
+      <div class="modal-footer" style="justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-secondary" onclick="window.closeMapPicker()" title="Batal & Tutup (Esc)">Batal</button>
+          <span style="font-size:0.75rem; color:var(--text-dim);">Pintasan: <kbd>Esc</kbd> Tutup • <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Gunakan</span>
+        </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn btn-primary" id="btnMapApplyAll" onclick="window.mapPickerApply('all')" disabled style="display:inline-flex; align-items:center; gap:4px;">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Gunakan & Terapkan ke SEMUA Foto
@@ -944,7 +1153,7 @@
           <button class="btn btn-secondary" id="btnMapApplySelected" onclick="window.mapPickerApply('selected')" disabled>
             Terapkan ke Terpilih Saja
           </button>
-          <button class="btn btn-outline" id="btnConfirmMapCoords" onclick="window.confirmMapCoords()" disabled>
+          <button class="btn btn-outline" id="btnConfirmMapCoords" onclick="window.confirmMapCoords()" disabled title="Gunakan Koordinat & Alamat (Ctrl+Enter)">
             Gunakan Koordinat & Alamat
           </button>
         </div>
@@ -1066,6 +1275,6 @@
   <div id="errorToastArea" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px; max-width:400px; pointer-events:none;"></div>
 
   <!-- Modular Application Entry Point -->
-  <script type="module" src="/js/app.js?v=4.1"></script>
+  <script type="module" src="/js/app.js?v=4.2"></script>
 </body>
 </html>

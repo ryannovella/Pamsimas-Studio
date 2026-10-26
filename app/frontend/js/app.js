@@ -6,6 +6,7 @@ import { PhotoLightbox } from './lightbox.js';
 import { initErrorCatcher } from './errorCatcher.js';
 import { ReportBuilder } from './reportBuilder.js';
 import { AppUpdater } from './updater.js';
+import { KeyboardShortcutsManager } from './shortcuts.js';
 
 class App {
   constructor() {
@@ -13,6 +14,7 @@ class App {
     this.smartTimeline = null;
     this.lightbox = null;
     this.updater = null;
+    this.shortcuts = null;
   }
 
   init() {
@@ -28,12 +30,15 @@ class App {
     this.lightbox = new PhotoLightbox();
     this.updater = new AppUpdater();
     this.updater.init();
+    this.shortcuts = new KeyboardShortcutsManager(this);
+    this.shortcuts.init();
 
     // Expose instances for HTML bindings
     window.reportBuilder = this.reportBuilder;
     window.smartTimeline = this.smartTimeline;
     window.photoLightbox = this.lightbox;
     window.appUpdater = this.updater;
+    window.shortcutsManager = this.shortcuts;
     window.app = this;
 
     // Active context is always 'report' in this standalone app
@@ -60,11 +65,37 @@ class App {
     window.closeHelpModal = () => {
       document.getElementById('helpModal')?.classList.remove('active');
     };
+    window.switchHelpTab = (tab) => {
+      const btnShortcuts = document.getElementById('tabBtnHelpShortcuts');
+      const btnGuide = document.getElementById('tabBtnHelpGuide');
+      const viewShortcuts = document.getElementById('helpTabShortcuts');
+      const viewGuide = document.getElementById('helpTabGuide');
+      if (!btnShortcuts || !btnGuide || !viewShortcuts || !viewGuide) return;
+
+      if (tab === 'shortcuts') {
+        btnShortcuts.style.borderBottom = '2px solid var(--accent-cyan)';
+        btnShortcuts.style.color = 'var(--text-main)';
+        btnGuide.style.borderBottom = '2px solid transparent';
+        btnGuide.style.color = 'var(--text-dim)';
+        viewShortcuts.style.display = 'flex';
+        viewGuide.style.display = 'none';
+      } else {
+        btnGuide.style.borderBottom = '2px solid var(--accent-cyan)';
+        btnGuide.style.color = 'var(--text-main)';
+        btnShortcuts.style.borderBottom = '2px solid transparent';
+        btnShortcuts.style.color = 'var(--text-dim)';
+        viewGuide.style.display = 'flex';
+        viewShortcuts.style.display = 'none';
+      }
+    };
     window.openSmartTimeline = (ctx = 'report') => this.smartTimeline.openModal(ctx);
     window.closeSmartTimeline = () => this.smartTimeline.closeModal();
 
     window.closeActivePhotoModal = () => {
       this.reportBuilder.closeModal();
+    };
+    window.navigateModalPhoto = (dir, autoSave = true) => {
+      this.reportBuilder.navigateModalPhoto(dir, autoSave);
     };
     window.saveActivePhotoChanges = () => {
       this.reportBuilder.saveModalChanges();
