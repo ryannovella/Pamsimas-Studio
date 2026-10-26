@@ -1659,16 +1659,17 @@ textarea.form-input::placeholder {
 }
 
 .modal-photo-editor .modal-body {
-  padding: 18px 24px;
+  padding: 16px 20px;
   display: flex;
-  gap: 24px;
-  height: calc(90vh - 125px);
+  gap: 18px;
+  height: calc(90vh - 120px);
   max-height: none;
   overflow: hidden;
 }
 
 .modal-photo-editor .modal-preview {
-  flex: 1.6;
+  flex: 1.25;
+  min-width: 0;
   height: 100%;
   background: radial-gradient(circle at center, #101726 0%, #05080f 100%);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1678,7 +1679,7 @@ textarea.form-input::placeholder {
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 14px;
+  padding: 12px;
   box-shadow: inset 0 2px 14px rgba(0, 0, 0, 0.6);
   position: relative;
 }
@@ -1758,12 +1759,74 @@ textarea.form-input::placeholder {
 
 .modal-photo-editor .modal-form {
   flex: 1;
+  min-width: 440px;
+  max-width: 540px;
   height: 100%;
   overflow-y: auto;
-  padding-right: 10px;
+  overflow-x: hidden;
+  padding-right: 8px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+  scrollbar-gutter: stable;
+}
+
+.modal-photo-editor .form-grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.modal-photo-editor .form-group {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal-photo-editor .form-group label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-photo-editor .form-input,
+.modal-photo-editor .form-select {
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-photo-editor .form-select {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.modal-photo-editor .modal-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  flex-wrap: wrap;
+  padding-top: 6px;
+}
+
+@media (max-width: 1024px) {
+  .modal-photo-editor .modal-body {
+    padding: 12px;
+    gap: 12px;
+  }
+  .modal-photo-editor .modal-form {
+    min-width: 0;
+  }
 }
 
 /* =========================================================

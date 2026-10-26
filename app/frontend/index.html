@@ -157,7 +157,7 @@
                 <div class="form-group">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
                     <label class="form-label" style="margin-bottom:0;">Tanggal Laporan</label>
-                    <span id="reportTanggalLaporanTag" class="tag-subtle" title="Otomatis H+1 dari Tanggal SPT">(H+1 SPT)</span>
+                    <span id="reportTanggalLaporanTag" class="tag-subtle" title="Otomatis H+1 SPT (1 hari dinas) atau H+1 hari akhir dinas (multi-hari)">(H+1 SPT)</span>
                   </div>
                   <input type="date" id="reportTanggalLaporan" class="form-input form-input-sm" value="" onchange="window.reportBuilder ? window.reportBuilder.onTanggalLaporanChange(this.value) : null">
                   <span id="reportTanggalLaporanPreview" class="date-preview-label"></span>
@@ -614,45 +614,45 @@
           </div>
         </div>
         <div class="modal-form">
-          <div class="form-group" style="background:rgba(234,179,8,0.06); border:1px solid rgba(234,179,8,0.2); border-radius:8px; padding:10px 12px; margin-bottom:14px;">
-            <label class="checkbox-inline" style="font-weight:600; color:#facc15; cursor:pointer; display:flex; align-items:center; gap:8px;">
+          <div class="form-group" style="background:rgba(234,179,8,0.06); border:1px solid rgba(234,179,8,0.22); border-radius:6px; padding:7px 10px; margin-bottom:8px;">
+            <label class="checkbox-inline" style="font-weight:600; color:#facc15; font-size:0.78rem; cursor:pointer; display:flex; align-items:center; gap:8px;">
               <input type="checkbox" id="modalKeepOriginal" onchange="window.onActiveModalKeepOriginalChange(this.checked)">
-              <span style="display:inline-flex; align-items:center; gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Gunakan foto asli (tanpa watermark)</span>
+              <span style="display:inline-flex; align-items:center; gap:5px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                Gunakan Foto Asli (Tanpa Watermark)
+              </span>
             </label>
-            <div style="font-size:0.75rem; color:var(--text-dim); margin-top:4px; margin-left:24px;">
-              Foto tidak akan diberi watermark waktu dan koordinat.
-            </div>
           </div>
           <!-- KONTROL CROP, ROTATE & FLIP -->
-          <div id="modalCropBar" style="background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:8px; padding:10px 12px; margin-bottom:14px; display:flex; flex-direction:column; gap:8px;">
+          <div id="modalCropBar" style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:6px; padding:8px 10px; margin-bottom:8px; display:flex; flex-direction:column; gap:6px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div style="font-weight:600; color:var(--text-main); font-size:0.82rem; display:flex; align-items:center; gap:6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx=\"6\" cy=\"6\" r=\"3\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><line x1=\"20\" y1=\"4\" x2=\"8.12\" y2=\"15.88\"/><line x1=\"14.47\" y1=\"14.48\" x2=\"20\" y2=\"20\"/><line x1=\"8.12\" y1=\"8.12\" x2=\"12\" y2=\"12\"/></svg>
-                <span>Edit Geometri & Orientasi Foto</span>
+              <div style="font-weight:600; color:var(--text-main); font-size:0.78rem; display:flex; align-items:center; gap:5px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                <span>Geometri & Orientasi</span>
               </div>
-              <span id="modalCropStatusBadge" class="badge" style="font-size:0.68rem;">Siap</span>
+              <span id="modalCropStatusBadge" class="badge" style="font-size:0.65rem; padding:1px 6px;">Siap</span>
             </div>
             
-            <!-- Toolbar Transformasi: Rotasi & Flip -->
-            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.06);">
-              <button type="button" class="btn btn-secondary btn-xs" onclick="window.rotateActivePhoto(-90)" title="Putar 90° berlawanan arah jarum jam (Kiri)" style="display:inline-flex; align-items:center; gap:4px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Putar Kiri
+            <!-- Toolbar Transformasi: 4 tombol seimbang dalam 1 baris -->
+            <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:5px;">
+              <button type="button" class="btn btn-secondary btn-xs" onclick="window.rotateActivePhoto(-90)" title="Putar 90° Kiri (Berlawanan jarum jam)" style="padding:4px 4px; font-size:0.7rem; justify-content:center; white-space:nowrap;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Putar Kiri
               </button>
-              <button type="button" class="btn btn-secondary btn-xs" onclick="window.rotateActivePhoto(90)" title="Putar 90° searah jarum jam (Kanan)" style="display:inline-flex; align-items:center; gap:4px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg> Putar Kanan
+              <button type="button" class="btn btn-secondary btn-xs" onclick="window.rotateActivePhoto(90)" title="Putar 90° Kanan (Searah jarum jam)" style="padding:4px 4px; font-size:0.7rem; justify-content:center; white-space:nowrap;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg> Putar Kanan
               </button>
-              <button type="button" class="btn btn-secondary btn-xs" onclick="window.flipActivePhoto('h')" title="Balik Horizontal (Cermin Kiri-Kanan)" style="display:inline-flex; align-items:center; gap:4px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/><path d="M4 14h16"/></svg> Balik Horizontal
+              <button type="button" class="btn btn-secondary btn-xs" onclick="window.flipActivePhoto('h')" title="Balik Horizontal (Cermin Kiri-Kanan)" style="padding:4px 4px; font-size:0.7rem; justify-content:center; white-space:nowrap;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/><path d="M4 14h16"/></svg> Balik H
               </button>
-              <button type="button" class="btn btn-secondary btn-xs" onclick="window.flipActivePhoto('v')" title="Balik Vertikal (Atas-Bawah)" style="display:inline-flex; align-items:center; gap:4px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="m17 7-5-5-5 5"/><path d="m17 17-5 5-5-5"/></svg> Balik Vertikal
+              <button type="button" class="btn btn-secondary btn-xs" onclick="window.flipActivePhoto('v')" title="Balik Vertikal (Atas-Bawah)" style="padding:4px 4px; font-size:0.7rem; justify-content:center; white-space:nowrap;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="m17 7-5-5-5 5"/><path d="m17 17-5 5-5-5"/></svg> Balik V
               </button>
             </div>
 
-            <div style="font-size:0.72rem; color:var(--text-dim);" id="modalCropInfoText">
-              Gunakan rotasi/flip di atas atau klik <em>Seleksi Potong</em> di bawah foto untuk memotong rasio kustom.
+            <div style="font-size:0.68rem; color:var(--text-dim); line-height:1.2;" id="modalCropInfoText">
+              Gunakan rotasi/flip di atas atau Seleksi Potong untuk rasio kustom.
             </div>
-            <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+            <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
               <button type="button" class="btn btn-secondary btn-xs" id="btnModalApplyCrop" onclick="window.modalApplyCrop()" style="display:none; font-weight:600; align-items:center; gap:3px;">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> Terapkan Potongan
               </button>
@@ -667,25 +667,24 @@
               </button>
             </div>
           </div>
-          <div class="form-group">
-            <label>Tanggal Foto</label>
-            <input type="date" id="modalDatePicker" class="form-input">
-          </div>
           <div class="form-grid-2">
             <div class="form-group">
-              <label>Jam & Menit (WIB)</label>
-              <input type="time" step="1" id="modalTimePicker" class="form-input font-mono">
+              <label>Tanggal Foto</label>
+              <input type="date" id="modalDatePicker" class="form-input">
             </div>
             <div class="form-group">
-              <label>Variasi Detik</label>
-              <button type="button" class="btn btn-secondary btn-sm" style="width:100%; height:38px; display:inline-flex; align-items:center; justify-content:center; gap:4px;" onclick="window.jitterModalTime()">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Variasi ±30 Detik
-              </button>
+              <label>Jam & Menit (WIB)</label>
+              <div style="display:flex; gap:5px;">
+                <input type="time" step="1" id="modalTimePicker" class="form-input font-mono" style="flex:1; min-width:0;">
+                <button type="button" class="btn btn-secondary btn-xs" style="white-space:nowrap; padding:4px 7px; flex-shrink:0;" onclick="window.jitterModalTime()" title="Variasi acak ±30 detik">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ±30 Detik
+                </button>
+              </div>
             </div>
           </div>
           <div class="form-group">
             <label>Teks Watermark Waktu</label>
-            <input type="text" id="modalTimeStr" class="form-input font-mono" readonly style="background:rgba(0,0,0,0.3); color:var(--accent-cyan);">
+            <input type="text" id="modalTimeStr" class="form-input font-mono" readonly style="background:rgba(0,0,0,0.3); color:var(--accent-cyan); font-size:0.78rem;">
           </div>
           <div class="form-grid-2">
             <div class="form-group">
@@ -697,17 +696,15 @@
               <input type="text" id="modalLon" class="form-input font-mono">
             </div>
           </div>
-          <div style="display:flex; justify-content:space-between; margin-top:-6px; margin-bottom:12px; gap:8px; flex-wrap:wrap;">
-            <div style="display:flex; gap:6px;">
-              <button type="button" class="btn btn-secondary btn-xs" onclick="window.openModalMapPicker()" style="display:inline-flex; align-items:center; gap:3px;">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/></svg> Peta Lokasi
-              </button>
-              <button type="button" class="btn btn-secondary btn-xs" onclick="window.reverseGeocodeModalCoords()" id="btnModalReverseGeocode" title="Deteksi otomatis alamat dari koordinat GPS" style="display:inline-flex; align-items:center; gap:3px;">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Deteksi Alamat Otomatis
-              </button>
-            </div>
-            <button type="button" class="btn btn-secondary btn-xs" onclick="window.jitterModalCoords()">
-              Variasi Posisi (5m–2km)
+          <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:5px; margin-top:-2px; margin-bottom:4px;">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="window.openModalMapPicker()" style="justify-content:center; white-space:nowrap; padding:4px 4px; font-size:0.7rem;" title="Buka pemilih titik lokasi peta interaktif">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/></svg> Peta Lokasi
+            </button>
+            <button type="button" class="btn btn-secondary btn-xs" onclick="window.reverseGeocodeModalCoords()" id="btnModalReverseGeocode" title="Deteksi otomatis alamat dari koordinat GPS" style="justify-content:center; white-space:nowrap; padding:4px 4px; font-size:0.7rem;">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Deteksi Alamat
+            </button>
+            <button type="button" class="btn btn-secondary btn-xs" onclick="window.jitterModalCoords()" style="justify-content:center; white-space:nowrap; padding:4px 4px; font-size:0.7rem;" title="Variasi acak koordinat posisi (5m–2km)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24"/><path d="m14.83 9.17 4.24-4.24"/><path d="m14.83 14.83 4.24 4.24"/><path d="m9.17 14.83-4.24 4.24"/></svg> Variasi GPS
             </button>
           </div>
           <div class="form-grid-2">
@@ -715,7 +712,7 @@
               <label>Format Alamat Watermark</label>
               <select id="modalAddressMode" class="form-select" onchange="window.onModalAddressModeChange ? window.onModalAddressModeChange(this.value) : null">
                 <option value="natural" selected>Alamat Lengkap Peta</option>
-                <option value="structured">Hierarki Wilayah (Dusun, Desa, Kec, Kab)</option>
+                <option value="structured">Hierarki Wilayah (Dusun, Desa, ...)</option>
               </select>
             </div>
             <div class="form-group">
@@ -728,12 +725,12 @@
               </select>
             </div>
           </div>
-          <div class="form-group" style="background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:8px; padding:10px 12px; margin-bottom:12px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-              <label style="margin:0; font-weight:600; color:var(--text-main); font-size:0.8rem;">Alamat Hasil Deteksi Peta</label>
-              <span style="font-size:0.7rem; color:var(--text-dim);">Enter untuk baris baru</span>
+          <div class="form-group" style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:6px; padding:7px 9px; margin-bottom:4px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label style="margin:0; font-weight:600; color:var(--text-main); font-size:0.78rem;">Alamat Hasil Deteksi Peta</label>
+              <span style="font-size:0.68rem; color:var(--text-dim);">Enter untuk baris baru</span>
             </div>
-            <textarea id="modalCustomAddress" class="form-input" rows="2" placeholder="Contoh: Jl. Grabag - Secang, Dusun Bedoyo, Baleagung, Grabag, Magelang" oninput="window.onModalCustomAddressInput ? window.onModalCustomAddressInput(this.value) : null"></textarea>
+            <textarea id="modalCustomAddress" class="form-input" rows="2" placeholder="Contoh: Jl. Grabag - Secang, Dusun Bedoyo, Baleagung, Grabag, Magelang" oninput="window.onModalCustomAddressInput ? window.onModalCustomAddressInput(this.value) : null" style="font-size:0.78rem; min-height:48px;"></textarea>
           </div>
           <div class="form-group">
             <label>Dusun / Lokasi</label>
