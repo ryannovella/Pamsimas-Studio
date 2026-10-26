@@ -677,7 +677,7 @@
           </div>
           <div class="form-group">
             <label>Teks Watermark Waktu</label>
-            <input type="text" id="modalTimeStr" class="form-input font-mono" readonly style="background:rgba(0,0,0,0.3); color:#818cf8;">
+            <input type="text" id="modalTimeStr" class="form-input font-mono" readonly style="background:rgba(0,0,0,0.3); color:var(--accent-cyan);">
           </div>
           <div class="form-grid-2">
             <div class="form-group">
@@ -905,7 +905,7 @@
             <button type="button" class="btn btn-secondary btn-xs" id="btnLayerGoogleTerrain" onclick="window.setMapLayer('googleTerrain')">Google Medan</button>
             <button type="button" class="btn btn-secondary btn-xs" id="btnLayerOsm" onclick="window.setMapLayer('osm')">OpenStreetMap</button>
           </div>
-          <span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:0.7rem;">Auto Reverse GPS Aktif</span>
+          <span class="badge" style="background:rgba(16,185,129,0.15); color:var(--accent-emerald); border:1px solid rgba(16,185,129,0.3); font-size:0.7rem;">Auto Reverse GPS Aktif</span>
         </div>
 
         <p class="help-text" style="margin:0;">Klik di peta Google Maps untuk memilih titik koordinat. Data alamat lengkap (Dusun, Desa, Kec, Kab) akan terdeteksi otomatis persis seperti aplikasi geotag GPS.</p>
@@ -968,10 +968,10 @@
         <div style="font-size:0.8rem; color:var(--text-dim);">
           Berkas log: <code id="errorLogsPath" class="font-mono" style="color:var(--text-main);">data/logs/error.log</code>
         </div>
-        <pre id="errorLogsContent" class="font-mono" style="background:#090d16; color:#f87171; padding:14px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); max-height:360px; overflow-y:auto; font-size:0.75rem; white-space:pre-wrap; word-break:break-word;"></pre>
+        <pre id="errorLogsContent" class="font-mono" style="background:#090d16; color:var(--danger-text); padding:14px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); max-height:360px; overflow-y:auto; font-size:0.75rem; white-space:pre-wrap; word-break:break-word;"></pre>
       </div>
       <div class="modal-footer" style="justify-content:space-between;">
-        <button class="btn btn-outline btn-sm" onclick="window.clearErrorLogs()" style="color:#ef4444; border-color:rgba(239,68,68,0.3); display:inline-flex; align-items:center; gap:4px;">
+        <button class="btn btn-outline btn-sm" onclick="window.clearErrorLogs()" style="color:var(--danger-text); border-color:rgba(239,68,68,0.45); display:inline-flex; align-items:center; gap:4px;">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Bersihkan Log
         </button>
         <div style="display:flex; gap:8px;">

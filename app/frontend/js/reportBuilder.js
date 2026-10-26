@@ -922,8 +922,8 @@ export class ReportBuilder {
 
     if (!sVal) {
       badge.textContent = 'Belum Diatur';
-      badge.style.background = 'rgba(148,163,184,0.12)';
-      badge.style.color = '#94a3b8';
+      badge.style.background = 'rgba(203,213,225,0.12)';
+      badge.style.color = '#cbd5e1';
       this.evaluateRealtimeAudit();
       return;
     }
@@ -1363,7 +1363,7 @@ export class ReportBuilder {
       vTitle.textContent = `Desa ${desaName}${kecName ? ' (' + kecName + ')' : ''}`;
     }
     if (notice) {
-      notice.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" style="vertical-align:middle; margin-right:3px;"><polyline points="20 6 9 17 4 12"/></svg> Kecamatan ${kecName} otomatis disesuaikan`;
+      notice.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" style="vertical-align:middle; margin-right:3px;"><polyline points="20 6 9 17 4 12"/></svg> Kecamatan ${kecName} otomatis disesuaikan`;
       notice.style.display = 'inline';
       setTimeout(() => {
         const el = document.getElementById(`autofillNotice_${villageId}`);
@@ -1413,7 +1413,7 @@ export class ReportBuilder {
 
           const notice = document.getElementById(`autofillNotice_${id}`);
           if (notice) {
-            notice.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" style="vertical-align:middle; margin-right:3px;"><polyline points="20 6 9 17 4 12"/></svg> Kecamatan ${match.kecamatan} otomatis disesuaikan`;
+            notice.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" style="vertical-align:middle; margin-right:3px;"><polyline points="20 6 9 17 4 12"/></svg> Kecamatan ${match.kecamatan} otomatis disesuaikan`;
             notice.style.display = 'inline';
             setTimeout(() => {
               const el = document.getElementById(`autofillNotice_${id}`);
@@ -2964,7 +2964,7 @@ export class ReportBuilder {
         const cardBorder = isComplete ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.35)';
         const statusBadge = isComplete
           ? `<span style="color:#34d399; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; background:rgba(16, 185, 129, 0.15); border:1px solid rgba(16, 185, 129, 0.35); border-radius:4px;" title="Lengkap"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>`
-          : `<span style="color:#f87171; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.35); border-radius:4px;" title="Belum Lengkap"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>`;
+          : `<span style="color:#fca5a5; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.35); border-radius:4px;" title="Belum Lengkap"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>`;
 
         let targetSegKey = '';
         if (['kabupaten', 'tahun', 'nomor_spt', 'tanggal_spt', 'tanggal_laporan', 'trip_dates'].includes(it.field)) {

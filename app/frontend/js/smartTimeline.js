@@ -211,7 +211,7 @@ export class SmartTimeline {
     if (!photos || photos.length === 0) {
       this.resultsContainer.innerHTML = `
         <div class="empty-state">
-          <p style="color:#ef4444;">No photos available in current view to analyze.</p>
+          <p style="color:#fca5a5;">No photos available in current view to analyze.</p>
         </div>
       `;
       return;
@@ -257,7 +257,7 @@ export class SmartTimeline {
     } catch (err) {
       this.resultsContainer.innerHTML = `
         <div class="empty-state">
-          <p style="color:#ef4444;">Error running analysis: ${err.message}</p>
+          <p style="color:#fca5a5;">Error running analysis: ${err.message}</p>
         </div>
       `;
     }
@@ -311,7 +311,7 @@ export class SmartTimeline {
 
     let html = `
       <div class="st-summary-badge">
-        <span style="display:inline-flex; align-items:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><polyline points="20 6 9 17 4 12"/></svg>Terdeteksi <strong>${total_clusters} Spot / Klaster Lokasi</strong> dari <strong>${total_photos} Foto</strong></span>
+        <span style="display:inline-flex; align-items:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><polyline points="20 6 9 17 4 12"/></svg>Terdeteksi <strong>${total_clusters} Spot / Klaster Lokasi</strong> dari <strong>${total_photos} Foto</strong></span>
         <span class="badge badge-accent">Detik Manusiawi (Bukan :00/:05) & Transit 30–50 Menit</span>
         ${hasGpsJitter ? '<span class="badge" style="background:#065f46; color:#a7f3d0; display:inline-flex; align-items:center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>GPS Jitter 5–25m Aktif (Unik)</span>' : ''}
       </div>

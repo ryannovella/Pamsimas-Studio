@@ -394,9 +394,9 @@ const mapPicker = {
 
         if (this._marker) {
           const popupTitle = parsed.desa ? `<b>Desa ${parsed.desa}</b>` : '<b>Titik Terpilih</b>';
-          const popupDusun = parsed.dusun ? `<br><small style="color:#10b981; font-weight:600;">${parsed.dusun}</small>` : '';
+          const popupDusun = parsed.dusun ? `<br><small style="color:#34d399; font-weight:600;">${parsed.dusun}</small>` : '';
           const popupSub = parsed.kec ? `<br>${parsed.kec}, ${parsed.kab}` : `<br>${parsed.kab}`;
-          this._marker.bindPopup(`${popupTitle}${popupDusun}${popupSub}<br><small style="color:#64748b;">${this._pickedLat}, ${this._pickedLon}</small>`).openPopup();
+          this._marker.bindPopup(`${popupTitle}${popupDusun}${popupSub}<br><small style="color:#cbd5e1;">${this._pickedLat}, ${this._pickedLon}</small>`).openPopup();
         }
 
         const elDesa = document.getElementById('mapPreviewDesa');
