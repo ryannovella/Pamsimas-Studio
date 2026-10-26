@@ -151,10 +151,13 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
 
     tanggal_spt_iso = trip_start_iso or parse_indo_date_to_iso(tanggal_spt_raw)
 
-    # Otomatisasi Tanggal Laporan: Jika belum ada di dokumen, prioritas H+1 dari hari terakhir dinas, lalu dari Tanggal SPT
+    # Otomatisasi Tanggal Laporan: Jika belum ada di dokumen, jika dinas multi-hari diset H+1 hari akhir, atau H+1 Tanggal SPT
     auto_hplus1 = False
     if not tanggal_laporan_iso:
-        if trip_end_iso or trip_start_iso:
+        if trip_end_iso and trip_start_iso and trip_end_iso != trip_start_iso:
+            tanggal_laporan_iso = get_hplus1_iso(trip_end_iso)
+            auto_hplus1 = True
+        elif trip_end_iso or trip_start_iso:
             tanggal_laporan_iso = get_hplus1_iso(trip_end_iso or trip_start_iso)
             auto_hplus1 = True
         elif tanggal_spt_iso:

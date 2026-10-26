@@ -1345,6 +1345,39 @@ def generate_monev_docx(
             if r.font:
                 r.font.color.rgb = RGBColor(0, 0, 0)
 
+    # 6b. Pastikan judul bagian & subbagian berformat bold, murni hitam, Arial:
+    # - PENDAHULUAN
+    # - 1. Umum
+    # - 2. Maksud dan Tujuan
+    # - 3. Ruang Lingkup
+    # - 4. Dasar Pelaksanaan
+    # - A. KEGIATAN YANG DILAKSANAKAN
+    # - B. HASIL YANG DICAPAI
+    def _is_monev_section_heading(text: str) -> bool:
+        t = re.sub(r'\s+', ' ', text.strip()).upper()
+        if t == "PENDAHULUAN":
+            return True
+        if t in ("1. UMUM", "2. MAKSUD DAN TUJUAN", "3. RUANG LINGKUP", "4. DASAR PELAKSANAAN"):
+            return True
+        if re.match(r"^(?:[A-Z]\.\s*)?KEGIATAN\s+YANG\s+DILAKSANAKAN$", t):
+            return True
+        if re.match(r"^(?:[A-Z]\.\s*)?HASIL\s+YANG\s+DICAPAI$", t):
+            return True
+        return False
+
+    for s_name in ("Heading 1", "Heading 2"):
+        if s_name in doc.styles:
+            doc.styles[s_name].font.bold = True
+
+    for p in doc.paragraphs:
+        if _is_monev_section_heading(p.text):
+            for r in p.runs:
+                r.bold = True
+                if r.font:
+                    r.font.name = "Arial"
+                    r.font.size = Pt(11)
+                    r.font.color.rgb = RGBColor(0, 0, 0)
+
     # 7. Identifikasi P32 ("B. HASIL YANG DICAPAI") dan P54 (pembatas Section 1)
     p32_idx = 32
     for idx, p in enumerate(doc.paragraphs):

@@ -151,7 +151,7 @@ export class ReportBuilder {
 
     // Modal elements
     this.modal = document.getElementById('docEditModal');
-    this.modalTitle = document.getElementById('modalTitle');
+    this.modalTitle = document.getElementById('modalPhotoTitle') || document.getElementById('modalTitle');
     this.modalDatePicker = document.getElementById('modalDatePicker');
     this.modalTimePicker = document.getElementById('modalTimePicker');
     this.modalTimeStr = document.getElementById('modalTimeStr');
@@ -882,9 +882,29 @@ export class ReportBuilder {
     }
     const tag = document.getElementById('reportTanggalLaporanTag');
     if (tag) {
-      tag.textContent = isManual ? '(Manual)' : '(H+1 SPT)';
-      tag.style.color = isManual ? '#f59e0b' : '#38bdf8';
-      tag.title = isManual ? 'Tanggal laporan diubah manual' : 'Otomatis dihitung H+1 dari Tanggal SPT';
+      const isMultiDay = !!(this.tripStartDate && this.tripEndDate && this.tripStartDate !== this.tripEndDate);
+      const lastTripDate = (this.tripEndDate || this.tripStartDate || '').trim();
+      const tglSptVal = (this.tanggalSpt || '').trim();
+      const hPlus1End = lastTripDate ? getNextDayIso(lastTripDate) : '';
+      const hPlus1Spt = tglSptVal ? getNextDayIso(tglSptVal) : '';
+
+      if (isManual) {
+        tag.textContent = '(Manual)';
+        tag.style.color = '#f59e0b';
+        tag.title = 'Tanggal laporan diubah manual';
+      } else if (isMultiDay && this.tanggalLaporan === hPlus1End) {
+        tag.textContent = '(H+1 Hari Akhir)';
+        tag.style.color = '#38bdf8';
+        tag.title = 'Otomatis dihitung H+1 dari hari akhir kegiatan dinas';
+      } else if (this.tanggalLaporan === hPlus1Spt) {
+        tag.textContent = '(H+1 SPT)';
+        tag.style.color = '#38bdf8';
+        tag.title = 'Otomatis dihitung H+1 dari Tanggal SPT';
+      } else {
+        tag.textContent = isMultiDay ? '(H+1 Hari Akhir)' : '(H+1 SPT)';
+        tag.style.color = '#38bdf8';
+        tag.title = 'Otomatis dihitung H+1';
+      }
     }
     this.updateTanggalLaporanPreview();
     this.evaluateRealtimeAudit();
@@ -936,14 +956,19 @@ export class ReportBuilder {
       if (sInput && (!this.lockedSegments.administrasi)) {
         sInput.value = val;
         this.tripStartDate = val;
-        this.onTripDatesChange();
       }
 
-      // 2. Tanggal Laporan otomatis H+1 dari Tanggal SPT
-      const hPlus1 = getNextDayIso(val);
-      if (hPlus1) {
-        this.setReportTanggalLaporan(hPlus1, false);
+      // 2. Tanggal Laporan: Jika dinas multi-hari diset H+1 hari akhir, jika 1 hari diset H+1 Tanggal SPT
+      if (!this.lockedSegments.administrasi) {
+        if (this.tripEndDate && this.tripEndDate !== val) {
+          const hPlus1End = getNextDayIso(this.tripEndDate);
+          if (hPlus1End) this.setReportTanggalLaporan(hPlus1End, false);
+        } else {
+          const hPlus1Spt = getNextDayIso(val);
+          if (hPlus1Spt) this.setReportTanggalLaporan(hPlus1Spt, false);
+        }
       }
+      this.onTripDatesChange();
     } else {
       this.setReportTanggalLaporan('', false);
     }
@@ -975,13 +1000,22 @@ export class ReportBuilder {
     this.tripStartDate = sVal;
     this.tripEndDate = eVal;
 
-    // Otomatis sinkronkan Tanggal Laporan ke H+1 dari hari terakhir kegiatan dinas (jika segmen tidak dikunci)
+    // Otomatis sinkronkan Tanggal Laporan:
+    // Jika dinas lebih dari satu hari maka tanggal laporan diset ke H+1 hari akhir,
+    // jika 1 hari dinas maka diset ke H+1 Tanggal SPT
     if (!this.lockedSegments.administrasi) {
-      const lastTripDate = eVal || sVal;
-      if (lastTripDate) {
-        const hPlus1 = getNextDayIso(lastTripDate);
-        if (hPlus1) {
-          this.setReportTanggalLaporan(hPlus1, false);
+      if (eVal && sVal && eVal !== sVal) {
+        // Multi-hari dinas: H+1 hari akhir
+        const hPlus1End = getNextDayIso(eVal);
+        if (hPlus1End) {
+          this.setReportTanggalLaporan(hPlus1End, false);
+        }
+      } else if (sVal || this.tanggalSpt) {
+        // 1 hari dinas: H+1 Tanggal SPT
+        const baseDate = this.tanggalSpt || sVal;
+        const hPlus1Spt = getNextDayIso(baseDate);
+        if (hPlus1Spt) {
+          this.setReportTanggalLaporan(hPlus1Spt, false);
         }
       }
     }
@@ -3196,20 +3230,55 @@ export class ReportBuilder {
 
     // 5. Tanggal Laporan
     const tglLap = (this.tanggalLaporan || '').trim();
-    if (tglLap) {
-      items.push({
-        field: 'tanggal_laporan',
-        status: 'complete',
-        label: 'Tanggal Laporan',
-        message: `Terisi: ${formatIndonesianDateOnly(tglLap)}`
-      });
-    } else {
+    const tglSptVal = (this.tanggalSpt || '').trim();
+    const isMultiDay = !!(sDate && eDate && sDate !== eDate);
+    const lastTripDate = (eDate || sDate || '').trim();
+    const hPlus1End = lastTripDate ? getNextDayIso(lastTripDate) : '';
+    const hPlus1Spt = tglSptVal ? getNextDayIso(tglSptVal) : '';
+    const expectedTglLap = isMultiDay ? hPlus1End : (hPlus1Spt || hPlus1End);
+
+    if (!tglLap) {
       items.push({
         field: 'tanggal_laporan',
         status: 'incomplete',
         label: 'Tanggal Laporan',
         message: 'Tanggal laporan belum ditentukan'
       });
+    } else {
+      // Validasi ketentuan: H+1 hari akhir dinas jika multi-hari, atau H+1 Tanggal SPT jika 1 hari
+      if (isMultiDay && tglLap === hPlus1End) {
+        items.push({
+          field: 'tanggal_laporan',
+          status: 'complete',
+          label: 'Tanggal Laporan',
+          message: `Sesuai aturan: H+1 hari akhir dinas (${formatIndonesianDateOnly(tglLap)})`
+        });
+      } else if (!isMultiDay && (tglLap === hPlus1Spt || tglLap === hPlus1End)) {
+        items.push({
+          field: 'tanggal_laporan',
+          status: 'complete',
+          label: 'Tanggal Laporan',
+          message: `Sesuai aturan: H+1 Tanggal SPT (${formatIndonesianDateOnly(tglLap)})`
+        });
+      } else if (!tglSptVal && !lastTripDate) {
+        items.push({
+          field: 'tanggal_laporan',
+          status: 'complete',
+          label: 'Tanggal Laporan',
+          message: `Terisi: ${formatIndonesianDateOnly(tglLap)}`
+        });
+      } else {
+        const saran = isMultiDay
+          ? `H+1 hari akhir dinas: ${formatIndonesianDateOnly(hPlus1End)}`
+          : `H+1 Tanggal SPT: ${formatIndonesianDateOnly(hPlus1Spt || hPlus1End)}`;
+
+        items.push({
+          field: 'tanggal_laporan',
+          status: 'incomplete',
+          label: 'Tanggal Laporan',
+          message: `Perhatian: Tanggal laporan (${formatIndonesianDateOnly(tglLap)}) tidak sesuai ketentuan. Harusnya ${saran}.`
+        });
+      }
     }
 
     // 6. Tabel Pelaksana Kedinasan
