@@ -1430,6 +1430,17 @@ textarea.form-input::placeholder {
   line-height: 1.2;
 }
 
+.btn:disabled,
+.btn[disabled],
+.btn.disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+  filter: grayscale(0.65) !important;
+}
+
 .btn-primary {
   background: #1e40af;
   color: #fff;
@@ -2353,7 +2364,28 @@ input[type="week"] {
   cursor: pointer;
   position: relative;
   font-family: var(--font-sans);
-  color: var(--text-main);
+  color: #64748b;
+}
+
+input[type="date"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit,
+input[type="datetime-local"]::-webkit-datetime-edit,
+input[type="month"]::-webkit-datetime-edit,
+input[type="week"]::-webkit-datetime-edit {
+  color: #64748b;
+}
+
+input[type="date"].has-value,
+input[type="time"].has-value,
+input[type="datetime-local"].has-value,
+input[type="month"].has-value,
+input[type="week"].has-value,
+input[type="date"].has-value::-webkit-datetime-edit,
+input[type="time"].has-value::-webkit-datetime-edit,
+input[type="datetime-local"].has-value::-webkit-datetime-edit,
+input[type="month"].has-value::-webkit-datetime-edit,
+input[type="week"].has-value::-webkit-datetime-edit {
+  color: #ffffff;
 }
 
 /* Crisp high-contrast calendar & clock picker icon (WCAG AAA >= 7:1)
@@ -3152,9 +3184,53 @@ input[type="file"]::file-selector-button:hover {
 
 .form-grid-spt {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 1.5fr 1fr;
   gap: 8px;
   margin-top: 8px;
+}
+
+.spt-input-group {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+  width: 100%;
+}
+
+.spt-input-group .spt-prefix-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  color: #ffffff;
+  font-size: 0.82rem;
+  padding: 7px 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.spt-input-group .spt-prefix-input:focus {
+  z-index: 3;
+  color: #ffffff;
+}
+
+.spt-input-group .spt-suffix-input {
+  flex: 0 0 85px;
+  width: 85px;
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  text-align: center;
+  font-weight: 700;
+  color: #ffffff;
+  font-size: 0.85rem;
+  padding: 7px 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.spt-input-group .spt-suffix-input:focus {
+  z-index: 3;
+  color: #ffffff;
 }
 
 .tag-subtle {

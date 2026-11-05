@@ -148,7 +148,7 @@
               <div class="form-grid-admin">
                 <div class="form-group" style="position:relative;">
                   <label class="form-label">Kabupaten</label>
-                  <input type="text" id="reportKabupaten" class="form-input form-input-sm" value="" placeholder="Ketik kabupaten..." autocomplete="off">
+                  <input type="text" id="reportKabupaten" class="form-input form-input-sm" value="" placeholder="Kabupaten..." autocomplete="off">
                 </div>
                 <div class="form-group">
                   <label class="form-label">Tahun</label>
@@ -166,7 +166,11 @@
               <div class="form-grid-spt">
                 <div class="form-group">
                   <label class="form-label">Nomor SPT</label>
-                  <input type="text" id="reportNomorSpt" class="form-input form-input-sm font-mono" value="" placeholder="Contoh: CK07/T/Bpbpk11/2026/1766">
+                  <div class="spt-input-group">
+                    <input type="text" id="reportNomorSptPrefix" class="form-input form-input-sm font-mono spt-prefix-input" value="CK07/T/Bpbpk11/2026/" placeholder="CK07/T/Bpbpk11/2026/" title="Prefix SPT" autocomplete="off" spellcheck="false">
+                    <input type="text" id="reportNomorSptSuffix" class="form-input form-input-sm font-mono spt-suffix-input" value="" placeholder="No..." title="Nomor Urut SPT" autocomplete="off" spellcheck="false">
+                  </div>
+                  <input type="hidden" id="reportNomorSpt" value="">
                 </div>
                 <div class="form-group">
                   <label class="form-label">Tanggal SPT</label>
@@ -200,7 +204,7 @@
                 <!-- Baris Ramping Tunggal: Pencarian & Auto-Add Pelaksana (One-Click) -->
                 <div class="personel-input-row">
                   <div style="position:relative; flex:1;">
-                    <input type="text" id="reportPersonelInput" class="form-input form-input-sm" placeholder="Cari atau ketik nama personel..." autocomplete="off">
+                    <input type="text" id="reportPersonelInput" class="form-input form-input-sm" placeholder="Nama personel..." autocomplete="off">
                   </div>
                   <button type="button" class="btn btn-secondary btn-sm" onclick="window.reportBuilder.addPelaksanaFromInput()" title="Tambahkan nama (atau tekan Enter)">
                     + Tambah
@@ -350,19 +354,19 @@
                     <div class="quick-fields-row" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px;">
                       <div class="quick-field">
                         <label style="font-size:0.68rem; color:var(--text-dim);">Desa / Kelurahan</label>
-                        <input type="text" id="reportQuickDesa" class="form-input form-input-sm" placeholder="Contoh: Baleagung" oninput="window.reportBuilder.onQuickDesaInput(this.value)">
+                        <input type="text" id="reportQuickDesa" class="form-input form-input-sm" placeholder="Desa..." oninput="window.reportBuilder.onQuickDesaInput(this.value)">
                       </div>
                       <div class="quick-field">
                         <label style="font-size:0.68rem; color:var(--text-dim);">Kecamatan</label>
-                        <input type="text" id="reportQuickKec" class="form-input form-input-sm" placeholder="Contoh: Grabag">
+                        <input type="text" id="reportQuickKec" class="form-input form-input-sm" placeholder="Kecamatan...">
                       </div>
                       <div class="quick-field">
                         <label style="font-size:0.68rem; color:var(--text-dim);">Dusun / Lokasi (Opsional)</label>
-                        <input type="text" id="reportQuickDusun" class="form-input form-input-sm" placeholder="Contoh: Dusun Bedoyo">
+                        <input type="text" id="reportQuickDusun" class="form-input form-input-sm" placeholder="Dusun...">
                       </div>
                       <div class="quick-field">
                         <label style="font-size:0.68rem; color:var(--text-dim);">Kabupaten / Kota</label>
-                        <input type="text" id="reportQuickKab" class="form-input form-input-sm" placeholder="Contoh: Magelang">
+                        <input type="text" id="reportQuickKab" class="form-input form-input-sm" placeholder="Kabupaten...">
                       </div>
                       <div class="quick-field">
                         <label style="font-size:0.68rem; color:var(--text-dim);">Provinsi</label>
@@ -379,7 +383,7 @@
                       </div>
                       <div class="quick-field">
                         <label style="font-size:0.68rem; color:var(--text-dim);">Alamat Bebas / Tambahan (Opsional)</label>
-                        <input type="text" id="reportQuickCustomAddress" class="form-input form-input-sm" placeholder="Ketik alamat custom jika ingin mengganti nama jalan/lokasi bebas...">
+                        <input type="text" id="reportQuickCustomAddress" class="form-input form-input-sm" placeholder="Alamat custom (opsional)...">
                       </div>
                     </div>
                   </div>
@@ -506,6 +510,21 @@
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   <span>Download .docx</span>
                 </button>
+                <!-- Peringatan Kelengkapan Terintegrasi (< 100%) -->
+                <div id="reportIncompleteWarning" style="display:none; margin-top:8px; padding:9px 12px; border-radius:var(--radius-sm); background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.22); color:var(--text-main); font-size:0.77rem; line-height:1.45;">
+                  <div style="display:flex; align-items:flex-start; gap:8px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.2" style="flex-shrink:0; margin-top:2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <div style="flex:1;">
+                      <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+                        <span style="font-weight:600; color:#fca5a5;">Kelengkapan Belum 100% (<span id="reportIncompletePercent">0%</span>)</span>
+                        <a href="javascript:void(0)" onclick="window.reportBuilder.toggleAuditCard()" style="color:#93c5fd; font-size:0.72rem; text-decoration:none;">Lihat Detail &rarr;</a>
+                      </div>
+                      <div id="reportIncompleteItemsList" style="margin-top:2px; color:var(--text-muted); font-size:0.72rem;">
+                        Komponen belum lengkap
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
             </div>
@@ -730,11 +749,11 @@
               <label style="margin:0; font-weight:600; color:var(--text-main); font-size:0.78rem;">Alamat Hasil Deteksi Peta</label>
               <span style="font-size:0.68rem; color:var(--text-dim);">Enter untuk baris baru</span>
             </div>
-            <textarea id="modalCustomAddress" class="form-input" rows="2" placeholder="Contoh: Jl. Grabag - Secang, Dusun Bedoyo, Baleagung, Grabag, Magelang" oninput="window.onModalCustomAddressInput ? window.onModalCustomAddressInput(this.value) : null" style="font-size:0.78rem; min-height:48px;"></textarea>
+            <textarea id="modalCustomAddress" class="form-input" rows="2" placeholder="Alamat custom..." oninput="window.onModalCustomAddressInput ? window.onModalCustomAddressInput(this.value) : null" style="font-size:0.78rem; min-height:48px;"></textarea>
           </div>
-          <div class="form-group">
-            <label>Dusun / Lokasi</label>
-            <input type="text" id="modalDusun" class="form-input" placeholder="Contoh: Dusun Bedoyo">
+          <div class="form-group" style="margin-bottom:8px;">
+            <label class="form-label">Dusun / Lokasi</label>
+            <input type="text" id="modalDusun" class="form-input" placeholder="Dusun...">
           </div>
           <div class="form-grid-2">
             <div class="form-group">

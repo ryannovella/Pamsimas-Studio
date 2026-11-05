@@ -789,7 +789,7 @@ def make_xml_bullet(
 
 def normalize_image_aspect_ratio(img: Image.Image, target_ratio: float = 4 / 3) -> Image.Image:
     """
-    Normalizes portrait or mismatched images to a balanced landscape aspect ratio (default 4:3)
+    Normalizes portrait, square, or ultra-wide landscape images to a balanced landscape aspect ratio (default 4:3)
     using high-quality centered cropping so that table grid rows remain perfectly aligned and symmetrical.
     Also handles EXIF orientation transposition if present.
     """
@@ -799,18 +799,21 @@ def normalize_image_aspect_ratio(img: Image.Image, target_ratio: float = 4 / 3) 
         pass
 
     w, h = img.size
+    if w <= 0 or h <= 0:
+        return img
     current_ratio = w / h
 
-    # If image is portrait (h > w) or substantially narrower than 4:3 (margin toleransi ketat agar landscape panjang tidak terpangkas)
-    if current_ratio < 0.98:
-        # Portrait to Landscape 4:3 center crop
-        target_h = int(w / target_ratio)
-        if target_h <= h:
+    # Margin toleransi ~2.5% agar foto yang sudah ~4:3 tidak terpotong ulang
+    if abs(current_ratio - target_ratio) > 0.035:
+        if current_ratio < target_ratio:
+            # Foto lebih tegak / portrait / square: potong vertikal secara simetris
+            target_h = int(round(w / target_ratio))
             top = max(0, (h - target_h) // 2)
             bottom = top + target_h
             return img.crop((0, top, w, bottom))
         else:
-            target_w = int(h * target_ratio)
+            # Foto lebih lebar / ultra-wide landscape: potong horizontal secara simetris
+            target_w = int(round(h * target_ratio))
             left = max(0, (w - target_w) // 2)
             right = left + target_w
             return img.crop((left, 0, right, h))

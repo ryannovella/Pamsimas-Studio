@@ -21,6 +21,8 @@ export class ReportBuilder {
   constructor() {
     this.kabupaten = '';
     this.tahun = '2026';
+    this.sptPrefix = this.getStoredSptPrefix();
+    this.sptSuffix = '';
     this.nomorSpt = '';
     this.tanggalSpt = '';
     this.tanggalLaporan = '';
@@ -179,11 +181,13 @@ export class ReportBuilder {
     // Jangan otomatis mengisi Tgl Mulai saat pertama kali membuka WebUI
     if (sInput) {
       sInput.value = '';
+      this.syncDateInputColor(sInput);
     }
     this.tripStartDate = '';
 
     if (eInput) {
       eInput.value = '';
+      this.syncDateInputColor(eInput);
     }
     this.tripEndDate = '';
 
@@ -793,24 +797,86 @@ export class ReportBuilder {
       });
     }
 
-    // Tahun change
+    // Tahun change & Auto-Sync Tahun di Prefix SPT
     const tahunInput = document.getElementById('reportTahun');
     if (tahunInput) {
       tahunInput.addEventListener('input', (e) => {
         this.tahun = e.target.value.trim() || '2026';
+        if (this.sptPrefix && /\/(202\d)\//.test(this.sptPrefix)) {
+          this.sptPrefix = this.sptPrefix.replace(/\/(202\d)\//, `/${this.tahun}/`);
+          this.saveStoredSptPrefix(this.sptPrefix);
+          this.nomorSpt = this.sptSuffix ? `${this.sptPrefix}${this.sptSuffix}` : '';
+          this.syncSptInputs();
+        }
         this.updateDocumentTitlePreview();
         this.evaluateRealtimeAudit();
       });
     }
 
-    // Nomor SPT change
-    const sptInput = document.getElementById('reportNomorSpt');
-    if (sptInput) {
-      sptInput.addEventListener('input', (e) => {
-        this.nomorSpt = e.target.value.trim();
+    // Inisialisasi awal nilai input SPT
+    this.syncSptInputs();
+
+    // Suffix (nomor urut) change & paste
+    const sptSuffixInput = document.getElementById('reportNomorSptSuffix');
+    if (sptSuffixInput) {
+      sptSuffixInput.addEventListener('input', (e) => {
+        const val = e.target.value.trim();
+        if (val.includes('/')) {
+          this.handleSptFullPaste(val);
+          return;
+        }
+        this.sptSuffix = val;
+        this.nomorSpt = this.sptSuffix ? `${this.sptPrefix}${this.sptSuffix}` : '';
+        const hiddenInp = document.getElementById('reportNomorSpt');
+        if (hiddenInp) hiddenInp.value = this.nomorSpt;
         this.evaluateRealtimeAudit();
       });
+
+      sptSuffixInput.addEventListener('paste', (e) => {
+        const text = (e.clipboardData || window.clipboardData)?.getData('text');
+        if (text && text.includes('/')) {
+          e.preventDefault();
+          this.handleSptFullPaste(text);
+        }
+      });
     }
+
+    // Prefix change & paste
+    const sptPrefixInput = document.getElementById('reportNomorSptPrefix');
+    if (sptPrefixInput) {
+      sptPrefixInput.addEventListener('input', (e) => {
+        this.sptPrefix = e.target.value;
+        this.saveStoredSptPrefix(this.sptPrefix);
+        this.nomorSpt = this.sptSuffix ? `${this.sptPrefix}${this.sptSuffix}` : '';
+        const hiddenInp = document.getElementById('reportNomorSpt');
+        if (hiddenInp) hiddenInp.value = this.nomorSpt;
+        this.evaluateRealtimeAudit();
+      });
+
+      sptPrefixInput.addEventListener('paste', (e) => {
+        const text = (e.clipboardData || window.clipboardData)?.getData('text');
+        if (text && text.includes('/')) {
+          const lastSlash = text.trim().lastIndexOf('/');
+          if (lastSlash !== -1 && lastSlash < text.trim().length - 1) {
+            e.preventDefault();
+            this.handleSptFullPaste(text);
+          }
+        }
+      });
+    }
+
+    // Global Date / Time Picker Color Sync (Greyed-out placeholder bila kosong, putih saat terisi)
+    document.addEventListener('input', (e) => {
+      if (e.target && ['date', 'time', 'datetime-local'].includes(e.target.type)) {
+        this.syncDateInputColor(e.target);
+      }
+    }, true);
+    document.addEventListener('change', (e) => {
+      if (e.target && ['date', 'time', 'datetime-local'].includes(e.target.type)) {
+        this.syncDateInputColor(e.target);
+      }
+    }, true);
+    this.syncAllDateInputColors();
 
     // Tanggal SPT change (Date Picker)
     const tglSptInput = document.getElementById('reportTanggalSpt');
@@ -874,12 +940,28 @@ export class ReportBuilder {
   // =========================================================
   // TANGGAL SPT & TANGGAL LAPORAN (DATE PICKER & AUTO H+1)
   // =========================================================
+  syncDateInputColor(el) {
+    if (!el) return;
+    if (el.value && el.value.trim()) {
+      el.classList.add('has-value');
+    } else {
+      el.classList.remove('has-value');
+    }
+  }
+
+  syncAllDateInputColors() {
+    document.querySelectorAll('input[type="date"], input[type="time"], input[type="datetime-local"]').forEach(el => {
+      this.syncDateInputColor(el);
+    });
+  }
+
   setReportTanggalLaporan(isoDate, isManual = false) {
     this.tanggalLaporan = isoDate || '';
     const el = document.getElementById('reportTanggalLaporan');
     if (el && el.value !== this.tanggalLaporan) {
       el.value = this.tanggalLaporan;
     }
+    this.syncDateInputColor(el);
     const tag = document.getElementById('reportTanggalLaporanTag');
     if (tag) {
       const isMultiDay = !!(this.tripStartDate && this.tripEndDate && this.tripStartDate !== this.tripEndDate);
@@ -921,12 +1003,98 @@ export class ReportBuilder {
     this.setReportTanggalLaporan(val, true);
   }
 
+  getStoredSptPrefix() {
+    let saved = '';
+    try {
+      saved = localStorage.getItem('pamsimas_spt_prefix') || '';
+    } catch (_) {}
+    if (saved && saved.trim()) {
+      let pref = saved.trim();
+      if (!pref.endsWith('/')) pref += '/';
+      const yr = this.tahun || '2026';
+      return pref.replace(/\/(202\d)\//, `/${yr}/`);
+    }
+    return `CK07/T/Bpbpk11/${this.tahun || '2026'}/`;
+  }
+
+  saveStoredSptPrefix(prefix) {
+    if (!prefix || !prefix.trim()) return;
+    try {
+      localStorage.setItem('pamsimas_spt_prefix', prefix.trim());
+    } catch (_) {}
+  }
+
+  setReportNomorSpt(fullVal) {
+    const val = (fullVal || '').trim();
+    if (!val) {
+      this.sptSuffix = '';
+      this.nomorSpt = '';
+      this.syncSptInputs();
+      this.evaluateRealtimeAudit();
+      return;
+    }
+
+    const lastSlash = val.lastIndexOf('/');
+    if (lastSlash !== -1) {
+      this.sptPrefix = val.slice(0, lastSlash + 1);
+      this.sptSuffix = val.slice(lastSlash + 1).trim();
+      this.saveStoredSptPrefix(this.sptPrefix);
+    } else {
+      if (/^\d+$/.test(val)) {
+        this.sptSuffix = val;
+      } else {
+        this.sptPrefix = val.endsWith('/') ? val : `${val}/`;
+        this.sptSuffix = '';
+        this.saveStoredSptPrefix(this.sptPrefix);
+      }
+    }
+
+    this.nomorSpt = this.sptSuffix ? `${this.sptPrefix}${this.sptSuffix}` : '';
+    this.syncSptInputs();
+    this.evaluateRealtimeAudit();
+  }
+
+  syncSptInputs() {
+    const prefInp = document.getElementById('reportNomorSptPrefix');
+    if (prefInp && prefInp.value !== this.sptPrefix) {
+      prefInp.value = this.sptPrefix;
+    }
+    const suffInp = document.getElementById('reportNomorSptSuffix');
+    if (suffInp && suffInp.value !== this.sptSuffix) {
+      suffInp.value = this.sptSuffix;
+    }
+    const hiddenInp = document.getElementById('reportNomorSpt');
+    if (hiddenInp && hiddenInp.value !== this.nomorSpt) {
+      hiddenInp.value = this.nomorSpt;
+    }
+  }
+
+  handleSptFullPaste(pastedText) {
+    const clean = (pastedText || '').trim();
+    if (!clean) return;
+    const lastSlash = clean.lastIndexOf('/');
+    if (lastSlash !== -1) {
+      this.sptPrefix = clean.slice(0, lastSlash + 1);
+      this.sptSuffix = clean.slice(lastSlash + 1).trim();
+      this.saveStoredSptPrefix(this.sptPrefix);
+      this.nomorSpt = this.sptSuffix ? `${this.sptPrefix}${this.sptSuffix}` : '';
+      this.syncSptInputs();
+      this.evaluateRealtimeAudit();
+      const suffInp = document.getElementById('reportNomorSptSuffix');
+      if (suffInp) {
+        suffInp.focus();
+        suffInp.select();
+      }
+    }
+  }
+
   setReportTanggalSpt(isoDate) {
     this.tanggalSpt = isoDate || '';
     const el = document.getElementById('reportTanggalSpt');
     if (el && el.value !== this.tanggalSpt) {
       el.value = this.tanggalSpt;
     }
+    this.syncDateInputColor(el);
     this.updateTanggalSptPreview();
     this.evaluateRealtimeAudit();
   }
@@ -999,6 +1167,8 @@ export class ReportBuilder {
 
     this.tripStartDate = sVal;
     this.tripEndDate = eVal;
+    this.syncDateInputColor(sInput);
+    this.syncDateInputColor(eInput);
 
     // Otomatis sinkronkan Tanggal Laporan:
     // Jika dinas lebih dari satu hari maka tanggal laporan diset ke H+1 hari akhir,
@@ -1279,18 +1449,14 @@ export class ReportBuilder {
     if (!listEl) return;
 
     if (this.pelaksanaList.length === 0) {
-      listEl.innerHTML = `
-        <div class="empty-hint" style="padding:10px 12px; font-size:0.75rem; color:var(--text-muted); background:rgba(255,255,255,0.02); border-radius:6px; border:1px dashed var(--border-color);">
-          Belum ada personel yang ditambahkan. Cari nama pegawai BPBPK atau ketik nama luar pada kolom di atas (klik saran untuk otomatis menambahkan).
-        </div>
-      `;
+      listEl.innerHTML = '';
       return;
     }
 
     listEl.innerHTML = this.pelaksanaList.map((nama, idx) => `
       <div class="pelaksana-row" style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
         <span class="font-mono" style="font-size:0.72rem; color:var(--text-dim); min-width:20px;">${idx + 1}.</span>
-        <input type="text" class="form-input form-input-sm" value="${this.escapeHtml(nama)}" placeholder="Nama Lengkap & Gelar Pegawai BPBPK" style="flex:1;" oninput="window.reportBuilder.onPelaksanaChange(${idx}, this.value)">
+        <input type="text" class="form-input form-input-sm" value="${this.escapeHtml(nama)}" placeholder="Nama personel..." style="flex:1;" oninput="window.reportBuilder.onPelaksanaChange(${idx}, this.value)">
         <span class="badge font-mono" style="font-size:0.65rem; color:var(--text-muted);">${idx % 2 === 0 ? 'Ttd Kiri' : 'Ttd Kanan'}</span>
         <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.removePelaksana(${idx})" title="Hapus pegawai ini" style="padding:4px 6px;">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -1378,11 +1544,11 @@ export class ReportBuilder {
         <div class="form-row form-grid-2" style="margin-bottom:8px;">
           <div class="form-group" style="margin-bottom:0; position:relative;">
             <label class="form-label">Nama Desa</label>
-            <input type="text" id="desa_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.desa)}" placeholder="Ketik nama desa (otomatis terfilter)..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'desa', this.value)">
+            <input type="text" id="desa_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.desa)}" placeholder="Nama desa..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'desa', this.value)">
           </div>
           <div class="form-group" style="margin-bottom:0; position:relative;">
             <label class="form-label">Kecamatan</label>
-            <input type="text" id="kec_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.kecamatan)}" placeholder="Ketik atau pilih kecamatan..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'kecamatan', this.value)">
+            <input type="text" id="kec_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.kecamatan)}" placeholder="Kecamatan..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'kecamatan', this.value)">
           </div>
         </div>
 
@@ -1391,7 +1557,7 @@ export class ReportBuilder {
           <label class="form-label">
             Catatan Lapangan
           </label>
-          <textarea class="form-textarea" rows="3" placeholder="Tulis catatan lapangan di sini..." oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'notes', this.value)">${this.escapeHtml(v.notes)}</textarea>
+          <textarea class="form-textarea" rows="3" placeholder="Catatan lapangan..." oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'notes', this.value)">${this.escapeHtml(v.notes)}</textarea>
         </div>
       </div>
     `).join('');
@@ -1802,8 +1968,9 @@ export class ReportBuilder {
         img.src = dataUrl;
       });
 
-      // Deteksi rasio asli foto: jika naturalWidth > naturalHeight (landscape), pastikan BUKAN portrait
-      // Foto hanya portrait jika tinggi benar-benar lebih besar daripada lebar secara signifikan
+      // Deteksi rasio foto: target rasio baku laporan Kementerian PU adalah landscape 4:3 (1.333)
+      const currentRatio = imgInfo.height > 0 ? (imgInfo.width / imgInfo.height) : (4 / 3);
+      const isMismatched = Math.abs(currentRatio - (4 / 3)) > 0.035;
       const isPortrait = (imgInfo.height > imgInfo.width * 1.05);
       const photoId = 'p_' + Math.random().toString(36).substr(2, 9);
 
@@ -1820,6 +1987,7 @@ export class ReportBuilder {
         naturalWidth: imgInfo.width,
         naturalHeight: imgInfo.height,
         is_portrait: isPortrait,
+        is_mismatched: isMismatched,
         timeStr: '',
         lat: initJittered.lat,
         lon: initJittered.lon,
@@ -1835,24 +2003,14 @@ export class ReportBuilder {
         is_original: false,
         is_cropped: false
       };
+
+      // Flow: Upload -> Deteksi rasio tidak selaras -> Crop otomatis ringan -> Stamp
+      if (isMismatched) {
+        await this.normalizePhotoAspect(photoItem, 4 / 3);
+      }
+
       this.photos.push(photoItem);
       newlyLoadedPhotos.push(photoItem);
-    }
-
-    // Periksa apakah ada foto berorientasi Portrait (Tegak)
-    const portraitPhotos = newlyLoadedPhotos.filter(p => p.is_portrait);
-    if (portraitPhotos.length > 0) {
-      const confirmCrop = confirm(
-        `Terdeteksi ${portraitPhotos.length} foto berorientasi Portrait (Tegak).\n\n` +
-        `Format tabel foto laporan resmi Kementerian PU menggunakan rasio Landscape (4:3) agar tampilan serasi, sejajar, dan proporsional.\n\n` +
-        `Klik 'OK' untuk menyesuaikan otomatis (Center-Crop ke 4:3) pada foto-foto tersebut.\n` +
-        `Klik 'Cancel' untuk tetap mempertahankan foto asli apa adanya.`
-      );
-      if (confirmCrop) {
-        for (const p of portraitPhotos) {
-          await this.normalizePhotoAspect(p, 4 / 3);
-        }
-      }
     }
 
     // Otomatis jalankan generate timestamp merata jika desa sudah terisi
@@ -1885,6 +2043,7 @@ export class ReportBuilder {
       const srcRatio = w / h;
       if (Math.abs(srcRatio - targetRatio) < 0.02) {
         photoItem.is_portrait = false;
+        photoItem.is_mismatched = false;
         return;
       }
 
@@ -1896,7 +2055,7 @@ export class ReportBuilder {
         cropX = 0;
         cropY = Math.max(0, Math.round((h - cropH) / 2));
       } else {
-        // Foto lebih lebar: potong kiri dan kanan secara simetris
+        // Foto lebih lebar (wide landscape): potong kiri dan kanan secara simetris
         cropH = h;
         cropW = Math.round(h * targetRatio);
         cropY = 0;
@@ -1913,8 +2072,11 @@ export class ReportBuilder {
         photoItem.originalDataUrl = photoItem.dataUrl;
       }
       photoItem.dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      photoItem.naturalWidth = cropW;
+      photoItem.naturalHeight = cropH;
       photoItem.is_cropped = true;
       photoItem.is_portrait = false;
+      photoItem.is_mismatched = false;
       this.imageCache.delete(photoItem.id);
     } catch (e) {
       console.warn('Gagal menormalkan aspek rasio:', e);
@@ -2893,7 +3055,6 @@ export class ReportBuilder {
       if (!this.lockedSegments.administrasi) {
         this.kabupaten = rep.kabupaten || '';
         this.tahun = rep.tahun || '2026';
-        this.nomorSpt = rep.nomor_spt || '';
         this.tanggalSpt = rep.tanggal_spt || '';
         this.tanggalLaporan = rep.tanggal_laporan || '';
         this.tempatPembuatan = rep.tempat_pembuatan || 'Semarang';
@@ -2902,8 +3063,7 @@ export class ReportBuilder {
         if (kabInp) kabInp.value = this.kabupaten;
         const thnInp = document.getElementById('reportTahun');
         if (thnInp) thnInp.value = this.tahun;
-        const sptInp = document.getElementById('reportNomorSpt');
-        if (sptInp) sptInp.value = this.nomorSpt;
+        this.setReportNomorSpt(rep.nomor_spt || '');
         this.setReportTanggalSpt(this.tanggalSpt);
 
         // 2. Jadwal Dinas & Tanggal Laporan
@@ -2967,14 +3127,19 @@ export class ReportBuilder {
           for (const p of data.photos) {
             const pId = 'p_' + Math.random().toString(36).substr(2, 9);
             const hasTs = !!p.has_timestamp;
+            const pWidth = p.width || 0;
+            const pHeight = p.height || 0;
+            const curRatio = (pWidth && pHeight) ? (pWidth / pHeight) : (4 / 3);
+            const isMismatched = Math.abs(curRatio - (4 / 3)) > 0.035;
             this.photos.push({
               id: pId,
               filename: p.filename || 'foto.jpg',
               dataUrl: p.dataUrl || p.url || '',
               originalDataUrl: p.dataUrl || p.url || '',
-              naturalWidth: p.width || 0,
-              naturalHeight: p.height || 0,
-              is_portrait: !!(p.height && p.width && p.height > p.width * 1.05),
+              naturalWidth: pWidth,
+              naturalHeight: pHeight,
+              is_portrait: !!(pHeight && pWidth && pHeight > pWidth * 1.05),
+              is_mismatched: isMismatched,
               timeStr: p.time_str || p.timeStr || '',
               lat: p.lat || '',
               lon: p.lon || '',
@@ -2994,23 +3159,15 @@ export class ReportBuilder {
           }
           this.renderPhotos();
 
-          // Cek foto portrait
-          const portraitPhotos = this.photos.filter(p => p.is_portrait);
-          if (portraitPhotos.length > 0) {
+          // Deteksi otomatis rasio foto yang tidak selaras (portrait / wide) dan sesuaikan ke 4:3
+          const mismatchedPhotos = this.photos.filter(p => p.is_mismatched);
+          if (mismatchedPhotos.length > 0) {
             setTimeout(async () => {
-              const confirmCrop = confirm(
-                `Terdeteksi ${portraitPhotos.length} foto berorientasi Portrait (Tegak) pada dokumen ini.\n\n` +
-                `Format tabel foto resmi Kementerian PU menggunakan rasio Landscape (4:3) agar tampilan seragam dan sejajar.\n\n` +
-                `Klik 'OK' untuk menyesuaikan otomatis (Center-Crop ke 4:3) pada foto-foto tersebut.\n` +
-                `Klik 'Cancel' untuk mempertahankan rasio asli.`
-              );
-              if (confirmCrop) {
-                for (const p of portraitPhotos) {
-                  await this.normalizePhotoAspect(p, 4 / 3);
-                }
-                this.renderPhotos();
+              for (const p of mismatchedPhotos) {
+                await this.normalizePhotoAspect(p, 4 / 3);
               }
-            }, 400);
+              this.renderPhotos();
+            }, 100);
           }
         } else {
           this.renderPhotos();
@@ -3174,12 +3331,19 @@ export class ReportBuilder {
 
     // 2. Nomor SPT
     const sptClean = (this.nomorSpt || '').trim();
-    if (sptClean) {
+    if (sptClean && this.sptSuffix) {
       items.push({
         field: 'nomor_spt',
         status: 'complete',
         label: 'Nomor SPT',
         message: `Terisi: ${sptClean}`
+      });
+    } else if (this.sptPrefix && !this.sptSuffix) {
+      items.push({
+        field: 'nomor_spt',
+        status: 'incomplete',
+        label: 'Nomor SPT',
+        message: 'Nomor urut SPT (angka belakang) belum diisi'
       });
     } else {
       items.push({
@@ -3302,9 +3466,9 @@ export class ReportBuilder {
     } else {
       items.push({
         field: 'pelaksana',
-        status: 'incomplete',
+        status: 'complete',
         label: 'Tabel Pelaksana',
-        message: 'Format tanpa tabel tanda tangan pelaksana. Centang jika diperlukan.'
+        message: 'Format tanpa tabel tanda tangan pelaksana dipilih'
       });
     }
 
@@ -3395,6 +3559,41 @@ export class ReportBuilder {
       statusText.textContent = `${validVillages.length} Desa • ${this.photos.length} Foto Dokumentasi`;
     }
 
+    // Update State Tombol Download & Peringatan Kelengkapan (< 100%)
+    const isComplete = (scorePct === 100);
+    const btnDocx = document.getElementById('btnGenerateReportDocx');
+    const warningContainer = document.getElementById('reportIncompleteWarning');
+    const pctEl = document.getElementById('reportIncompletePercent');
+    const itemsListEl = document.getElementById('reportIncompleteItemsList');
+
+    if (btnDocx) {
+      if (!isComplete) {
+        btnDocx.disabled = true;
+        btnDocx.classList.add('disabled');
+        btnDocx.setAttribute('aria-disabled', 'true');
+        btnDocx.title = `Kelengkapan dokumen belum 100% (${scorePct}%). Lengkapi seluruh data untuk mengunduh laporan.`;
+      } else {
+        btnDocx.disabled = false;
+        btnDocx.classList.remove('disabled');
+        btnDocx.removeAttribute('aria-disabled');
+        btnDocx.title = 'Download & Susun Laporan Word (.docx) (Ctrl+S)';
+      }
+    }
+
+    if (warningContainer) {
+      if (!isComplete) {
+        warningContainer.style.display = 'block';
+        if (pctEl) pctEl.textContent = `${scorePct}%`;
+        if (itemsListEl) {
+          const incompleteItems = items.filter(it => it.status !== 'complete');
+          const labels = incompleteItems.map(it => it.label).join(', ');
+          itemsListEl.textContent = `Komponen belum lengkap: ${labels || 'Data belum terisi'}. Lengkapi seluruh data dan foto bertimestamp sebelum mengunduh.`;
+        }
+      } else {
+        warningContainer.style.display = 'none';
+      }
+    }
+
     // Update Card jika card sedang terbuka
     const card = document.getElementById('reportAuditCard');
     if (card && card.style.display !== 'none') {
@@ -3436,6 +3635,21 @@ export class ReportBuilder {
   // =========================================================
   async generateDocx() {
     if (this.isGenerating) return;
+
+    // Validasi & Deny proses generate jika kelengkapan belum 100%
+    const currentAudit = this.evaluateRealtimeAudit();
+    if (currentAudit.score_percent < 100) {
+      const incomplete = currentAudit.items
+        .filter(it => it.status !== 'complete')
+        .map(it => it.label)
+        .join(', ');
+      this.showWarningNotice(`Kelengkapan belum 100% (saat ini ${currentAudit.score_percent}%). Komponen belum lengkap: ${incomplete}. Lengkapi seluruh data sebelum mengunduh laporan.`);
+      const warningContainer = document.getElementById('reportIncompleteWarning');
+      if (warningContainer) {
+        warningContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      return;
+    }
 
     if (this.villages.length === 0) {
       alert('Tambahkan minimal satu desa.');
