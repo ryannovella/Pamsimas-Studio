@@ -284,17 +284,32 @@
                   </span>
                 </div>
 
-                <div class="trip-grid">
-                  <div class="form-group">
+                <!-- PILIHAN DURASI DINAS: HANYA SEHARI ATAU MULTIPLE HARI -->
+                <div class="trip-mode-box">
+                  <span class="trip-mode-label">Pilihan Durasi Dinas:</span>
+                  <div class="trip-mode-options">
+                    <label class="checkbox-inline" title="Kegiatan monev lapangan berlangsung dalam satu hari">
+                      <input type="radio" name="reportTripDurationMode" id="tripModeSingle" value="single" checked onchange="window.reportBuilder ? window.reportBuilder.onTripModeChange('single') : null">
+                      <span>Hanya sehari</span>
+                    </label>
+                    <label class="checkbox-inline" title="Kegiatan monev lapangan berlangsung beberapa hari (rentang tanggal)">
+                      <input type="radio" name="reportTripDurationMode" id="tripModeMultiple" value="multiple" onchange="window.reportBuilder ? window.reportBuilder.onTripModeChange('multiple') : null">
+                      <span>Multiple hari</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="trip-grid" id="reportTripGrid">
+                  <div class="form-group" id="reportTripStartDateGroup">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-                      <label class="form-label" style="margin-bottom:0;">Tgl Mulai</label>
+                      <label class="form-label" id="reportTripStartDateLabel" style="margin-bottom:0;">Tanggal Dinas</label>
                       <span class="tag-subtle" title="Otomatis mengikuti Tanggal SPT">(Sama dgn SPT)</span>
                     </div>
                     <input type="date" id="reportTripStartDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()">
                   </div>
-                  <div class="form-group">
-                    <label class="form-label">Tgl Selesai</label>
-                    <input type="date" id="reportTripEndDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()" placeholder="Kosong = 1 Hari">
+                  <div class="form-group" id="reportTripEndDateGroup" style="display:none;">
+                    <label class="form-label">Tgl Selesai Dinas</label>
+                    <input type="date" id="reportTripEndDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()">
                   </div>
                   <div class="form-group">
                     <label class="form-label">Jam Mulai (WIB)</label>
@@ -322,14 +337,18 @@
 
               <!-- Photo Upload Dropzone Ramping -->
               <input type="file" id="reportPhotoFileInput" accept="image/*" multiple style="display:none;">
-              <div class="studio-dropzone-bar" id="reportPhotoDropZone" onclick="document.getElementById('reportPhotoFileInput').click()">
+              <div class="studio-dropzone-bar" id="reportPhotoDropZone" onclick="window.reportBuilder ? window.reportBuilder.triggerPhotoUpload() : document.getElementById('reportPhotoFileInput').click()" title="Klik atau seret foto dokumentasi ke sini">
                 <div class="dropzone-inner">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="reportPhotoDropZoneIcon">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                     <polyline points="17 8 12 3 7 8"/>
                     <line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
-                  <span class="dropzone-text">Pilih atau seret berkas foto dokumentasi ke sini</span>
+                  <span class="dropzone-text" id="reportPhotoDropZoneText">Pilih atau seret berkas foto dokumentasi ke sini</span>
+                </div>
+                <div class="dropzone-disabled-notice" id="reportPhotoDisabledNotice" style="display:none;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <span id="reportPhotoDisabledMsg">Upload foto terkunci: Lengkapi Tanggal SPT & Tanggal Dinas terlebih dahulu</span>
                 </div>
               </div>
 
@@ -689,12 +708,12 @@
           <div class="form-grid-2">
             <div class="form-group">
               <label>Tanggal Foto</label>
-              <input type="date" id="modalDatePicker" class="form-input">
+              <input type="date" id="modalDatePicker" class="form-input" onchange="window.onModalDateTimeChange ? window.onModalDateTimeChange() : null" oninput="window.onModalDateTimeChange ? window.onModalDateTimeChange() : null">
             </div>
             <div class="form-group">
               <label>Jam & Menit (WIB)</label>
               <div style="display:flex; gap:5px;">
-                <input type="time" step="1" id="modalTimePicker" class="form-input font-mono" style="flex:1; min-width:0;">
+                <input type="time" step="1" id="modalTimePicker" class="form-input font-mono" style="flex:1; min-width:0;" onchange="window.onModalDateTimeChange ? window.onModalDateTimeChange() : null" oninput="window.onModalDateTimeChange ? window.onModalDateTimeChange() : null">
                 <button type="button" class="btn btn-secondary btn-xs" style="white-space:nowrap; padding:4px 7px; flex-shrink:0;" onclick="window.jitterModalTime()" title="Variasi acak ±30 detik">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ±30 Detik
                 </button>
@@ -703,16 +722,16 @@
           </div>
           <div class="form-group">
             <label>Teks Watermark Waktu</label>
-            <input type="text" id="modalTimeStr" class="form-input font-mono" readonly style="background:rgba(0,0,0,0.3); color:var(--accent-cyan); font-size:0.78rem;">
+            <input type="text" id="modalTimeStr" class="form-input font-mono" style="background:rgba(0,0,0,0.3); color:var(--accent-cyan); font-size:0.78rem;" oninput="window.onModalTimeStrInput ? window.onModalTimeStrInput() : null" onchange="window.onModalTimeStrInput ? window.onModalTimeStrInput() : null">
           </div>
           <div class="form-grid-2">
             <div class="form-group">
               <label>Latitude</label>
-              <input type="text" id="modalLat" class="form-input font-mono">
+              <input type="text" id="modalLat" class="form-input font-mono" oninput="window.updateActiveModalPreview ? window.updateActiveModalPreview() : null">
             </div>
             <div class="form-group">
               <label>Longitude</label>
-              <input type="text" id="modalLon" class="form-input font-mono">
+              <input type="text" id="modalLon" class="form-input font-mono" oninput="window.updateActiveModalPreview ? window.updateActiveModalPreview() : null">
             </div>
           </div>
           <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:5px; margin-top:-2px; margin-bottom:4px;">
@@ -753,26 +772,26 @@
           </div>
           <div class="form-group" style="margin-bottom:8px;">
             <label class="form-label">Dusun / Lokasi</label>
-            <input type="text" id="modalDusun" class="form-input" placeholder="Dusun...">
+            <input type="text" id="modalDusun" class="form-input" placeholder="Dusun..." oninput="window.updateActiveModalPreview ? window.updateActiveModalPreview() : null">
           </div>
           <div class="form-grid-2">
             <div class="form-group">
               <label>Desa / Kelurahan</label>
-              <input type="text" id="modalDesa" class="form-input">
+              <input type="text" id="modalDesa" class="form-input" oninput="window.updateActiveModalPreview ? window.updateActiveModalPreview() : null">
             </div>
             <div class="form-group">
               <label>Kecamatan</label>
-              <input type="text" id="modalKecamatan" class="form-input">
+              <input type="text" id="modalKecamatan" class="form-input" oninput="window.updateActiveModalPreview ? window.updateActiveModalPreview() : null">
             </div>
           </div>
           <div class="form-grid-2">
             <div class="form-group">
               <label>Kabupaten</label>
-              <input type="text" id="modalKabupaten" class="form-input">
+              <input type="text" id="modalKabupaten" class="form-input" oninput="window.updateActiveModalPreview ? window.updateActiveModalPreview() : null">
             </div>
             <div class="form-group">
               <label>Provinsi</label>
-              <input type="text" id="modalProvinsi" class="form-input">
+              <input type="text" id="modalProvinsi" class="form-input" oninput="window.updateActiveModalPreview ? window.updateActiveModalPreview() : null">
             </div>
           </div>
         </div>

@@ -729,7 +729,7 @@ def safe_int(v: Any, default: int = 0) -> int:
     except (ValueError, TypeError):
         return default
 
-def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[str]]:
+def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[str], Any]:
     """
     Parses any Word document (.docx):
     - Extracts all genuine field survey photos in their CROPPED state (via DrawingML srcRect).
@@ -837,6 +837,7 @@ def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[
                     date_info = di
                     break
 
+        has_detected_date = (date_info is not None)
         if not date_info:
             date_info = {
                 'is_range': False,
@@ -1121,8 +1122,11 @@ def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[
             lon = "110.312050"
             desa_key = desa.lower().strip()
             
-            # Use pre-assigned strictly continuous chronological times
-            time_str = pre_assigned_times[mf_idx] if mf_idx < len(pre_assigned_times) else doc_date
+            # Use pre-assigned strictly continuous chronological times (only if valid date detected)
+            if has_detected_date:
+                time_str = pre_assigned_times[mf_idx] if mf_idx < len(pre_assigned_times) else doc_date
+            else:
+                time_str = ""
 
 
             # Ensure detected_villages is populated from both filename/text AND potential matches

@@ -393,8 +393,12 @@ export class KeyboardShortcutsManager {
       // Alt+U or Ctrl+Shift+U: Upload Documentation Photos
       if ((hasAlt && (key === 'u' || key === 'U')) || (hasCtrl && hasShift && (key === 'u' || key === 'U'))) {
         e.preventDefault();
-        const photoInput = document.getElementById('reportPhotoFileInput');
-        if (photoInput) photoInput.click();
+        if (window.reportBuilder && typeof window.reportBuilder.triggerPhotoUpload === 'function') {
+          window.reportBuilder.triggerPhotoUpload();
+        } else {
+          const photoInput = document.getElementById('reportPhotoFileInput');
+          if (photoInput && !photoInput.disabled) photoInput.click();
+        }
         return;
       }
 

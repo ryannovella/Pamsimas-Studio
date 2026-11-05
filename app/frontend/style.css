@@ -479,6 +479,30 @@ body {
   background: rgba(56, 189, 248, 0.05);
 }
 
+.studio-dropzone-bar.dropzone-disabled {
+  opacity: 0.52;
+  background: rgba(15, 23, 42, 0.3) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.8);
+}
+
+.studio-dropzone-bar.dropzone-disabled:hover {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: rgba(15, 23, 42, 0.35) !important;
+}
+
+.dropzone-disabled-notice {
+  font-size: 0.73rem;
+  color: #fbbf24;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
 .dropzone-inner {
   display: flex;
   align-items: center;
@@ -1102,27 +1126,78 @@ body {
   opacity: 1;
 }
 
-/* Error Catcher */
+/* Toast Notifications (Bottom Right) */
 .err-toast {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  background: linear-gradient(135deg, #7f1d1d, #450a0a);
-  border: 1px solid #ef4444;
-  color: #fecaca;
-  border-radius: 10px;
-  padding: 12px 14px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.5);
-  min-width: 280px;
-  animation: slide-in-up 0.18s ease;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  min-width: 290px;
+  max-width: 420px;
+  animation: slide-in-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: auto;
-  font-size: 0.85rem;
-  line-height: 1.4;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.err-toast.fade-out {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.err-toast.success {
+  background: linear-gradient(135deg, rgba(6, 78, 59, 0.95), rgba(4, 47, 46, 0.95));
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #ecfdf5;
+}
+.err-toast.success strong {
+  color: #34d399;
 }
 .err-toast.info {
-  background: linear-gradient(135deg, #0f172a, #1e293b);
-  border-color: rgba(56,189,248,0.5);
-  color: #bae6fd;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95));
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #f0f9ff;
+}
+.err-toast.info strong {
+  color: #38bdf8;
+}
+.err-toast.warning {
+  background: linear-gradient(135deg, rgba(69, 26, 3, 0.95), rgba(41, 18, 3, 0.95));
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fffbeb;
+}
+.err-toast.warning strong {
+  color: #fbbf24;
+}
+.err-toast.error {
+  background: linear-gradient(135deg, rgba(127, 29, 29, 0.95), rgba(69, 10, 10, 0.95));
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #fef2f2;
+}
+.err-toast.error strong {
+  color: #f87171;
+}
+.err-toast-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.err-toast-close {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 0 4px;
+  transition: opacity var(--transition-fast);
+}
+.err-toast-close:hover {
+  opacity: 1;
 }
 
 /* Studio floating batch toolbar */
@@ -3344,6 +3419,41 @@ input[type="file"]::file-selector-button:hover {
   color: var(--text-main);
 }
 
+/* Duration Mode Selector */
+.trip-mode-box {
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trip-mode-label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.trip-mode-options {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.trip-mode-options .checkbox-inline {
+  font-size: 0.76rem;
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .trip-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -3388,6 +3498,16 @@ input[type="file"]::file-selector-button:hover {
 
 .btn-generate-timestamps:active {
   transform: scale(0.99);
+}
+
+.btn-generate-timestamps:disabled {
+  opacity: 0.42 !important;
+  cursor: not-allowed !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 /* Modern Photo Card */
@@ -3503,12 +3623,6 @@ input[type="file"]::file-selector-button:hover {
   justify-content: space-between;
   line-height: 1.45;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-}
-
-.err-toast.warning {
-  background: linear-gradient(135deg, #451a03, #291203);
-  border-color: rgba(245, 158, 11, 0.6);
-  color: #fef3c7;
 }
 
 .report-audit-panel {

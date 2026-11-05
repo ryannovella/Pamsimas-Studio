@@ -401,7 +401,11 @@ export class SmartTimeline {
 
     const timeline = this.analysisData.timeline.filter(item => this.selectedPhotoIds.has(item.photo_id));
     if (timeline.length === 0) {
-      alert("Pilih minimal satu foto untuk menerapkan timeline!");
+      if (typeof window.showToast === 'function') {
+        window.showToast("Pilih minimal satu foto untuk menerapkan timeline!", "warning");
+      } else {
+        alert("Pilih minimal satu foto untuk menerapkan timeline!");
+      }
       return;
     }
 
@@ -421,7 +425,11 @@ export class SmartTimeline {
       });
 
       window.docEditor.renderGrid();
-      alert(`Berhasil menerapkan jam realistis & koordinat unik untuk ${timeline.length} foto dokumen!`);
+      if (typeof window.showToast === 'function') {
+        window.showToast(`Berhasil menerapkan jam realistis & koordinat unik untuk ${timeline.length} foto dokumen!`, "success");
+      } else {
+        alert(`Berhasil menerapkan jam realistis & koordinat unik untuk ${timeline.length} foto dokumen!`);
+      }
     } else {
       // Apply to PhotoStudio
       timeline.forEach(item => {
@@ -436,7 +444,11 @@ export class SmartTimeline {
       });
 
       window.photoStudio.renderGrid();
-      alert(`Berhasil menerapkan jam realistis & koordinat unik untuk ${timeline.length} foto studio!`);
+      if (typeof window.showToast === 'function') {
+        window.showToast(`Berhasil menerapkan jam realistis & koordinat unik untuk ${timeline.length} foto studio!`, "success");
+      } else {
+        alert(`Berhasil menerapkan jam realistis & koordinat unik untuk ${timeline.length} foto studio!`);
+      }
     }
 
     this.closeModal();

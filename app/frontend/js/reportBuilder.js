@@ -52,6 +52,7 @@ export class ReportBuilder {
     this.isGenerating = false;
 
     // Perjalanan Dinas & Jam Kerja
+    this.tripMode = 'single'; // 'single' (hanya sehari) atau 'multiple' (multiple hari)
     this.tripStartDate = '';
     this.tripEndDate = '';
     this.tripStartTime = '09:14:23';
@@ -174,6 +175,14 @@ export class ReportBuilder {
     this.updateQuickVillageTargetOptions();
   }
 
+  showToast(msg, type = 'info', duration = null) {
+    if (typeof window.showToast === 'function') {
+      window.showToast(msg, type, duration);
+    } else {
+      alert(msg);
+    }
+  }
+
   initTripPanel() {
     const sInput = document.getElementById('reportTripStartDate');
     const eInput = document.getElementById('reportTripEndDate');
@@ -206,7 +215,9 @@ export class ReportBuilder {
       this.setReportTanggalLaporan(this.tanggalLaporan, false);
     }
 
+    this.setTripMode('single', false);
     this.onTripDatesChange();
+    this.updatePhotoUploadState();
   }
 
   async fetchLocations() {
@@ -679,7 +690,7 @@ export class ReportBuilder {
 
   addPelaksanaFromInput() {
     if (this.lockedSegments.pelaksana) {
-      alert('Segmen Tim Pelaksana sedang terkunci.');
+      this.showToast('Segmen Tim Pelaksana sedang terkunci. Buka kunci segmen terlebih dahulu.', 'warning');
       return;
     }
     const inp = document.getElementById('reportPersonelInput');
@@ -930,11 +941,35 @@ export class ReportBuilder {
       dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropZone.classList.remove('drag-active');
+        if (!this.areAllDatesFilled()) {
+          this.promptDatesRequired();
+          return;
+        }
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
           this.handlePhotoFiles(Array.from(e.dataTransfer.files));
         }
       });
     }
+
+    // Modal Date & Time Picker listeners for real-time watermark sync
+    if (this.modalDatePicker) {
+      this.modalDatePicker.addEventListener('change', () => this.onModalDateTimeChange());
+      this.modalDatePicker.addEventListener('input', () => this.onModalDateTimeChange());
+    }
+    if (this.modalTimePicker) {
+      this.modalTimePicker.addEventListener('change', () => this.onModalDateTimeChange());
+      this.modalTimePicker.addEventListener('input', () => this.onModalDateTimeChange());
+    }
+    if (this.modalTimeStr) {
+      this.modalTimeStr.addEventListener('input', () => this.onModalTimeStrInput());
+      this.modalTimeStr.addEventListener('change', () => this.onModalTimeStrInput());
+    }
+    ['modalLat', 'modalLon', 'modalDusun', 'modalDesa', 'modalKecamatan', 'modalKabupaten', 'modalProvinsi'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', () => this.updateModalLivePreview());
+      }
+    });
   }
 
   // =========================================================
@@ -964,8 +999,8 @@ export class ReportBuilder {
     this.syncDateInputColor(el);
     const tag = document.getElementById('reportTanggalLaporanTag');
     if (tag) {
-      const isMultiDay = !!(this.tripStartDate && this.tripEndDate && this.tripStartDate !== this.tripEndDate);
-      const lastTripDate = (this.tripEndDate || this.tripStartDate || '').trim();
+      const isMultiDay = (this.tripMode === 'multiple') && !!(this.tripStartDate && this.tripEndDate && this.tripStartDate !== this.tripEndDate);
+      const lastTripDate = (this.tripMode === 'multiple' ? this.tripEndDate : this.tripStartDate) || this.tripStartDate || '';
       const tglSptVal = (this.tanggalSpt || '').trim();
       const hPlus1End = lastTripDate ? getNextDayIso(lastTripDate) : '';
       const hPlus1Spt = tglSptVal ? getNextDayIso(tglSptVal) : '';
@@ -990,6 +1025,7 @@ export class ReportBuilder {
     }
     this.updateTanggalLaporanPreview();
     this.evaluateRealtimeAudit();
+    this.updatePhotoUploadState();
   }
 
   updateTanggalLaporanPreview() {
@@ -1102,7 +1138,7 @@ export class ReportBuilder {
   updateTanggalSptPreview() {
     const previewEl = document.getElementById('reportTanggalSptPreview');
     if (previewEl) {
-      if (this.tripStartDate && this.tripEndDate && this.tripStartDate !== this.tripEndDate) {
+      if (this.tripMode === 'multiple' && this.tripStartDate && this.tripEndDate && this.tripStartDate !== this.tripEndDate) {
         const s = formatIndonesianDateOnly(this.tripStartDate);
         const e = formatIndonesianDateOnly(this.tripEndDate);
         previewEl.textContent = `${s} - ${e}`;
@@ -1139,7 +1175,14 @@ export class ReportBuilder {
       this.onTripDatesChange();
     } else {
       this.setReportTanggalLaporan('', false);
+      const sInput = document.getElementById('reportTripStartDate');
+      if (sInput && (!this.lockedSegments.administrasi)) {
+        sInput.value = '';
+        this.tripStartDate = '';
+      }
+      this.onTripDatesChange();
     }
+    this.updatePhotoUploadState();
   }
 
   updateDocumentTitlePreview() {
@@ -1157,24 +1200,176 @@ export class ReportBuilder {
   // =========================================================
   // PERJALANAN DINAS & RENTANG JAM MANAGEMENT
   // =========================================================
+  setTripMode(mode, triggerChange = true) {
+    this.tripMode = (mode === 'multiple') ? 'multiple' : 'single';
+    const singleRadio = document.getElementById('tripModeSingle');
+    const multiRadio = document.getElementById('tripModeMultiple');
+    if (singleRadio) singleRadio.checked = (this.tripMode === 'single');
+    if (multiRadio) multiRadio.checked = (this.tripMode === 'multiple');
+
+    const endGroup = document.getElementById('reportTripEndDateGroup');
+    const startLabel = document.getElementById('reportTripStartDateLabel');
+    const eInput = document.getElementById('reportTripEndDate');
+
+    if (this.tripMode === 'single') {
+      if (endGroup) endGroup.style.display = 'none';
+      if (startLabel) startLabel.textContent = 'Tanggal Dinas';
+      if (eInput) eInput.value = '';
+      this.tripEndDate = '';
+    } else {
+      if (endGroup) endGroup.style.display = 'block';
+      if (startLabel) startLabel.textContent = 'Tgl Mulai Dinas';
+      if (eInput && this.tripEndDate) {
+        eInput.value = this.tripEndDate;
+      }
+    }
+
+    if (triggerChange) {
+      this.onTripDatesChange();
+    } else {
+      this.updateTripDurationBadge();
+      this.updatePhotoUploadState();
+    }
+  }
+
+  onTripModeChange(mode) {
+    this.setTripMode(mode, true);
+  }
+
+  areAllDatesFilled() {
+    const tglSpt = (this.tanggalSpt || document.getElementById('reportTanggalSpt')?.value || '').trim();
+    const tglLap = (this.tanggalLaporan || document.getElementById('reportTanggalLaporan')?.value || '').trim();
+    const sTrip = (this.tripStartDate || document.getElementById('reportTripStartDate')?.value || '').trim();
+
+    if (!tglSpt || !tglLap || !sTrip) {
+      return false;
+    }
+
+    if (this.tripMode === 'multiple') {
+      const eTrip = (this.tripEndDate || document.getElementById('reportTripEndDate')?.value || '').trim();
+      if (!eTrip) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  updatePhotoUploadState() {
+    const dropZone = document.getElementById('reportPhotoDropZone');
+    const fileInput = document.getElementById('reportPhotoFileInput');
+    const noticeEl = document.getElementById('reportPhotoDisabledNotice');
+    const noticeMsg = document.getElementById('reportPhotoDisabledMsg');
+    const btnAuto = document.getElementById('btnAutoGenerateTimestamps');
+
+    const isFilled = this.areAllDatesFilled();
+
+    if (isFilled) {
+      if (dropZone) {
+        dropZone.classList.remove('dropzone-disabled');
+        dropZone.title = 'Pilih atau seret berkas foto dokumentasi ke sini (Alt+U)';
+      }
+      if (fileInput) fileInput.disabled = false;
+      if (btnAuto) {
+        btnAuto.disabled = false;
+        btnAuto.title = 'Terapkan Jadwal & Geotag ke Foto';
+      }
+      if (noticeEl) noticeEl.style.display = 'none';
+    } else {
+      if (dropZone) {
+        dropZone.classList.add('dropzone-disabled');
+        dropZone.title = 'Lengkapi semua tanggal dinas terlebih dahulu untuk membuka upload foto';
+      }
+      if (fileInput) fileInput.disabled = true;
+      if (btnAuto) {
+        btnAuto.disabled = true;
+        btnAuto.title = 'Lengkapi tanggal dinas terlebih dahulu untuk menerapkan timestamp';
+      }
+
+      // Compute precise missing explanation
+      const missing = [];
+      const tglSpt = (this.tanggalSpt || document.getElementById('reportTanggalSpt')?.value || '').trim();
+      const sTrip = (this.tripStartDate || document.getElementById('reportTripStartDate')?.value || '').trim();
+      const tglLap = (this.tanggalLaporan || document.getElementById('reportTanggalLaporan')?.value || '').trim();
+
+      if (!tglSpt) missing.push('Tanggal SPT');
+      if (!sTrip) missing.push(this.tripMode === 'multiple' ? 'Tgl Mulai' : 'Tanggal Dinas');
+      if (this.tripMode === 'multiple') {
+        const eTrip = (this.tripEndDate || document.getElementById('reportTripEndDate')?.value || '').trim();
+        if (!eTrip) missing.push('Tgl Selesai');
+      }
+      if (!tglLap) missing.push('Tanggal Laporan');
+
+      if (noticeMsg) {
+        const mStr = missing.length > 0 ? missing.join(' & ') : 'Tanggal';
+        noticeMsg.textContent = `Upload foto terkunci: Lengkapi ${mStr} terlebih dahulu`;
+      }
+      if (noticeEl) noticeEl.style.display = 'flex';
+    }
+  }
+
+  triggerPhotoUpload() {
+    if (!this.areAllDatesFilled()) {
+      this.promptDatesRequired();
+      return;
+    }
+    const input = document.getElementById('reportPhotoFileInput');
+    if (input && !input.disabled) input.click();
+  }
+
+  promptDatesRequired() {
+    const missing = [];
+    const tglSpt = (this.tanggalSpt || document.getElementById('reportTanggalSpt')?.value || '').trim();
+    const sTrip = (this.tripStartDate || document.getElementById('reportTripStartDate')?.value || '').trim();
+    const tglLap = (this.tanggalLaporan || document.getElementById('reportTanggalLaporan')?.value || '').trim();
+
+    if (!tglSpt) missing.push('Tanggal SPT');
+    if (!sTrip) missing.push(this.tripMode === 'multiple' ? 'Tgl Mulai Dinas' : 'Tanggal Dinas');
+    if (this.tripMode === 'multiple') {
+      const eTrip = (this.tripEndDate || document.getElementById('reportTripEndDate')?.value || '').trim();
+      if (!eTrip) missing.push('Tgl Selesai Dinas');
+    }
+    if (!tglLap) missing.push('Tanggal Laporan');
+
+    const warn = `Penguploadan foto belum dapat dilakukan! Harap lengkapi ${missing.join(', ')} terlebih dahulu.`;
+    this.showToast(warn, 'warning');
+
+    // Auto-focus first missing date field
+    if (!tglSpt) {
+      document.getElementById('reportTanggalSpt')?.focus();
+    } else if (!sTrip) {
+      document.getElementById('reportTripStartDate')?.focus();
+    } else if (this.tripMode === 'multiple' && !this.tripEndDate) {
+      document.getElementById('reportTripEndDate')?.focus();
+    } else if (!tglLap) {
+      document.getElementById('reportTanggalLaporan')?.focus();
+    }
+  }
+
   onTripDatesChange() {
     const sInput = document.getElementById('reportTripStartDate');
     const eInput = document.getElementById('reportTripEndDate');
-    const badge = document.getElementById('reportTripDurationBadge');
 
     const sVal = (sInput?.value || '').trim();
-    const eVal = (eInput?.value || '').trim();
+    let eVal = (eInput?.value || '').trim();
+
+    if (this.tripMode === 'single') {
+      eVal = sVal;
+      if (eInput) eInput.value = '';
+      this.tripEndDate = '';
+    } else {
+      this.tripEndDate = eVal;
+    }
 
     this.tripStartDate = sVal;
-    this.tripEndDate = eVal;
     this.syncDateInputColor(sInput);
-    this.syncDateInputColor(eInput);
+    if (eInput) this.syncDateInputColor(eInput);
 
     // Otomatis sinkronkan Tanggal Laporan:
     // Jika dinas lebih dari satu hari maka tanggal laporan diset ke H+1 hari akhir,
-    // jika 1 hari dinas maka diset ke H+1 Tanggal SPT
+    // jika 1 hari dinas maka diset ke H+1 Tanggal SPT (atau H+1 tanggal mulai)
     if (!this.lockedSegments.administrasi) {
-      if (eVal && sVal && eVal !== sVal) {
+      if (this.tripMode === 'multiple' && eVal && sVal && eVal !== sVal) {
         // Multi-hari dinas: H+1 hari akhir
         const hPlus1End = getNextDayIso(eVal);
         if (hPlus1End) {
@@ -1196,20 +1391,26 @@ export class ReportBuilder {
       this.quickDate.value = sVal;
     }
 
-    if (!badge) {
-      this.evaluateRealtimeAudit();
-      return;
-    }
+    this.updateTripDurationBadge();
+    this.updatePhotoUploadState();
+    this.evaluateRealtimeAudit();
+  }
+
+  updateTripDurationBadge() {
+    const badge = document.getElementById('reportTripDurationBadge');
+    if (!badge) return;
+
+    const sVal = (this.tripStartDate || '').trim();
+    const eVal = (this.tripEndDate || '').trim();
 
     if (!sVal) {
       badge.textContent = 'Belum Diatur';
       badge.style.background = 'rgba(203,213,225,0.12)';
       badge.style.color = '#cbd5e1';
-      this.evaluateRealtimeAudit();
       return;
     }
 
-    if (!eVal || eVal === sVal) {
+    if (this.tripMode === 'single' || !eVal || eVal === sVal) {
       badge.textContent = `1 Hari (${formatIndonesianDateOnly(sVal)})`;
       badge.style.background = 'rgba(56,189,248,0.15)';
       badge.style.color = '#38bdf8';
@@ -1218,13 +1419,18 @@ export class ReportBuilder {
       const eParts = eVal.split('-').map(Number);
       const sDate = new Date(sParts[0], sParts[1] - 1, sParts[2]);
       const eDate = new Date(eParts[0], eParts[1] - 1, eParts[2]);
-      const diffDays = Math.max(1, Math.round((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1);
+      const diffDays = Math.round((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1;
 
-      badge.textContent = `${diffDays} Hari (${formatIndonesianDateOnly(sVal)} s/d ${formatIndonesianDateOnly(eVal)})`;
-      badge.style.background = 'rgba(16,185,129,0.18)';
-      badge.style.color = '#34d399';
+      if (diffDays < 1) {
+        badge.textContent = 'Tgl Selesai Kurang dari Tgl Mulai';
+        badge.style.background = 'rgba(239,68,68,0.18)';
+        badge.style.color = '#f87171';
+      } else {
+        badge.textContent = `${diffDays} Hari (${formatIndonesianDateOnly(sVal)} s/d ${formatIndonesianDateOnly(eVal)})`;
+        badge.style.background = 'rgba(16,185,129,0.18)';
+        badge.style.color = '#34d399';
+      }
     }
-    this.evaluateRealtimeAudit();
   }
 
   randomizeWorkHours(showToast = true) {
@@ -1277,7 +1483,7 @@ export class ReportBuilder {
     this.tripEndTime = tEndStr;
 
     if (showToast) {
-      alert(`Rentang jam kegiatan disesuaikan: ${tStartStr.slice(0, 5)} - ${tEndStr.slice(0, 5)} WIB.`);
+      this.showToast(`Rentang jam kegiatan disesuaikan: ${tStartStr.slice(0, 5)} - ${tEndStr.slice(0, 5)} WIB.`, 'info');
     }
   }
 
@@ -1286,17 +1492,21 @@ export class ReportBuilder {
   // =========================================================
   autoGenerateAllTimestamps(silent = false) {
     if (this.lockedSegments.photos) {
-      if (!silent) alert('Segmen Foto sedang terkunci. Buka kunci segmen foto terlebih dahulu untuk memperbarui.');
+      if (!silent) this.showToast('Segmen Foto sedang terkunci. Buka kunci segmen foto terlebih dahulu untuk memperbarui.', 'warning');
       return;
     }
     if (this.photos.length === 0) {
-      if (!silent) alert('Belum ada foto yang diunggah.');
+      if (!silent) this.showToast('Belum ada foto yang diunggah.', 'warning');
+      return;
+    }
+    if (!this.areAllDatesFilled()) {
+      if (!silent) this.promptDatesRequired();
       return;
     }
 
     const validVillages = this.villages.filter(v => v.desa && v.desa.trim());
     if (validVillages.length === 0) {
-      if (!silent) alert('Harap isi minimal satu nama desa terlebih dahulu.');
+      if (!silent) this.showToast('Harap isi minimal satu nama desa terlebih dahulu.', 'warning');
       return;
     }
 
@@ -1322,7 +1532,7 @@ export class ReportBuilder {
     });
 
     if (!schedule || schedule.length === 0) {
-      if (!silent) alert('Gagal mengatur jadwal foto.');
+      if (!silent) this.showToast('Gagal mengatur jadwal foto.', 'error');
       return;
     }
 
@@ -1355,7 +1565,7 @@ export class ReportBuilder {
     this.evaluateRealtimeAudit();
 
     if (!silent) {
-      alert(`Waktu dan koordinat (radius 5m – 2km) berhasil diterapkan ke ${this.photos.length} foto.`);
+      this.showToast(`Waktu dan koordinat (radius 5m – 2km) berhasil diterapkan ke ${this.photos.length} foto.`, 'success');
     }
   }
 
@@ -1421,7 +1631,7 @@ export class ReportBuilder {
 
   removePelaksana(index) {
     if (this.lockedSegments.pelaksana) {
-      alert('Segmen Tim Pelaksana sedang terkunci.');
+      this.showToast('Segmen Tim Pelaksana sedang terkunci.', 'warning');
       return;
     }
     this.pelaksanaList.splice(index, 1);
@@ -1431,7 +1641,7 @@ export class ReportBuilder {
 
   clearPelaksana() {
     if (this.lockedSegments.pelaksana) {
-      alert('Segmen Tim Pelaksana sedang terkunci.');
+      this.showToast('Segmen Tim Pelaksana sedang terkunci.', 'warning');
       return;
     }
     this.pelaksanaList = [];
@@ -1474,7 +1684,7 @@ export class ReportBuilder {
   // =========================================================
   addVillage(data = null) {
     if (this.lockedSegments.villages) {
-      alert('Segmen Data Desa sedang terkunci.');
+      this.showToast('Segmen Data Desa sedang terkunci.', 'warning');
       return;
     }
     const vId = 'v_' + Math.random().toString(36).substr(2, 9);
@@ -1494,11 +1704,11 @@ export class ReportBuilder {
 
   removeVillage(id) {
     if (this.lockedSegments.villages) {
-      alert('Segmen Data Desa sedang terkunci.');
+      this.showToast('Segmen Data Desa sedang terkunci.', 'warning');
       return;
     }
     if (this.villages.length <= 1) {
-      alert('Dokumen minimal harus memuat satu desa.');
+      this.showToast('Dokumen minimal harus memuat satu desa.', 'warning');
       return;
     }
     if (this.villageAutocompletes && this.villageAutocompletes.has(id)) {
@@ -1820,14 +2030,14 @@ export class ReportBuilder {
 
   applyQuickSetup(target = 'all') {
     if (this.photos.length === 0) {
-      alert('Belum ada foto dokumentasi yang diunggah.');
+      this.showToast('Belum ada foto dokumentasi yang diunggah.', 'warning');
       return;
     }
 
     let targetPhotos = [];
     if (target === 'selected') {
       if (this.selectedPhotoIds.size === 0) {
-        alert('Pilih minimal satu foto terlebih dahulu.');
+        this.showToast('Pilih minimal satu foto terlebih dahulu.', 'warning');
         return;
       }
       targetPhotos = this.photos.filter(p => this.selectedPhotoIds.has(p.id));
@@ -1911,7 +2121,7 @@ export class ReportBuilder {
 
     this.renderPhotos();
     this.updateBatchBar();
-    alert(`Pengaturan berhasil diterapkan ke ${targetPhotos.length} foto.`);
+    this.showToast(`Pengaturan berhasil diterapkan ke ${targetPhotos.length} foto.`, 'success');
   }
 
   // =========================================================
@@ -1919,11 +2129,12 @@ export class ReportBuilder {
   // =========================================================
   getSurveyIsoDate() {
     if (this.tripStartDate) return this.tripStartDate;
+    if (this.tanggalSpt) return this.tanggalSpt;
     if (this.tanggalLaporan) {
       const parsed = parseIndonesianTimestamp(this.tanggalLaporan);
       if (parsed && parsed.isoDate) return parsed.isoDate;
     }
-    return new Date().toISOString().slice(0, 10);
+    return '';
   }
 
   async getImage(photoItem) {
@@ -1946,9 +2157,14 @@ export class ReportBuilder {
   async handlePhotoFiles(fileList) {
     if (!fileList || fileList.length === 0) return;
 
+    if (!this.areAllDatesFilled()) {
+      this.promptDatesRequired();
+      return;
+    }
+
     const validFiles = fileList.filter(f => (f.type && f.type.startsWith('image/')) || /\.(jpe?g|png|webp|bmp|gif|tiff?|heic|jfif)$/i.test(f.name || ''));
     if (validFiles.length === 0) {
-      alert('Berkas yang dipilih bukan berkas foto/gambar yang didukung (JPG, PNG, WEBP).');
+      this.showToast('Berkas yang dipilih bukan berkas foto/gambar yang didukung (JPG, PNG, WEBP).', 'warning');
       return;
     }
 
@@ -2013,9 +2229,9 @@ export class ReportBuilder {
       newlyLoadedPhotos.push(photoItem);
     }
 
-    // Otomatis jalankan generate timestamp merata jika desa sudah terisi
+    // Otomatis jalankan generate timestamp merata jika tanggal & desa sudah terisi
     const validVillages = this.villages.filter(v => v.desa && v.desa.trim());
-    if (validVillages.length > 0) {
+    if (this.areAllDatesFilled() && validVillages.length > 0) {
       this.autoGenerateAllTimestamps(true);
     } else {
       this.renderPhotos();
@@ -2411,10 +2627,28 @@ export class ReportBuilder {
       this.modalTitle.innerText = `Edit Stempel Foto — ${p.filename}${countLabel}`;
     }
 
-    const parsed = parseIndonesianTimestamp(p.timeStr);
-    if (this.modalDatePicker) this.modalDatePicker.value = parsed.isoDate || this.getSurveyIsoDate();
-    if (this.modalTimePicker) this.modalTimePicker.value = parsed.timeStr24 || '09:14:23';
-    if (this.modalTimeStr) this.modalTimeStr.value = p.timeStr;
+    const rawTime = p.timeStr || p.time_str || '';
+    let parsed;
+    if (rawTime) {
+      parsed = parseIndonesianTimestamp(rawTime);
+    } else {
+      const defDate = this.getSurveyIsoDate() || new Date().toISOString().slice(0, 10);
+      parsed = parseIndonesianTimestamp(defDate);
+    }
+    const isoDate = parsed.isoDate || this.getSurveyIsoDate() || new Date().toISOString().slice(0, 10);
+    const time24 = parsed.timeStr24 || '09:14:23';
+
+    if (this.modalDatePicker) {
+      this.modalDatePicker.value = isoDate;
+      this.syncDateInputColor(this.modalDatePicker);
+    }
+    if (this.modalTimePicker) {
+      this.modalTimePicker.value = time24;
+      this.syncDateInputColor(this.modalTimePicker);
+    }
+    if (this.modalTimeStr) {
+      this.modalTimeStr.value = rawTime || formatIndonesianTimestamp(isoDate, time24, parsed.timezone || 'WIB');
+    }
 
     if (this.modalKeepOriginal) this.modalKeepOriginal.checked = !!(p.is_original || p.alreadyStamped);
 
@@ -2462,7 +2696,10 @@ export class ReportBuilder {
     if (autoSave) {
       const curPhoto = this.photos[curIdx];
       if (curPhoto) {
-        if (this.modalTimeStr) curPhoto.timeStr = this.modalTimeStr.value;
+        this.onModalDateTimeChange();
+        const finalTime = this.modalTimeStr ? this.modalTimeStr.value : (curPhoto.timeStr || curPhoto.time_str || '');
+        curPhoto.timeStr = finalTime;
+        curPhoto.time_str = finalTime;
         if (this.modalLat) curPhoto.lat = this.modalLat.value;
         if (this.modalLon) curPhoto.lon = this.modalLon.value;
         if (this.modalDusun) curPhoto.dusun = this.modalDusun.value;
@@ -2485,12 +2722,69 @@ export class ReportBuilder {
     await this.openModal(this.photos[newIdx].id);
   }
 
+  onModalDateTimeChange() {
+    if (!this.activePhotoId) return;
+    const p = this.photos.find(item => item.id === this.activePhotoId);
+
+    let dateVal = this.modalDatePicker ? this.modalDatePicker.value : '';
+    if (!dateVal) {
+      dateVal = this.getSurveyIsoDate() || new Date().toISOString().slice(0, 10);
+      if (this.modalDatePicker) this.modalDatePicker.value = dateVal;
+    }
+
+    let timeVal = this.modalTimePicker ? this.modalTimePicker.value : '';
+    const currentStr = this.modalTimeStr ? this.modalTimeStr.value : '';
+    const parsed = parseIndonesianTimestamp(currentStr || (p ? (p.timeStr || p.time_str) : ''));
+
+    if (timeVal) {
+      const parts = timeVal.split(':');
+      if (parts.length === 2) {
+        const sec = (parsed && parsed.seconds !== undefined) ? String(parsed.seconds).padStart(2, '0') : '23';
+        timeVal = `${parts[0]}:${parts[1]}:${sec}`;
+      }
+    } else {
+      timeVal = parsed.timeStr24 || '09:14:23';
+    }
+
+    const tz = parsed.timezone || 'WIB';
+    const formatted = formatIndonesianTimestamp(dateVal, timeVal, tz);
+    if (this.modalTimeStr) {
+      this.modalTimeStr.value = formatted;
+    }
+
+    if (this.modalDatePicker) this.syncDateInputColor(this.modalDatePicker);
+    if (this.modalTimePicker) this.syncDateInputColor(this.modalTimePicker);
+
+    this.updateModalLivePreview();
+  }
+
+  onModalTimeStrInput() {
+    if (!this.activePhotoId || !this.modalTimeStr) return;
+    const str = this.modalTimeStr.value;
+    const parsed = parseIndonesianTimestamp(str);
+    if (parsed) {
+      if (parsed.isoDate && this.modalDatePicker) {
+        this.modalDatePicker.value = parsed.isoDate;
+        this.syncDateInputColor(this.modalDatePicker);
+      }
+      if (parsed.timeStr24 && this.modalTimePicker) {
+        this.modalTimePicker.value = parsed.timeStr24;
+        this.syncDateInputColor(this.modalTimePicker);
+      }
+    }
+    this.updateModalLivePreview();
+  }
+
   async saveModalChanges() {
     if (!this.activePhotoId) return;
     const p = this.photos.find(item => item.id === this.activePhotoId);
     if (!p) return;
 
-    p.timeStr = this.modalTimeStr ? this.modalTimeStr.value : p.timeStr;
+    this.onModalDateTimeChange();
+
+    const finalTime = this.modalTimeStr ? this.modalTimeStr.value : (p.timeStr || p.time_str || '');
+    p.timeStr = finalTime;
+    p.time_str = finalTime;
     p.lat = this.modalLat ? this.modalLat.value : p.lat;
     p.lon = this.modalLon ? this.modalLon.value : p.lon;
     p.dusun = this.modalDusun ? this.modalDusun.value : '';
@@ -2509,6 +2803,10 @@ export class ReportBuilder {
 
     this.closeModal();
     this.renderPhotos();
+    if (typeof this.evaluateRealtimeAudit === 'function') {
+      this.evaluateRealtimeAudit();
+    }
+    this.showToast('Perubahan foto & stempel waktu berhasil disimpan.', 'success');
   }
 
   async updateModalLivePreview() {
@@ -2517,7 +2815,7 @@ export class ReportBuilder {
     if (!p) return;
 
     const meta = {
-      time_str: this.modalTimeStr ? this.modalTimeStr.value : p.timeStr,
+      time_str: this.modalTimeStr ? this.modalTimeStr.value : (p.timeStr || p.time_str || ''),
       lat: this.modalLat ? this.modalLat.value : p.lat,
       lon: this.modalLon ? this.modalLon.value : p.lon,
       dusun: this.modalDusun ? this.modalDusun.value : '',
@@ -2712,7 +3010,7 @@ export class ReportBuilder {
 
   async modalApplyCrop() {
     if (!this.activePhotoId || !this.activeCropPixels) {
-      alert('Tentukan area potong pada foto terlebih dahulu.');
+      this.showToast('Tentukan area potong pada foto terlebih dahulu.', 'warning');
       return;
     }
     const p = this.photos.find(item => item.id === this.activePhotoId);
@@ -2752,8 +3050,9 @@ export class ReportBuilder {
 
       await this.updateModalLivePreview();
       await this.renderCardStamp(p.id);
+      this.showToast('Foto berhasil dipotong.', 'success');
     } catch (err) {
-      alert('Gagal memotong foto: ' + err.message);
+      this.showToast('Gagal memotong foto: ' + err.message, 'error');
     }
   }
 
@@ -2990,8 +3289,14 @@ export class ReportBuilder {
     this.modalTimeStr.value = jittered;
 
     const parsed = parseIndonesianTimestamp(jittered);
-    if (this.modalDatePicker) this.modalDatePicker.value = parsed.isoDate;
-    if (this.modalTimePicker) this.modalTimePicker.value = parsed.timeStr24;
+    if (this.modalDatePicker) {
+      this.modalDatePicker.value = parsed.isoDate;
+      this.syncDateInputColor(this.modalDatePicker);
+    }
+    if (this.modalTimePicker) {
+      this.modalTimePicker.value = parsed.timeStr24;
+      this.syncDateInputColor(this.modalTimePicker);
+    }
     this.updateModalLivePreview();
   }
 
@@ -3016,7 +3321,7 @@ export class ReportBuilder {
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.docx')) {
-      alert('Pilih file dokumen Word (.docx).');
+      this.showToast('Pilih berkas dokumen Word (.docx).', 'warning');
       event.target.value = '';
       return;
     }
@@ -3074,6 +3379,13 @@ export class ReportBuilder {
         const eTrip = document.getElementById('reportTripEndDate');
         if (eTrip) eTrip.value = this.tripEndDate;
 
+        // Tentukan mode durasi dinas: multiple jika ada tgl selesai berbeda, single jika sama/1 hari
+        if (this.tripEndDate && this.tripStartDate && this.tripEndDate !== this.tripStartDate) {
+          this.setTripMode('multiple', false);
+        } else {
+          this.setTripMode('single', false);
+        }
+
         if (this.tanggalLaporan) {
           this.setReportTanggalLaporan(this.tanggalLaporan, false);
         } else {
@@ -3123,10 +3435,14 @@ export class ReportBuilder {
         this.selectedPhotoIds.clear();
         this.imageCache.clear();
 
+        const datesComplete = this.areAllDatesFilled();
         if (data.photos && data.photos.length > 0) {
           for (const p of data.photos) {
             const pId = 'p_' + Math.random().toString(36).substr(2, 9);
             const hasTs = !!p.has_timestamp;
+            // Jika tanggal-tanggal belum terisi (laporan eksisting bolong-bolong),
+            // jangan langsung mentimestamp foto jika foto tersebut belum bertimestamp fisik!
+            const assignedTimeStr = (hasTs || datesComplete) ? (p.time_str || p.timeStr || '') : '';
             const pWidth = p.width || 0;
             const pHeight = p.height || 0;
             const curRatio = (pWidth && pHeight) ? (pWidth / pHeight) : (4 / 3);
@@ -3140,7 +3456,7 @@ export class ReportBuilder {
               naturalHeight: pHeight,
               is_portrait: !!(pHeight && pWidth && pHeight > pWidth * 1.05),
               is_mismatched: isMismatched,
-              timeStr: p.time_str || p.timeStr || '',
+              timeStr: assignedTimeStr,
               lat: p.lat || '',
               lon: p.lon || '',
               desa: p.desa || (this.villages[0]?.desa || ''),
@@ -3184,8 +3500,11 @@ export class ReportBuilder {
         this.renderAuditCard(data.audit_report, this.currentLoadedDocxName, true);
       }
 
+      this.updatePhotoUploadState();
+      this.showToast(`Dokumen "${file.name}" berhasil dibuka dan dianalisis.`, 'success');
+
     } catch (err) {
-      alert('Gagal membaca dokumen: ' + (err.message || 'Terjadi kesalahan'));
+      this.showToast('Gagal membaca dokumen: ' + (err.message || 'Terjadi kesalahan'), 'error');
     } finally {
       if (btn) {
         btn.disabled = false;
@@ -3375,28 +3694,54 @@ export class ReportBuilder {
     // 4. Jadwal Perjalanan Dinas
     const sDate = (this.tripStartDate || '').trim();
     const eDate = (this.tripEndDate || '').trim();
+    const isMultiDayMode = (this.tripMode === 'multiple');
     if (sDate) {
-      const durText = (eDate && eDate !== sDate) ? `${formatIndonesianDateOnly(sDate)} s/d ${formatIndonesianDateOnly(eDate)}` : `${formatIndonesianDateOnly(sDate)} (1 hari dinas)`;
-      items.push({
-        field: 'trip_dates',
-        status: 'complete',
-        label: 'Jadwal Perjalanan Dinas',
-        message: `Terisi: ${durText}`
-      });
+      if (isMultiDayMode) {
+        if (eDate && eDate >= sDate) {
+          const durText = `${formatIndonesianDateOnly(sDate)} s/d ${formatIndonesianDateOnly(eDate)}`;
+          items.push({
+            field: 'trip_dates',
+            status: 'complete',
+            label: 'Jadwal Perjalanan Dinas',
+            message: `Terisi: ${durText}`
+          });
+        } else if (eDate && eDate < sDate) {
+          items.push({
+            field: 'trip_dates',
+            status: 'incomplete',
+            label: 'Jadwal Perjalanan Dinas',
+            message: 'Tanggal selesai dinas tidak boleh sebelum tanggal mulai'
+          });
+        } else {
+          items.push({
+            field: 'trip_dates',
+            status: 'incomplete',
+            label: 'Jadwal Perjalanan Dinas',
+            message: 'Tanggal selesai dinas belum diisi (pilihan multiple hari)'
+          });
+        }
+      } else {
+        items.push({
+          field: 'trip_dates',
+          status: 'complete',
+          label: 'Jadwal Perjalanan Dinas',
+          message: `Terisi: ${formatIndonesianDateOnly(sDate)} (1 hari dinas)`
+        });
+      }
     } else {
       items.push({
         field: 'trip_dates',
         status: 'incomplete',
         label: 'Jadwal Perjalanan Dinas',
-        message: 'Tanggal mulai/selesai perjalanan dinas belum ditentukan'
+        message: 'Tanggal kegiatan perjalanan dinas belum ditentukan'
       });
     }
 
     // 5. Tanggal Laporan
     const tglLap = (this.tanggalLaporan || '').trim();
     const tglSptVal = (this.tanggalSpt || '').trim();
-    const isMultiDay = !!(sDate && eDate && sDate !== eDate);
-    const lastTripDate = (eDate || sDate || '').trim();
+    const isMultiDay = isMultiDayMode && !!(sDate && eDate && sDate !== eDate);
+    const lastTripDate = (isMultiDayMode ? eDate : sDate) || sDate || '';
     const hPlus1End = lastTripDate ? getNextDayIso(lastTripDate) : '';
     const hPlus1Spt = tglSptVal ? getNextDayIso(tglSptVal) : '';
     const expectedTglLap = isMultiDay ? hPlus1End : (hPlus1Spt || hPlus1End);
@@ -3652,7 +3997,7 @@ export class ReportBuilder {
     }
 
     if (this.villages.length === 0) {
-      alert('Tambahkan minimal satu desa.');
+      this.showToast('Tambahkan minimal satu desa.', 'warning');
       return;
     }
 
@@ -3677,7 +4022,7 @@ export class ReportBuilder {
         tanggal_laporan: toIndonesianDateText(this.tanggalLaporan),
         tempat_pembuatan: this.tempatPembuatan,
         trip_start_date: this.tripStartDate,
-        trip_end_date: this.tripEndDate,
+        trip_end_date: (this.tripMode === 'multiple') ? this.tripEndDate : '',
         pelaksana: this.includePelaksana ? this.pelaksanaList.filter(Boolean) : [],
         villages: this.villages.map(v => ({
           desa: v.desa,
@@ -3751,6 +4096,7 @@ export class ReportBuilder {
             noticeEl.style.display = 'none';
           }, 6000);
         }
+        this.showToast('Dokumen Word (.docx) berhasil dibuat dan diunduh.', 'success');
       }
     } catch (e) {
       this.showWarningNotice('Gagal menghubungi server: ' + (e.message || 'Periksa koneksi internet Anda.'));

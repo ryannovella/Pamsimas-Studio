@@ -9,7 +9,15 @@ export function initErrorCatcher() {
     } catch (_) {}
   }
 
-  function showToast(msg, type = 'error') {
+  function dismissToast(toast) {
+    if (!toast || toast.classList.contains('fade-out')) return;
+    toast.classList.add('fade-out');
+    setTimeout(() => {
+      if (toast.parentNode) toast.remove();
+    }, 200);
+  }
+
+  function showToast(msg, type = 'info', duration = null) {
     const toastArea = document.getElementById('errorToastArea');
     if (!toastArea) {
       alert(msg);
@@ -17,18 +25,49 @@ export function initErrorCatcher() {
     }
     const toast = document.createElement('div');
     toast.className = `err-toast ${type}`;
+
+    let iconSvg = '';
+    let title = 'Info';
+
+    if (type === 'success') {
+      title = 'Berhasil';
+      iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2" class="err-toast-icon"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+    } else if (type === 'warning') {
+      title = 'Perhatian';
+      iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2" class="err-toast-icon"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+    } else if (type === 'error') {
+      title = 'Terjadi Kesalahan';
+      iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.2" class="err-toast-icon"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+    } else {
+      title = 'Informasi';
+      iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" class="err-toast-icon"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
+    }
+
+    const cleanMsg = String(msg || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+
     toast.innerHTML = `
+      ${iconSvg}
       <div style="flex:1; min-width:0;">
-        <strong style="font-size:0.85rem; display:block;">${type === 'error' ? 'Terjadi Kesalahan' : 'Info'}</strong>
-        <span style="font-size:0.78rem; opacity:0.92; word-break:break-word;">${msg}</span>
+        <strong style="font-size:0.83rem; font-weight:600; display:block; margin-bottom:2px;">${title}</strong>
+        <span style="font-size:0.78rem; opacity:0.95; word-break:break-word; line-height:1.4;">${cleanMsg}</span>
       </div>
-      <button onclick="this.closest('.err-toast').remove()" style="background:none; border:none; color:inherit; cursor:pointer; font-size:1.2rem; padding:0 4px;">&times;</button>
+      <button type="button" class="err-toast-close" title="Tutup">&times;</button>
     `;
+
+    const closeBtn = toast.querySelector('.err-toast-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => dismissToast(toast));
+    }
+
     toastArea.appendChild(toast);
-    if (type !== 'error' || msg.length < 80) {
-      setTimeout(() => { if (toast.parentNode) toast.remove(); }, 6000);
+
+    const autoTime = duration !== null ? duration : (type === 'error' ? 6500 : (type === 'warning' ? 5000 : 4000));
+    if (autoTime > 0) {
+      setTimeout(() => dismissToast(toast), autoTime);
     }
   }
+
+  window.showToast = showToast;
 
   window.addEventListener('error', (event) => {
     const msg = event.message || 'JavaScript Error';

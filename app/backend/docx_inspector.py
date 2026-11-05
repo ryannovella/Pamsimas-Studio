@@ -213,9 +213,13 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
     # 6. Parse Photos & Locations using docx_service
     parsed_photos = []
     detected_villages = []
+    has_dates = bool(trip_start_iso or tanggal_spt_iso)
     try:
-        photos_raw, def_kab, def_prov, detected_villages, _ = parse_document(docx_path)
+        photos_raw, def_kab, def_prov, detected_villages, doc_date_info = parse_document(docx_path)
         for p in photos_raw:
+            has_ts = bool(p.get("has_timestamp", False))
+            # Jika tanggal laporan/dinas belum lengkap di dokumen eksisting, jangan langsung mentimestamp foto
+            photo_time_str = p.get("time_str", "") if (has_dates or has_ts) else ""
             parsed_photos.append({
                 "id": str(p.get("id", uuid.uuid4().hex[:8])),
                 "filename": p.get("filename", ""),
@@ -225,13 +229,13 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
                 "desa": p.get("desa", ""),
                 "kecamatan": p.get("kecamatan", ""),
                 "dusun": p.get("dusun", ""),
-                "timeStr": p.get("time_str", ""),
+                "timeStr": photo_time_str,
                 "lat": p.get("lat", "-7.391520"),
                 "lon": p.get("lon", "110.312050"),
                 "kabupaten": p.get("kabupaten") or kabupaten,
                 "provinsi": p.get("provinsi", "Jawa Tengah"),
-                "has_timestamp": bool(p.get("has_timestamp", False)),
-                "alreadyStamped": bool(p.get("has_timestamp", False)),
+                "has_timestamp": has_ts,
+                "alreadyStamped": has_ts,
                 "suggestedCrop": p.get("suggested_crop_bottom", 0.18)
             })
     except Exception as e:
@@ -405,13 +409,13 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
 
     # Item 8: Foto Dokumentasi Lapangan
     if len(parsed_photos) > 0:
-        stamped_cnt = sum(1 for p in parsed_photos if p.get("has_timestamp"))
-        if stamped_cnt == len(parsed_photos):
+        stamped_cnt = sum(1 for p in parsed_photos if p.get("has_timestamp") or (has_dates and p.get("timeStr")))
+        if stamped_cnt == len(parsed_photos) and has_dates:
             audit_items.append({"field": "photos", "status": "complete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(parsed_photos)} foto (seluruh foto telah memiliki timestamp)"})
         elif stamped_cnt > 0:
             audit_items.append({"field": "photos", "status": "incomplete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(parsed_photos)} foto ({stamped_cnt} foto bertimestamp, {len(parsed_photos)-stamped_cnt} foto belum bertimestamp)"})
         else:
-            audit_items.append({"field": "photos", "status": "incomplete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(parsed_photos)} foto di dokumen (BELUM memiliki timestamp GPS)"})
+            audit_items.append({"field": "photos", "status": "incomplete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(parsed_photos)} foto di dokumen (BELUM memiliki timestamp GPS, lengkapi tanggal dinas terlebih dahulu)"})
     else:
         audit_items.append({"field": "photos", "status": "incomplete", "label": "Foto Dokumentasi", "message": "Belum ada foto dokumentasi lapangan di dalam dokumen"})
 

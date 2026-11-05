@@ -35,8 +35,8 @@ export function renderStampedPhoto(canvas, imgObj, meta, showRaw = false) {
   const w = imgObj.width;
   const rawH = imgObj.height;
 
-  // If user requested raw photo or keeping original without new stamp, show entire image untouched
-  if (showRaw || meta?.keep_original || meta?.skip_stamp) {
+  // If user requested raw photo, keeping original, or no timestamp has been generated yet, show entire image untouched
+  if (showRaw || meta?.keep_original || meta?.skip_stamp || !meta?.time_str) {
     canvas.width = w;
     canvas.height = rawH;
     ctx.drawImage(imgObj, 0, 0);
