@@ -1,5 +1,6 @@
 import os
 import io
+import sys
 import re
 import json
 import requests
@@ -14,6 +15,13 @@ try:
     import pypdf  # type: ignore
 except ImportError:
     pypdf = None
+    _p310_site = os.path.expandvars(r"%LOCALAPPDATA%\Programs\Python\Python310\Lib\site-packages")
+    if os.path.exists(_p310_site) and _p310_site not in sys.path:
+        sys.path.insert(0, _p310_site)
+        try:
+            import pypdf  # type: ignore
+        except Exception:
+            pypdf = None
 
 import docx
 from docx.shared import Inches, Pt, RGBColor
@@ -1079,7 +1087,7 @@ def build_compact_report_filename(report_data: Dict[str, Any], villages: List[Di
     return fn
 
 
-def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[List[str]] = None) -> bool:
+def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[List[Any]] = None) -> bool:
     """
     Memeriksa apakah tabel personel pada dokumen Word terpotong/terpisah di dua halaman berbeda
     (atau teks penutup laporan terpisah dari tabel tanda tangan).
@@ -1089,76 +1097,63 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
     rapi, dan berada pada halaman yang sama.
     Menggunakan WordCraft CLI (ArtCraft) untuk deteksi pagination presisi instan (sub-detik).
     """
+    global pypdf
     if not os.path.exists(docx_path):
         return False
+
+    if pypdf is None:
+        p310_site = os.path.expandvars(r"%LOCALAPPDATA%\Programs\Python\Python310\Lib\site-packages")
+        if os.path.exists(p310_site) and p310_site not in sys.path:
+            sys.path.insert(0, p310_site)
+            try:
+                import pypdf  # type: ignore
+            except Exception:
+                pass
 
     wc_cli = r"C:\Program Files\WordCraft\wordcraft-cli.exe"
     if not os.path.exists(wc_cli):
         wc_cli = shutil.which("wordcraft-cli") or ""
-    if not wc_cli or not pypdf:
-        return False
+    if not wc_cli:
+        alt = os.path.expandvars(r"%LOCALAPPDATA%\Programs\WordCraft\wordcraft-cli.exe")
+        if os.path.exists(alt):
+            wc_cli = alt
 
     try:
         doc = docx.Document(docx_path)
-        if not pelaksana_names:
-            pelaksana_names = []
+        clean_pelaksana = []
+        if pelaksana_names:
+            for p in pelaksana_names:
+                p_str = (p.get("nama") or p.get("name") or "") if isinstance(p, dict) else str(p)
+                p_str = p_str.strip()
+                if p_str:
+                    clean_pelaksana.append(p_str)
+
+        if not clean_pelaksana:
             for t in doc.tables:
                 if len(t.columns) == 4 and len(t.rows) >= 2:
                     for r in t.rows:
                         txt = r.cells[1].text.strip()
-                        if txt and txt not in pelaksana_names:
-                            pelaksana_names.append(txt)
+                        if txt and txt not in clean_pelaksana:
+                            clean_pelaksana.append(txt)
                     break
 
-        if not pelaksana_names or len(pelaksana_names) < 2:
+        if not clean_pelaksana or len(clean_pelaksana) < 2:
             return False
 
-        def check_split_state(doc_obj):
-            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f_d, \
-                 tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f_p:
-                temp_docx = f_d.name
-                temp_pdf = f_p.name
-            try:
-                doc_obj.save(temp_docx)
-                subprocess.run([wc_cli, "convert", temp_docx, temp_pdf], check=True, capture_output=True)
-                reader = pypdf.PdfReader(temp_pdf)  # type: ignore
-                personel_pages = {}
-                pembuat_page = None
-                for p_idx, page in enumerate(reader.pages, 1):
-                    txt = page.extract_text() or ""
-                    if "Pembuat Laporan" in txt and pembuat_page is None:
-                        pembuat_page = p_idx
-                    for name in pelaksana_names:
-                        parts = name.split()
-                        prefix = " ".join(parts[:2]) if len(parts) >= 2 else name
-                        if prefix in txt and name not in personel_pages:
-                            personel_pages[name] = p_idx
-                pages_seen = set(personel_pages.values())
-                if not pages_seen:
-                    return False, set()
-                is_split = (len(pages_seen) > 1) or (pembuat_page is not None and pembuat_page != min(pages_seen))
-                return is_split, pages_seen
-            finally:
-                for f in [temp_docx, temp_pdf]:
-                    if os.path.exists(f):
-                        try:
-                            os.remove(f)
-                        except Exception:
-                            pass
-
-        is_split, pages_seen = check_split_state(doc)
-        if not is_split:
-            return False
-
+        # Cari kandidat paragraf untuk penyisipan page break
+        # Prioritas 1: Poin 'Tindak lanjut dan rekomendasi' desa terakhir
+        # Prioritas 2: Poin 'Kendala / permasalahan' desa terakhir
+        # Prioritas 3: Poin catatan lapangan terakhir sebelum penutup
         dibuat_idx = -1
         for idx, p in enumerate(doc.paragraphs):
-            if "Dibuat di" in p.text:
+            t_low = p.text.lower()
+            if "dibuat di" in t_low:
                 dibuat_idx = idx
                 break
 
         if dibuat_idx == -1:
             for idx, p in enumerate(doc.paragraphs):
-                if "Pembuat Laporan" in p.text:
+                if "pembuat laporan" in p.text.lower():
                     dibuat_idx = idx
                     break
 
@@ -1185,6 +1180,78 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
                 break
 
         ordered_candidates = candidates_tindak + candidates_kendala + candidates_other
+        if not ordered_candidates:
+            return False
+
+        # Jika WordCraft CLI atau pypdf tidak tersedia, gunakan fallback aturan prioritas utama
+        if not wc_cli or not pypdf:
+            primary_cand = ordered_candidates[0]
+            pPr = primary_cand[1]._element.get_or_add_pPr()
+            if not pPr.xpath('./w:pageBreakBefore'):
+                pPr.append(OxmlElement("w:pageBreakBefore"))
+                doc.save(docx_path)
+                return True
+            return False
+
+        def check_split_state(doc_obj):
+            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f_d, \
+                 tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f_p:
+                temp_docx = f_d.name
+                temp_pdf = f_p.name
+            try:
+                doc_obj.save(temp_docx)
+                subprocess.run([wc_cli, "convert", temp_docx, temp_pdf], check=True, capture_output=True)
+                reader = pypdf.PdfReader(temp_pdf)  # type: ignore
+                personel_pages = {}
+                pembuat_page = None
+                dibuat_page = None
+                primary_cand_page = None
+
+                # Prefix unik paragraf prioritas utama (tindak lanjut & rekomendasi desa terakhir)
+                target_cand_txt = ordered_candidates[0][2]
+                words = re.sub(r"[*•:.]", " ", target_cand_txt).split()
+                target_prefix = " ".join(words[:6]) if len(words) >= 6 else target_cand_txt
+
+                for p_idx, page in enumerate(reader.pages, 1):
+                    txt = page.extract_text() or ""
+                    if "Pembuat Laporan" in txt and pembuat_page is None:
+                        pembuat_page = p_idx
+                    if "Dibuat di" in txt and dibuat_page is None:
+                        dibuat_page = p_idx
+                    if target_prefix and target_prefix in txt and primary_cand_page is None:
+                        primary_cand_page = p_idx
+                    for name in clean_pelaksana:
+                        parts = name.split()
+                        prefix = " ".join(parts[:2]) if len(parts) >= 2 else name
+                        if prefix in txt and name not in personel_pages:
+                            personel_pages[name] = p_idx
+                pages_seen = set(personel_pages.values())
+                if not pages_seen:
+                    return False, set()
+
+                table_page = min(pages_seen)
+                # Split terdeteksi jika:
+                # 1. Tabel personel terpotong di lebih dari satu halaman (len(pages_seen) > 1)
+                # 2. 'Pembuat Laporan' terpisah dari tabel tanda tangan (pembuat_page != table_page)
+                # 3. 'Dibuat di Semarang' terpisah dari tabel tanda tangan (dibuat_page != table_page)
+                # 4. Tabel berada di halaman baru terpisah dari butir tindak lanjut desa terakhir (primary_cand_page < table_page)
+                is_split = (len(pages_seen) > 1) or \
+                           (pembuat_page is not None and pembuat_page != table_page) or \
+                           (dibuat_page is not None and dibuat_page != table_page) or \
+                           (primary_cand_page is not None and primary_cand_page < table_page)
+                return is_split, pages_seen
+            finally:
+                for f in [temp_docx, temp_pdf]:
+                    if os.path.exists(f):
+                        try:
+                            os.remove(f)
+                        except Exception:
+                            pass
+
+        is_split, pages_seen = check_split_state(doc)
+        if not is_split:
+            return False
+
         for c_idx, p_cand, txt in ordered_candidates:
             pPr = p_cand._element.get_or_add_pPr()
             br_elem = OxmlElement("w:pageBreakBefore")
@@ -1196,6 +1263,15 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
                 return True
             else:
                 pPr.remove(br_elem)
+
+        # Fallback kuat: jika deteksi WordCraft masih mendeteksi selisih namun aturan pengguna tegas,
+        # pasang page break pada prioritas utama (Tindak lanjut dan rekomendasi) agar tidak terpotong.
+        primary_cand = ordered_candidates[0]
+        pPr = primary_cand[1]._element.get_or_add_pPr()
+        if not pPr.xpath('./w:pageBreakBefore'):
+            pPr.append(OxmlElement("w:pageBreakBefore"))
+            doc.save(docx_path)
+            return True
 
         return False
     except Exception as ex:
@@ -1548,6 +1624,10 @@ def generate_monev_docx(
     p_penutup1 = make_xml_paragraph(text="Dibuat di Semarang", bold=True, font_name="Arial", font_size_pt=11.0, alignment="center", line_spacing=1.5, space_before_pt=12, space_after_pt=2, indent_left_dxa=5472, indent_right_dxa=0)
     p_penutup2 = make_xml_paragraph(text=f"pada tanggal {tanggal_laporan}", bold=True, font_name="Arial", font_size_pt=11.0, alignment="center", line_spacing=1.5, space_before_pt=2, space_after_pt=2, indent_left_dxa=5472, indent_right_dxa=0)
     p_penutup3 = make_xml_paragraph(text="Pembuat Laporan,", bold=True, font_name="Arial", font_size_pt=11.0, alignment="center", line_spacing=1.5, space_before_pt=2, space_after_pt=8, indent_left_dxa=5472, indent_right_dxa=0)
+    for p_pen in [p_penutup1, p_penutup2, p_penutup3]:
+        pPr_pen = p_pen.xpath('./w:pPr')
+        if pPr_pen:
+            pPr_pen[0].append(OxmlElement('w:keepNext'))
     insert_before_target(p_penutup1)
     insert_before_target(p_penutup2)
     insert_before_target(p_penutup3)
@@ -1621,6 +1701,9 @@ def generate_monev_docx(
                         para.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
                     para.paragraph_format.line_spacing = 1.0
+                    if p_idx < len(pelaksana) - 1:
+                        pPr_c = para._element.get_or_add_pPr()
+                        pPr_c.append(OxmlElement('w:keepNext'))
                     for r_c in para.runs:
                         r_c.font.name = 'Arial'
                         r_c.font.size = Pt(10)
