@@ -44,6 +44,7 @@ export class ReportBuilder {
     ];
     this.photos = [];
     this.selectedPhotoIds = new Set();
+    this.lastSelectedPhotoIndex = null;
     this.activePhotoId = null;
     this.showRawGrid = false;
     this.modalShowRaw = false;
@@ -970,6 +971,23 @@ export class ReportBuilder {
         el.addEventListener('input', () => this.updateModalLivePreview());
       }
     });
+
+    // Dismiss context menu and batch dropdown on outside pointerdown or scroll
+    document.addEventListener('pointerdown', (e) => {
+      const ctxMenu = document.getElementById('photoContextMenu');
+      if (ctxMenu && ctxMenu.style.display !== 'none' && !ctxMenu.contains(e.target)) {
+        this.closeContextMenu();
+      }
+      const batchDropdown = document.getElementById('reportBatchTimeDropdown');
+      const batchWrap = document.getElementById('reportBatchTimeDropdownWrap');
+      if (batchDropdown && batchDropdown.style.display !== 'none' && batchWrap && !batchWrap.contains(e.target)) {
+        batchDropdown.style.display = 'none';
+      }
+    });
+
+    window.addEventListener('scroll', () => {
+      this.closeContextMenu();
+    }, { passive: true });
   }
 
   // =========================================================
@@ -2325,20 +2343,364 @@ export class ReportBuilder {
       this.photos.forEach(p => this.selectedPhotoIds.add(p.id));
     } else {
       this.selectedPhotoIds.clear();
+      this.lastSelectedPhotoIndex = null;
     }
     this.renderPhotosSelectionState();
     this.updateBatchBar();
   }
 
-  handleCheckboxClick(e, photoId) {
-    e.stopPropagation();
+  toggleSelectPhoto(photoId, idx) {
     if (this.selectedPhotoIds.has(photoId)) {
       this.selectedPhotoIds.delete(photoId);
     } else {
       this.selectedPhotoIds.add(photoId);
+      this.lastSelectedPhotoIndex = idx;
     }
     this.renderPhotosSelectionState();
     this.updateBatchBar();
+  }
+
+  selectRange(targetIndex, additive = false) {
+    if (!this.photos || this.photos.length === 0) return;
+    const lastIdx = (this.lastSelectedPhotoIndex !== null && this.lastSelectedPhotoIndex >= 0 && this.lastSelectedPhotoIndex < this.photos.length)
+      ? this.lastSelectedPhotoIndex
+      : 0;
+
+    const start = Math.min(lastIdx, targetIndex);
+    const end = Math.max(lastIdx, targetIndex);
+
+    if (!additive) {
+      this.selectedPhotoIds.clear();
+    }
+
+    for (let i = start; i <= end; i++) {
+      if (this.photos[i]) {
+        this.selectedPhotoIds.add(this.photos[i].id);
+      }
+    }
+
+    this.lastSelectedPhotoIndex = targetIndex;
+    this.renderPhotosSelectionState();
+    this.updateBatchBar();
+  }
+
+  handleCheckboxClick(e, photoId, idx) {
+    e.stopPropagation();
+    if (e.shiftKey && this.lastSelectedPhotoIndex !== null) {
+      e.preventDefault();
+      this.selectRange(idx, true);
+      return;
+    }
+    this.toggleSelectPhoto(photoId, idx);
+  }
+
+  handleCheckboxLabelClick(e, photoId, idx) {
+    e.stopPropagation();
+    if (e.target && e.target.tagName === 'INPUT') {
+      return;
+    }
+    if (e.shiftKey && this.lastSelectedPhotoIndex !== null) {
+      e.preventDefault();
+      this.selectRange(idx, true);
+      return;
+    }
+    this.toggleSelectPhoto(photoId, idx);
+  }
+
+  handleCardMediaClick(e, photoId, idx) {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.toggleSelectPhoto(photoId, idx);
+      return;
+    }
+    if (e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.selectRange(idx, false);
+      return;
+    }
+    // Normal click: open modal
+    this.lastSelectedPhotoIndex = idx;
+    this.openModal(photoId);
+  }
+
+  handleCardClick(e, photoId, idx) {
+    // Abaikan jika klik terjadi pada tombol aksi, input, atau link
+    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('label') || e.target.closest('a')) {
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      this.toggleSelectPhoto(photoId, idx);
+      return;
+    }
+    if (e.shiftKey) {
+      e.preventDefault();
+      this.selectRange(idx, false);
+      return;
+    }
+    // Klik biasa di luar tombol: seleksi eksklusif 1 foto ini
+    this.selectedPhotoIds.clear();
+    this.selectedPhotoIds.add(photoId);
+    this.lastSelectedPhotoIndex = idx;
+    this.renderPhotosSelectionState();
+    this.updateBatchBar();
+  }
+
+  handleCardContextMenu(e, photoId, idx) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Jika foto yang diklik kanan belum terseleksi, seleksi hanya foto ini
+    if (!this.selectedPhotoIds.has(photoId)) {
+      this.selectedPhotoIds.clear();
+      this.selectedPhotoIds.add(photoId);
+      this.lastSelectedPhotoIndex = idx;
+      this.renderPhotosSelectionState();
+      this.updateBatchBar();
+    }
+
+    this.openPhotoContextMenu(e.clientX, e.clientY, photoId);
+  }
+
+  closeContextMenu() {
+    const menu = document.getElementById('photoContextMenu');
+    if (menu) {
+      menu.style.display = 'none';
+      menu.classList.remove('active');
+    }
+  }
+
+  openPhotoContextMenu(clientX, clientY, photoId) {
+    let menu = document.getElementById('photoContextMenu');
+    if (!menu) {
+      menu = document.createElement('div');
+      menu.id = 'photoContextMenu';
+      menu.className = 'photo-context-menu';
+      document.body.appendChild(menu);
+    }
+
+    const selCount = this.selectedPhotoIds.size;
+    const tStartRaw = (document.getElementById('reportTripStartTime')?.value || this.tripStartTime || '08:30').slice(0, 5);
+
+    menu.innerHTML = `
+      <div class="ctx-header">
+        <span>Terapkan Waktu</span>
+        <span class="badge badge-accent" style="font-size:0.65rem; padding:1px 5px;">${selCount} Foto</span>
+      </div>
+      <div class="ctx-item" onclick="window.reportBuilder.applyTimeCategoryToSelected('pagi')">
+        <div class="ctx-item-left">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2.2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <span>Pagi</span>
+        </div>
+        <span class="ctx-time-range">${tStartRaw} – 11:00</span>
+      </div>
+      <div class="ctx-item" onclick="window.reportBuilder.applyTimeCategoryToSelected('siang')">
+        <div class="ctx-item-left">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+          <span>Siang</span>
+        </div>
+        <span class="ctx-time-range">11:00 – 14:00</span>
+      </div>
+      <div class="ctx-item" onclick="window.reportBuilder.applyTimeCategoryToSelected('sore')">
+        <div class="ctx-item-left">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2.2"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/></svg>
+          <span>Sore</span>
+        </div>
+        <span class="ctx-time-range">14:00 – 17:00</span>
+      </div>
+      <div class="ctx-item" onclick="window.reportBuilder.applyTimeCategoryToSelected('malam')">
+        <div class="ctx-item-left">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <span>Malam</span>
+        </div>
+        <span class="ctx-time-range">17:00 – 19:00</span>
+      </div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item" onclick="window.reportBuilder.closeContextMenu(); window.reportBuilder.openModal('${photoId}')">
+        <div class="ctx-item-left">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <span>Edit Foto Ini</span>
+        </div>
+      </div>
+      <div class="ctx-item" onclick="window.reportBuilder.closeContextMenu(); window.openPhotoLightbox('${photoId}', 'report')">
+        <div class="ctx-item-left">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Pratinjau Layar Penuh</span>
+        </div>
+      </div>
+      <div class="ctx-divider"></div>
+      <div class="ctx-item text-danger" onclick="window.reportBuilder.closeContextMenu(); window.reportBuilder.deleteSelectedPhotos()">
+        <div class="ctx-item-left" style="color:#f87171;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>Hapus ${selCount} Foto Terpilih</span>
+        </div>
+      </div>
+    `;
+
+    menu.style.display = 'flex';
+    menu.classList.add('active');
+
+    const mWidth = menu.offsetWidth || 230;
+    const mHeight = menu.offsetHeight || 290;
+    let posX = clientX;
+    let posY = clientY;
+
+    if (posX + mWidth > window.innerWidth - 10) {
+      posX = window.innerWidth - mWidth - 10;
+    }
+    if (posY + mHeight > window.innerHeight - 10) {
+      posY = window.innerHeight - mHeight - 10;
+    }
+    if (posX < 10) posX = 10;
+    if (posY < 10) posY = 10;
+
+    menu.style.left = `${posX}px`;
+    menu.style.top = `${posY}px`;
+  }
+
+  toggleBatchTimeDropdown(e) {
+    e.stopPropagation();
+    const dropdown = document.getElementById('reportBatchTimeDropdown');
+    if (!dropdown) return;
+    const isShowing = dropdown.style.display === 'flex';
+    if (isShowing) {
+      dropdown.style.display = 'none';
+      return;
+    }
+
+    const selCount = this.selectedPhotoIds.size;
+    const countBadge = document.getElementById('batchDropdownCountBadge');
+    if (countBadge) countBadge.textContent = `${selCount} Foto`;
+
+    const tStartRaw = (document.getElementById('reportTripStartTime')?.value || this.tripStartTime || '08:30').slice(0, 5);
+    const pagiRange = document.getElementById('batchRangePagi');
+    if (pagiRange) pagiRange.textContent = `${tStartRaw} – 11:00`;
+
+    dropdown.style.display = 'flex';
+  }
+
+  applyTimeCategoryToSelected(category) {
+    this.closeContextMenu();
+    const batchDropdown = document.getElementById('reportBatchTimeDropdown');
+    if (batchDropdown) batchDropdown.style.display = 'none';
+
+    if (this.selectedPhotoIds.size === 0) {
+      this.showToast('Pilih minimal satu foto terlebih dahulu untuk menerapkan waktu.', 'warning');
+      return;
+    }
+
+    const targetPhotos = this.photos.filter(p => this.selectedPhotoIds.has(p.id));
+    if (targetPhotos.length === 0) return;
+
+    const N = targetPhotos.length;
+
+    let startSec, endSec, categoryName;
+
+    let tStartInput = (document.getElementById('reportTripStartTime')?.value || this.tripStartTime || '08:30:00').trim();
+    let userStartSec = 8 * 3600 + 30 * 60; // 08:30:00
+    if (tStartInput) {
+      const parts = tStartInput.split(':').map(Number);
+      if (!isNaN(parts[0])) {
+        userStartSec = parts[0] * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+      }
+    }
+
+    const SEC_11_AM = 11 * 3600; // 39600
+    const SEC_14_PM = 14 * 3600; // 50400
+    const SEC_17_PM = 17 * 3600; // 61200
+    const SEC_19_PM = 19 * 3600; // 68400
+
+    switch (category) {
+      case 'pagi': {
+        categoryName = 'Pagi';
+        if (userStartSec >= SEC_11_AM - 120) {
+          startSec = 8 * 3600 + 30 * 60;
+        } else {
+          startSec = Math.max(6 * 3600, userStartSec);
+        }
+        endSec = SEC_11_AM - 15; // 10:59:45 (strictly before 11:00)
+        break;
+      }
+      case 'siang': {
+        categoryName = 'Siang';
+        startSec = SEC_11_AM + 15; // 11:00:15 (strictly >= 11:00)
+        endSec = SEC_14_PM - 15;   // 13:59:45 (strictly before 14:00)
+        break;
+      }
+      case 'sore': {
+        categoryName = 'Sore';
+        startSec = SEC_14_PM + 15; // 14:00:15 (strictly >= 14:00)
+        endSec = SEC_17_PM - 15;   // 16:59:45 (strictly before 17:00)
+        break;
+      }
+      case 'malam': {
+        categoryName = 'Malam';
+        startSec = SEC_17_PM + 15; // 17:00:15 (strictly >= 17:00)
+        endSec = SEC_19_PM;        // 19:00:00 (strictly <= 19:00)
+        break;
+      }
+      default:
+        return;
+    }
+
+    const assignedTimes = this.generateNonCollidingTimes(startSec, endSec, N);
+
+    targetPhotos.forEach((photo, idx) => {
+      const time24 = assignedTimes[idx];
+      const currentTs = photo.timeStr || photo.time_str || '';
+      const parsed = parseIndonesianTimestamp(currentTs);
+      const isoDate = parsed.isoDate || this.getSurveyIsoDate() || new Date().toISOString().slice(0, 10);
+      const tz = parsed.timezone || 'WIB';
+
+      const formatted = formatIndonesianTimestamp(isoDate, time24, tz);
+      photo.timeStr = formatted;
+      photo.time_str = formatted;
+    });
+
+    this.renderPhotos();
+    if (typeof this.evaluateRealtimeAudit === 'function') {
+      this.evaluateRealtimeAudit();
+    }
+
+    const firstTimeHms = assignedTimes[0].slice(0, 5);
+    const lastTimeHms = assignedTimes[N - 1].slice(0, 5);
+    const rangeSummary = N > 1 ? ` (${firstTimeHms} – ${lastTimeHms} WIB)` : ` (${firstTimeHms} WIB)`;
+    this.showToast(`Berhasil menerapkan waktu ${categoryName}${rangeSummary} untuk ${N} foto terpilih.`, 'success');
+  }
+
+  generateNonCollidingTimes(startSec, endSec, N) {
+    if (N <= 0) return [];
+    const span = Math.max(10, endSec - startSec);
+
+    if (N === 1) {
+      const mid = startSec + Math.round(span * (0.35 + Math.random() * 0.3));
+      return [this.secondsToHms(mid)];
+    }
+
+    const slotSize = span / N;
+    const times = [];
+
+    for (let i = 0; i < N; i++) {
+      const slotStart = startSec + i * slotSize;
+      const slotEnd = startSec + (i + 1) * slotSize;
+      const margin = Math.max(2, Math.min(25, Math.floor(slotSize * 0.15)));
+      const minS = slotStart + margin;
+      const maxS = slotEnd - margin;
+      let s = (minS < maxS) ? (minS + Math.random() * (maxS - minS)) : ((slotStart + slotEnd) / 2);
+      s = Math.round(s);
+      times.push(this.secondsToHms(s));
+    }
+
+    return times;
+  }
+
+  secondsToHms(totalSec) {
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = Math.floor(totalSec % 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
   renderPhotosSelectionState() {
@@ -2498,12 +2860,12 @@ export class ReportBuilder {
       const lonFormatted = String(p.lon || '').replace('.', ',');
 
       return `
-        <div class="report-photo-card ${isSelected ? 'selected' : ''} ${isOriginal ? 'keep-original' : ''}" id="reportPhotoCard_${p.id}">
+        <div class="report-photo-card ${isSelected ? 'selected' : ''} ${isOriginal ? 'keep-original' : ''}" id="reportPhotoCard_${p.id}" data-photo-id="${p.id}" data-photo-index="${idx}" onclick="window.reportBuilder.handleCardClick(event, '${p.id}', ${idx})" oncontextmenu="window.reportBuilder.handleCardContextMenu(event, '${p.id}', ${idx})">
           <!-- Media Preview (Canvas Live Stamp) -->
-          <div class="report-card-media" onclick="window.reportBuilder.openModal('${p.id}')">
+          <div class="report-card-media" onclick="window.reportBuilder.handleCardMediaClick(event, '${p.id}', ${idx})">
             <!-- Selection Checkbox -->
-            <label class="doc-card-checkbox" onclick="event.stopPropagation();" style="position:absolute; top:8px; left:8px; z-index:5; background:rgba(15,23,42,0.82); backdrop-filter:blur(4px); padding:2px 6px; border-radius:4px; display:flex; align-items:center; gap:5px; cursor:pointer;">
-              <input type="checkbox" id="reportChk_${p.id}" ${isSelected ? 'checked' : ''} onchange="window.reportBuilder.handleCheckboxClick(event, '${p.id}')">
+            <label class="doc-card-checkbox" onclick="window.reportBuilder.handleCheckboxLabelClick(event, '${p.id}', ${idx})" style="position:absolute; top:8px; left:8px; z-index:5; background:rgba(15,23,42,0.82); backdrop-filter:blur(4px); padding:2px 6px; border-radius:4px; display:flex; align-items:center; gap:5px; cursor:pointer;">
+              <input type="checkbox" id="reportChk_${p.id}" ${isSelected ? 'checked' : ''} onclick="window.reportBuilder.handleCheckboxClick(event, '${p.id}', ${idx})">
               <span class="font-mono" style="font-size:0.68rem; color:#fff; font-weight:700;">#${idx + 1}</span>
             </label>
 

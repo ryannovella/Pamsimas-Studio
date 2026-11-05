@@ -499,6 +499,45 @@
                   <span class="badge" id="reportSelectedCountBadge" style="font-size:0.68rem;">0 Dipilih</span>
                 </div>
                 <div class="doc-batch-actions" style="display:flex; gap:4px; flex-wrap:wrap;">
+                  <div class="dropdown" style="position:relative; display:inline-block;" id="reportBatchTimeDropdownWrap">
+                    <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder ? window.reportBuilder.toggleBatchTimeDropdown(event) : null" title="Terapkan kategori waktu (Pagi/Siang/Sore/Malam) ke foto terpilih">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Waktu Kegiatan ▾
+                    </button>
+                    <div class="photo-context-menu" id="reportBatchTimeDropdown" style="display:none; position:absolute; top:100%; left:0; margin-top:4px; z-index:1100;">
+                      <div class="ctx-header">
+                        <span>Waktu Kegiatan</span>
+                        <span class="badge badge-accent" id="batchDropdownCountBadge" style="font-size:0.65rem; padding:1px 5px;">0 Foto</span>
+                      </div>
+                      <div class="ctx-item" onclick="window.reportBuilder.applyTimeCategoryToSelected('pagi')">
+                        <div class="ctx-item-left">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2.2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                          <span>Pagi</span>
+                        </div>
+                        <span class="ctx-time-range" id="batchRangePagi">Mulai – 11:00</span>
+                      </div>
+                      <div class="ctx-item" onclick="window.reportBuilder.applyTimeCategoryToSelected('siang')">
+                        <div class="ctx-item-left">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                          <span>Siang</span>
+                        </div>
+                        <span class="ctx-time-range">11:00 – 14:00</span>
+                      </div>
+                      <div class="ctx-item" onclick="window.reportBuilder.applyTimeCategoryToSelected('sore')">
+                        <div class="ctx-item-left">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2.2"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/></svg>
+                          <span>Sore</span>
+                        </div>
+                        <span class="ctx-time-range">14:00 – 17:00</span>
+                      </div>
+                      <div class="ctx-item" onclick="window.reportBuilder.applyTimeCategoryToSelected('malam')">
+                        <div class="ctx-item-left">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                          <span>Malam</span>
+                        </div>
+                        <span class="ctx-time-range">17:00 – 19:00</span>
+                      </div>
+                    </div>
+                  </div>
                   <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.jitterPhotosTime()" title="Atur urutan jam dan menit kegiatan secara realistis">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Variasi Waktu
                   </button>
@@ -1305,6 +1344,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Floating Context Menu for Photo Gallery Right-Click -->
+  <div id="photoContextMenu" class="photo-context-menu" style="display:none;"></div>
 
   <!-- Error Toast Container -->
   <div id="errorToastArea" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px; max-width:400px; pointer-events:none;"></div>

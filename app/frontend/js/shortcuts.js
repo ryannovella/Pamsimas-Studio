@@ -370,6 +370,23 @@ export class KeyboardShortcutsManager {
     // 6. GLOBAL SHORTCUTS (NO MODAL ACTIVE)
     // =========================================================
     if (!activeModalId) {
+      // Escape: Close photo context menu or batch dropdown
+      if (key === 'Escape') {
+        window.reportBuilder?.closeContextMenu();
+        const batchDropdown = document.getElementById('reportBatchTimeDropdown');
+        if (batchDropdown) batchDropdown.style.display = 'none';
+      }
+
+      // Ctrl+A / Cmd+A: Select all uploaded photos (when not typing in an input field)
+      if (hasCtrl && !hasAlt && !isTyping && (key === 'a' || key === 'A')) {
+        const grid = document.getElementById('reportPhotosGrid');
+        if (grid && window.reportBuilder?.photos?.length > 0) {
+          e.preventDefault();
+          window.reportBuilder.toggleSelectAll(true);
+          return;
+        }
+      }
+
       // Ctrl+S / Cmd+S: Generate & Download Report Docx (Prevent browser Save Page)
       if (hasCtrl && !hasAlt && (key === 's' || key === 'S')) {
         e.preventDefault();

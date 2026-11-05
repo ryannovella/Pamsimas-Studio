@@ -3520,6 +3520,8 @@ input[type="file"]::file-selector-button:hover {
   flex-direction: column;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
   position: relative;
+  user-select: none;
+  cursor: pointer;
 }
 
 .report-photo-card:hover {
@@ -3958,6 +3960,92 @@ input[type="radio"] {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Photo Gallery Context Menu & Time Category Dropdown */
+.photo-context-menu {
+  position: fixed;
+  z-index: 1050;
+  min-width: 220px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  padding: 5px 0;
+  display: none;
+  flex-direction: column;
+  backdrop-filter: blur(12px);
+  font-size: 0.78rem;
+  color: var(--text-main);
+  user-select: none;
+  pointer-events: auto;
+  animation: scale-in-context 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes scale-in-context {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.photo-context-menu .ctx-header {
+  padding: 6px 12px 5px 12px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.photo-context-menu .ctx-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  text-decoration: none;
+  gap: 12px;
+}
+
+.photo-context-menu .ctx-item:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
+.photo-context-menu .ctx-item.text-danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.photo-context-menu .ctx-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.photo-context-menu .ctx-time-range {
+  font-size: 0.67rem;
+  color: var(--text-dim);
+  font-family: monospace;
+}
+
+.photo-context-menu .ctx-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
 }
 
 
