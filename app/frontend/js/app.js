@@ -124,6 +124,15 @@ class App {
     window.onActiveModalKeepOriginalChange = (checked) => {
       this.reportBuilder.updateModalLivePreview();
     };
+    window.onModalDateTimeChange = () => {
+      this.reportBuilder.onModalDateTimeChange();
+    };
+    window.onModalTimeStrInput = () => {
+      this.reportBuilder.onModalTimeStrInput();
+    };
+    window.updateActiveModalPreview = () => {
+      this.reportBuilder.updateModalLivePreview();
+    };
     window.jitterModalTime = () => {
       this.reportBuilder.jitterModalTime();
     };
@@ -591,10 +600,18 @@ const mapPicker = {
         this._map.setView([pLat, pLng], 17);
         this.selectLatLng(pLat, pLng);
       } else {
-        alert('Lokasi tidak ditemukan. Coba gunakan nama desa atau kecamatan yang lebih spesifik.');
+        if (typeof window.showToast === 'function') {
+          window.showToast('Lokasi tidak ditemukan. Coba gunakan nama desa atau kecamatan yang lebih spesifik.', 'warning');
+        } else {
+          alert('Lokasi tidak ditemukan. Coba gunakan nama desa atau kecamatan yang lebih spesifik.');
+        }
       }
     } catch (e) {
-      alert('Gagal mencari lokasi. Periksa koneksi internet Anda.');
+      if (typeof window.showToast === 'function') {
+        window.showToast('Gagal mencari lokasi. Periksa koneksi internet Anda.', 'error');
+      } else {
+        alert('Gagal mencari lokasi. Periksa koneksi internet Anda.');
+      }
     }
   }
 };
@@ -603,7 +620,11 @@ window.reverseGeocodeModalCoords = async () => {
   const lat = parseFloat(document.getElementById('modalLat')?.value);
   const lon = parseFloat(document.getElementById('modalLon')?.value);
   if (!lat || !lon || isNaN(lat) || isNaN(lon)) {
-    alert("Isi atau pilih koordinat Latitude & Longitude terlebih dahulu!");
+    if (typeof window.showToast === 'function') {
+      window.showToast("Isi atau pilih koordinat Latitude & Longitude terlebih dahulu!", "warning");
+    } else {
+      alert("Isi atau pilih koordinat Latitude & Longitude terlebih dahulu!");
+    }
     return;
   }
 
@@ -632,12 +653,24 @@ window.reverseGeocodeModalCoords = async () => {
       if (window.reportBuilder) {
         window.reportBuilder.updateModalLivePreview();
       }
-      alert(`Alamat berhasil disinkronkan dari GPS!\n- Alamat Alami: ${naturalAddr || '–'}\n- Dusun: ${data.dusun || '–'}\n- Desa: ${data.desa}\n- Kecamatan: ${data.kecamatan}\n- Kabupaten: ${data.kabupaten}`);
+      if (typeof window.showToast === 'function') {
+        window.showToast(`Alamat berhasil disinkronkan dari GPS! (Desa: ${data.desa || '–'}, Kec: ${data.kecamatan || '–'}, Kab: ${data.kabupaten || '–'})`, 'success');
+      } else {
+        alert(`Alamat berhasil disinkronkan dari GPS!\n- Alamat Alami: ${naturalAddr || '–'}\n- Dusun: ${data.dusun || '–'}\n- Desa: ${data.desa}\n- Kecamatan: ${data.kecamatan}\n- Kabupaten: ${data.kabupaten}`);
+      }
     } else {
-      alert("Gagal mendeteksi alamat dari koordinat ini.");
+      if (typeof window.showToast === 'function') {
+        window.showToast("Gagal mendeteksi alamat dari koordinat ini.", "warning");
+      } else {
+        alert("Gagal mendeteksi alamat dari koordinat ini.");
+      }
     }
   } catch (err) {
-    alert("Gagal menghubungi server geocoding: " + err.message);
+    if (typeof window.showToast === 'function') {
+      window.showToast("Gagal menghubungi server geocoding: " + err.message, "error");
+    } else {
+      alert("Gagal menghubungi server geocoding: " + err.message);
+    }
   } finally {
     if (btn) {
       btn.disabled = false;
