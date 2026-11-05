@@ -2508,14 +2508,14 @@ export class ReportBuilder {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2.2"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/></svg>
           <span>Sore</span>
         </div>
-        <span class="ctx-time-range">14:00 – 17:00</span>
+        <span class="ctx-time-range">14:00 – 18:00</span>
       </div>
       <div class="ctx-item" onclick="window.reportBuilder.applyTimeCategoryToSelected('malam')">
         <div class="ctx-item-left">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           <span>Malam</span>
         </div>
-        <span class="ctx-time-range">17:00 – 19:00</span>
+        <span class="ctx-time-range">18:00 – 19:00</span>
       </div>
       <div class="ctx-divider"></div>
       <div class="ctx-item" onclick="window.reportBuilder.closeContextMenu(); window.reportBuilder.openModal('${photoId}')">
@@ -2534,7 +2534,7 @@ export class ReportBuilder {
       <div class="ctx-item text-danger" onclick="window.reportBuilder.closeContextMenu(); window.reportBuilder.deleteSelectedPhotos()">
         <div class="ctx-item-left" style="color:#f87171;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          <span>Hapus ${selCount} Foto Terpilih</span>
+          <span>Hapus Seleksi (${selCount} Foto)</span>
         </div>
       </div>
     `;
@@ -2609,7 +2609,7 @@ export class ReportBuilder {
 
     const SEC_11_AM = 11 * 3600; // 39600
     const SEC_14_PM = 14 * 3600; // 50400
-    const SEC_17_PM = 17 * 3600; // 61200
+    const SEC_18_PM = 18 * 3600; // 64800 (jam 18:00 saat langit mulai gelap)
     const SEC_19_PM = 19 * 3600; // 68400
 
     switch (category) {
@@ -2632,12 +2632,12 @@ export class ReportBuilder {
       case 'sore': {
         categoryName = 'Sore';
         startSec = SEC_14_PM + 15; // 14:00:15 (strictly >= 14:00)
-        endSec = SEC_17_PM - 15;   // 16:59:45 (strictly before 17:00)
+        endSec = SEC_18_PM - 15;   // 17:59:45 (strictly before 18:00)
         break;
       }
       case 'malam': {
         categoryName = 'Malam';
-        startSec = SEC_17_PM + 15; // 17:00:15 (strictly >= 17:00)
+        startSec = SEC_18_PM + 15; // 18:00:15 (ketika langit sudah gelap)
         endSec = SEC_19_PM;        // 19:00:00 (strictly <= 19:00)
         break;
       }
@@ -2672,28 +2672,40 @@ export class ReportBuilder {
 
   generateNonCollidingTimes(startSec, endSec, N) {
     if (N <= 0) return [];
-    const span = Math.max(10, endSec - startSec);
+    const span = Math.max(30, endSec - startSec);
 
     if (N === 1) {
-      const mid = startSec + Math.round(span * (0.35 + Math.random() * 0.3));
-      return [this.secondsToHms(mid)];
+      // Natural mid-window placement with realistic minute & second jitter
+      const midSec = startSec + Math.round(span * (0.28 + Math.random() * 0.44));
+      return [this.secondsToHms(midSec)];
     }
 
-    const slotSize = span / N;
+    // Generate random weights to model natural surveyor inspection pacing
+    const weights = [];
+    for (let i = 0; i < N; i++) {
+      weights.push(0.6 + Math.random() * 1.4);
+    }
+    const sumWeights = weights.reduce((a, b) => a + b, 0);
+
+    const marginStart = Math.min(60, Math.floor(span * 0.04));
+    const marginEnd = Math.min(60, Math.floor(span * 0.04));
+    const usableSpan = span - marginStart - marginEnd;
+
+    let currentSec = startSec + marginStart;
     const times = [];
 
     for (let i = 0; i < N; i++) {
-      const slotStart = startSec + i * slotSize;
-      const slotEnd = startSec + (i + 1) * slotSize;
-      const margin = Math.max(2, Math.min(25, Math.floor(slotSize * 0.15)));
-      const minS = slotStart + margin;
-      const maxS = slotEnd - margin;
-      let s = (minS < maxS) ? (minS + Math.random() * (maxS - minS)) : ((slotStart + slotEnd) / 2);
-      s = Math.round(s);
-      times.push(this.secondsToHms(s));
+      const step = Math.max(15, Math.round((weights[i] / sumWeights) * usableSpan));
+      currentSec += step;
+      if (i > 0 && currentSec <= times[i - 1].rawSec) {
+        currentSec = times[i - 1].rawSec + Math.floor(15 + Math.random() * 25);
+      }
+      const maxAllowed = endSec - (N - 1 - i) * 10;
+      const finalSec = Math.min(maxAllowed, currentSec);
+      times.push({ rawSec: finalSec, hms: this.secondsToHms(finalSec) });
     }
 
-    return times;
+    return times.map(t => t.hms);
   }
 
   secondsToHms(totalSec) {
@@ -2740,12 +2752,15 @@ export class ReportBuilder {
 
   deleteSelectedPhotos() {
     if (this.selectedPhotoIds.size === 0) return;
-    if (!confirm(`Hapus ${this.selectedPhotoIds.size} foto terpilih dari laporan?`)) return;
+    const count = this.selectedPhotoIds.size;
+    if (!confirm(`Hapus ${count} foto yang dipilih dari laporan?`)) return;
 
     this.photos = this.photos.filter(p => !this.selectedPhotoIds.has(p.id));
     this.selectedPhotoIds.clear();
+    this.lastSelectedPhotoIndex = null;
     this.renderPhotos();
     this.updateSummaryBadge();
+    this.showToast(`${count} foto berhasil dihapus.`, 'info');
   }
 
   batchSetKeepOriginal(keep) {
@@ -3769,13 +3784,40 @@ export class ReportBuilder {
       // 4. Data Desa & Narasi / Catatan Lapangan
       if (!this.lockedSegments.villages) {
         if (rep.villages && rep.villages.length > 0) {
-          this.villages = rep.villages.map(v => ({
-            id: 'v_' + Math.random().toString(36).substr(2, 9),
-            desa: v.desa || '',
-            kecamatan: v.kecamatan || '',
-            notes: v.notes || '',
-            narrative: v.narrative || ''
-          }));
+          const merged = [];
+          const seen = new Map();
+          for (const v of rep.villages) {
+            const dName = (v.desa || '').trim();
+            if (!dName) continue;
+            const key = dName.toLowerCase();
+            if (seen.has(key)) {
+              const existing = seen.get(key);
+              if (!existing.notes && v.notes) existing.notes = v.notes;
+              else if (existing.notes && v.notes && existing.notes !== v.notes) existing.notes += '\n\n' + v.notes;
+              if (!existing.narrative && v.narrative) existing.narrative = v.narrative;
+              else if (existing.narrative && v.narrative && existing.narrative !== v.narrative) existing.narrative += '\n\n' + v.narrative;
+              if (!existing.kecamatan && v.kecamatan) existing.kecamatan = v.kecamatan;
+            } else {
+              const item = {
+                id: 'v_' + Math.random().toString(36).substr(2, 9),
+                desa: dName,
+                kecamatan: v.kecamatan || '',
+                notes: v.notes || '',
+                narrative: v.narrative || ''
+              };
+              seen.set(key, item);
+              merged.push(item);
+            }
+          }
+          this.villages = merged.length > 0 ? merged : [
+            {
+              id: 'v_init',
+              desa: '',
+              kecamatan: '',
+              notes: '',
+              narrative: ''
+            }
+          ];
         } else {
           this.villages = [
             {

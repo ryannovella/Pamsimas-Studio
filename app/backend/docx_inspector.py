@@ -262,15 +262,23 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
             break
 
         if in_hasil_section and txt:
-            m_des = re.search(r"(?:^\d+[\.\)]\s*)?Desa\s+([A-Za-z0-9]+)(?:\s+(?:Kecamatan|Kec\.?)\s+([A-Za-z0-9]+))?", txt, re.I)
-            is_heading = m_des and (len(txt.split()) <= 6 or p.style.name.startswith("Heading") or any(r.bold for r in p.runs[:2]))
-            if is_heading:
+            # Heading desa harus diawali pola 'Desa <Nama>' (bukan kalimat narasi seperti 'Hasil monitoring...')
+            m_des = re.match(r"^(?:\d+[\.\)]\s*)?Desa\s+([A-Za-z0-9]+)(?:[\s,]+(?:Kecamatan|Kec\.?)\s+([A-Za-z0-9]+))?", txt, re.I)
+            is_intro_sentence = bool(re.match(r"^(?:Hasil|Berdasarkan|Progres|Pelaksanaan|Kegiatan|Pekerjaan|Adapun|Catatan)\b", txt, re.I))
+            is_heading = m_des and len(txt.split()) <= 8 and not is_intro_sentence
+
+            if is_heading and m_des:
+                desa_name = fuzzy_match_village(m_des.group(1).strip())
+                # Jika judul desa sama dengan desa yang sedang aktif, anggap sebagai baris judul ganda, jangan buat entri baru
+                if current_desa and current_desa["desa"].lower() == desa_name.lower():
+                    continue
+
                 if current_desa:
                     current_desa["narrative"] = "\n".join(current_narrative_paras).strip()
                     current_desa["notes"] = current_desa["narrative"]
                     villages.append(current_desa)
                     current_narrative_paras = []
-                desa_name = fuzzy_match_village(m_des.group(1).strip())
+
                 kec_name = m_des.group(2).strip() if m_des.group(2) else ""
                 if not kec_name:
                     _, _, looked_kec, _ = lookup_location(desa_name, "", kabupaten)
@@ -289,6 +297,31 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
         current_desa["narrative"] = "\n".join(current_narrative_paras).strip()
         current_desa["notes"] = current_desa["narrative"]
         villages.append(current_desa)
+
+    # Dedup & merge villages by name jika ada entri berulang atau sebagian kosong
+    if villages:
+        merged_villages = []
+        v_map = {}
+        for v in villages:
+            d_name = v.get("desa", "").strip()
+            if not d_name:
+                continue
+            d_key = d_name.lower()
+            if d_key in v_map:
+                existing = v_map[d_key]
+                v_narr = v.get("narrative", "").strip()
+                if v_narr:
+                    if existing.get("narrative"):
+                        existing["narrative"] += "\n\n" + v_narr
+                    else:
+                        existing["narrative"] = v_narr
+                    existing["notes"] = existing["narrative"]
+                if not existing.get("kecamatan") and v.get("kecamatan"):
+                    existing["kecamatan"] = v.get("kecamatan")
+            else:
+                v_map[d_key] = v
+                merged_villages.append(v)
+        villages = merged_villages
 
     # Fallback desa jika belum ditemukan di Section B
     # 1. Dari token nama file yang cocok dengan master desa

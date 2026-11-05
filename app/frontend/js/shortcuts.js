@@ -387,6 +387,15 @@ export class KeyboardShortcutsManager {
         }
       }
 
+      // Delete: Delete selected photos (when not typing in an input field)
+      if (!isTyping && !hasCtrl && !hasAlt && (key === 'Delete' || key === 'Del')) {
+        if (window.reportBuilder && window.reportBuilder.selectedPhotoIds && window.reportBuilder.selectedPhotoIds.size > 0) {
+          e.preventDefault();
+          window.reportBuilder.deleteSelectedPhotos();
+          return;
+        }
+      }
+
       // Ctrl+S / Cmd+S: Generate & Download Report Docx (Prevent browser Save Page)
       if (hasCtrl && !hasAlt && (key === 's' || key === 'S')) {
         e.preventDefault();
