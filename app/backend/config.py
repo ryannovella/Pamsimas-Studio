@@ -50,12 +50,20 @@ if not DEFAULT_DOCX:
     DEFAULT_DOCX = os.path.join(_SAMPLES_DIR, "Laporan Monev.docx")  # placeholder
 
 # Server Config
-SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 8501
+SERVER_HOST = os.environ.get("SERVER_HOST", "0.0.0.0" if (os.environ.get("PORT") or os.environ.get("SPACE_ID")) else "127.0.0.1")
+SERVER_PORT = int(os.environ.get("PORT", 7860 if os.environ.get("SPACE_ID") else 8501))
 
 # Locked Official Stamping Standards
-STAMP_FONT_PATH   = "C:\\Windows\\Fonts\\arial.ttf"
-FALLBACK_FONT_PATH = "arial.ttf"
+_BUNDLED_FONT = os.path.join(BASE_DIR, "app", "templates", "arial.ttf")
+if os.path.exists(_BUNDLED_FONT):
+    STAMP_FONT_PATH = _BUNDLED_FONT
+elif os.path.exists("C:\\Windows\\Fonts\\arial.ttf"):
+    STAMP_FONT_PATH = "C:\\Windows\\Fonts\\arial.ttf"
+elif os.path.exists("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
+    STAMP_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+else:
+    STAMP_FONT_PATH = "arial.ttf"
+FALLBACK_FONT_PATH = STAMP_FONT_PATH
 
 # Proportions & Styling (Strictly preserved matching official reference)
 FONT_SIZE_RATIO    = 0.04237   # ~20px on 472px image height
