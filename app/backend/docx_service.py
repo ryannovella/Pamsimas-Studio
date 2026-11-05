@@ -777,14 +777,44 @@ def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[
             for m in re.finditer(r'Id="(rId\d+)"[^>]*Target="([^"]+)"', rels_xml):
                 rel_map[m.group(1)] = m.group(2)
                 
-        # Extract clean text from paragraphs & tables
+        # Extract clean text from paragraphs & tables (keeping unhighlighted text separate)
         paragraphs = []
+        unhighlighted_paragraphs = []
         if root is not None:
             for p in root.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p'):
                 txt = ''.join([t.text for t in p.iter() if t.text]).strip()
                 if txt:
                     paragraphs.append(txt)
+                    # Abaikan paragraf ber-highlight/shading (placeholder teks SPT lama) dari ekstraksi tanggal
+                    is_hl = False
+                    p_pr = p.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr')
+                    if p_pr is not None:
+                        shd = p_pr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}shd')
+                        if shd is not None:
+                            fill = shd.attrib.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fill', '')
+                            if fill and fill.lower() not in ['auto', 'none', 'ffffff', '000000']:
+                                is_hl = True
+                    if not is_hl:
+                        for r in p.findall('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}r'):
+                            r_pr = r.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rPr')
+                            if r_pr is not None:
+                                hl = r_pr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}highlight')
+                                if hl is not None:
+                                    val = hl.attrib.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', '')
+                                    if val and val.lower() not in ['none']:
+                                        is_hl = True
+                                        break
+                                shd = r_pr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}shd')
+                                if shd is not None:
+                                    fill = shd.attrib.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fill', '')
+                                    if fill and fill.lower() not in ['auto', 'none', 'ffffff', '000000']:
+                                        is_hl = True
+                                        break
+                    if not is_hl:
+                        unhighlighted_paragraphs.append(txt)
+
         full_text = " \n ".join(paragraphs)
+        unhighlighted_full_text = " \n ".join(unhighlighted_paragraphs)
         combined_text = f"{filename_text} \n {filename_normalized} \n {full_text}"
 
 
@@ -822,16 +852,16 @@ def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[
             except Exception:
                 pass
 
-        # 2. Detect Date (prioritize date RANGE first from filename or body text)
+        # 2. Detect Date (prioritize date RANGE first from filename or unhighlighted body text)
         date_info = None
-        for candidate in [clean_filename, filename_text, filename_normalized, full_text]:
+        for candidate in [clean_filename, filename_text, filename_normalized, unhighlighted_full_text]:
             di = extract_date_range(candidate, only_range=True, default_year=doc_year)
             if di:
                 date_info = di
                 break
         
         if not date_info:
-            for candidate in [clean_filename, filename_text, filename_normalized, full_text]:
+            for candidate in [clean_filename, filename_text, filename_normalized, unhighlighted_full_text]:
                 di = extract_date_range(candidate, only_range=False, default_year=doc_year)
                 if di:
                     date_info = di

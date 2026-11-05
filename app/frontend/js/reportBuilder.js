@@ -1411,6 +1411,14 @@ export class ReportBuilder {
 
     this.updateTripDurationBadge();
     this.updatePhotoUploadState();
+
+    // Jika seluruh tanggal telah terisi dan terdapat foto yang belum memiliki timestamp (misal hasil import dokumen),
+    // otomatis generate dan sesuaikan timestamp ke seluruh foto lapangan secara langsung
+    const hasUnstampedPhotos = this.photos.some(p => !p.timeStr && !p.time_str && !p.has_timestamp);
+    if (this.areAllDatesFilled() && this.photos.length > 0 && hasUnstampedPhotos) {
+      this.autoGenerateAllTimestamps(true);
+    }
+
     this.evaluateRealtimeAudit();
   }
 
@@ -1560,6 +1568,7 @@ export class ReportBuilder {
       const targetVillage = item.village || validVillages[0];
 
       photo.timeStr = item.timeStr;
+      photo.time_str = item.timeStr;
       photo.desa = targetVillage.desa || photo.desa || '';
       photo.kecamatan = targetVillage.kecamatan || photo.kecamatan || '';
       photo.kabupaten = this.kabupaten || 'Magelang';

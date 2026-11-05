@@ -51,6 +51,53 @@ def get_hplus1_iso(iso_date: str) -> str:
         return ""
 
 
+def format_indo_date_from_iso(iso_str: str) -> str:
+    """Mengonversi tanggal ISO (YYYY-MM-DD) ke teks format resmi Indonesia."""
+    if not iso_str or len(iso_str) < 10:
+        return ""
+    m_names = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+    try:
+        parts = iso_str[:10].split("-")
+        y, m, d = parts[0], int(parts[1]), int(parts[2])
+        return f"{d:02d} {m_names[m - 1]} {y}"
+    except Exception:
+        return iso_str
+
+
+def is_para_or_run_highlighted(p) -> bool:
+    """
+    Memeriksa apakah sebuah Paragraph atau Run memiliki highlighter pen atau warna latar shading.
+    Digunakan untuk mendeteksi placeholder teks template (misal SPT bertanggal lama yang perlu diganti).
+    """
+    try:
+        p_pr = p._p.pPr
+        if p_pr is not None:
+            shd = p_pr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}shd')
+            if shd is not None:
+                fill = shd.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fill')
+                if fill and fill.lower() not in ['auto', 'none', 'ffffff', '000000']:
+                    return True
+
+        for r in p.runs:
+            if r.font.highlight_color is not None:
+                return True
+            r_pr = r._r.rPr
+            if r_pr is not None:
+                hl = r_pr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}highlight')
+                if hl is not None:
+                    val = hl.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
+                    if val and val.lower() not in ['none']:
+                        return True
+                shd = r_pr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}shd')
+                if shd is not None:
+                    fill = shd.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fill')
+                    if fill and fill.lower() not in ['auto', 'none', 'ffffff', '000000']:
+                        return True
+    except Exception:
+        pass
+    return False
+
+
 def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
     """
     Menganalisis dokumen Monev Word eksisting (.docx), mengekstrak data administrasi,
@@ -110,6 +157,8 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
     # 2. Nomor & Tanggal SPT
     nomor_spt = ""
     tanggal_spt_raw = ""
+    spt_is_highlighted = False
+
     for p in doc.paragraphs[:50]:
         t = p.text.strip()
         m_spt = re.search(r"\b(CK\d+[A-Za-z0-9\/\-\.]+202\d[A-Za-z0-9\/\-\.]*)\b", t)
@@ -121,8 +170,12 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
             r"[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})",
             t, re.I
         )
-        if m_tspt and not tanggal_spt_raw:
-            tanggal_spt_raw = m_tspt.group(1).strip()
+        if m_tspt:
+            is_hl = is_para_or_run_highlighted(p)
+            if is_hl:
+                spt_is_highlighted = True
+            elif not tanggal_spt_raw:
+                tanggal_spt_raw = m_tspt.group(1).strip()
 
     # 3. Tanggal Laporan & Dibuat di
     tempat_pembuatan = "Semarang"
@@ -133,36 +186,83 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
         if m_tempat:
             tempat_pembuatan = m_tempat.group(1).strip()
         m_tlap = re.search(r"pada tanggal\s+([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})", t, re.I)
-        if m_tlap:
+        if m_tlap and not is_para_or_run_highlighted(p):
             tanggal_laporan_raw = m_tlap.group(1).strip()
 
     tanggal_laporan_iso = parse_indo_date_to_iso(tanggal_laporan_raw)
 
-    # 4. Tanggal Dinas (Mulai & Selesai)
+    # 4. Tanggal Dinas & SPT Berdasarkan Aturan Prioritas:
+    # Prioritas 1: Judul File (Filename)
+    # Prioritas 2: Catatan Lapangan (Section B) jika SPT ber-highlight
+    # Fallback: Jika SPT ber-highlight & tidak ada tanggal di judul/catatan -> Default KOSONG (foto tidak ditimestamp)
     trip_start_iso = ""
     trip_end_iso = ""
-    p_start, p_end = parse_date_range_str(tanggal_spt_raw)
+
+    # Prioritas 1: Cek Judul File
+    p_start, p_end = parse_date_range_str(clean_fn)
     if not p_start:
-        p_start, p_end = parse_date_range_str(clean_fn)
+        s_iso = parse_indo_date_to_iso(clean_fn)
+        if s_iso:
+            parts = [int(x) for x in s_iso.split("-")]
+            p_start = (parts[0], parts[1], parts[2])
+            p_end = p_start
+
     if p_start:
         trip_start_iso = f"{p_start[0]:04d}-{p_start[1]:02d}-{p_start[2]:02d}"
-    if p_end:
-        trip_end_iso = f"{p_end[0]:04d}-{p_end[1]:02d}-{p_end[2]:02d}"
+        trip_end_iso = f"{p_end[0]:04d}-{p_end[1]:02d}-{p_end[2]:02d}" if p_end else trip_start_iso
+    else:
+        # Prioritas 2: Cek Catatan Lapangan / Section B jika ada
+        in_b_sec = False
+        for p in doc.paragraphs:
+            txt_p = p.text.strip()
+            if "B. HASIL YANG DICAPAI" in txt_p.upper():
+                in_b_sec = True
+                continue
+            if in_b_sec and any(k in txt_p.upper() for k in ["C. KESIMPULAN", "PENUTUP", "DOKUMENTASI KEGIATAN"]):
+                break
+            if in_b_sec and txt_p and len(txt_p) > 20 and not is_para_or_run_highlighted(p):
+                m_nd = re.search(r"\b([0-9]{1,2}(?:\s*[-–—]\s*[0-9]{1,2})?\s+[A-Za-z]+\s+202\d)\b", txt_p, re.I)
+                if m_nd:
+                    ns, ne = parse_date_range_str(m_nd.group(1))
+                    if ns:
+                        trip_start_iso = f"{ns[0]:04d}-{ns[1]:02d}-{ns[2]:02d}"
+                        trip_end_iso = f"{ne[0]:04d}-{ne[1]:02d}-{ne[2]:02d}" if ne else trip_start_iso
+                        break
 
-    tanggal_spt_iso = trip_start_iso or parse_indo_date_to_iso(tanggal_spt_raw)
+        # Prioritas 3: Tanggal SPT dari tubuh dokumen HANYA jika TIDAK ber-highlight
+        if not trip_start_iso and tanggal_spt_raw and not spt_is_highlighted:
+            p_start, p_end = parse_date_range_str(tanggal_spt_raw)
+            if p_start:
+                trip_start_iso = f"{p_start[0]:04d}-{p_start[1]:02d}-{p_start[2]:02d}"
+                trip_end_iso = f"{p_end[0]:04d}-{p_end[1]:02d}-{p_end[2]:02d}" if p_end else trip_start_iso
 
-    # Otomatisasi Tanggal Laporan: Jika belum ada di dokumen, jika dinas multi-hari diset H+1 hari akhir, atau H+1 Tanggal SPT
+    # Sinkronisasi tanggal_spt_iso & tanggal_spt_raw
+    if trip_start_iso:
+        tanggal_spt_iso = trip_start_iso
+        if not tanggal_spt_raw or spt_is_highlighted:
+            if trip_end_iso and trip_end_iso != trip_start_iso:
+                ps = [int(x) for x in trip_start_iso.split("-")]
+                pe = [int(x) for x in trip_end_iso.split("-")]
+                m_names = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+                tanggal_spt_raw = f"{ps[2]:02d} – {pe[2]:02d} {m_names[pe[1] - 1]} {pe[0]}"
+            else:
+                tanggal_spt_raw = format_indo_date_from_iso(trip_start_iso)
+    else:
+        # Teks SPT ber-highlight dan tidak ada tanggal di judul/catatan -> Default KOSONG
+        tanggal_spt_iso = ""
+        tanggal_spt_raw = ""
+        trip_start_iso = ""
+        trip_end_iso = ""
+
+    # Otomatisasi Tanggal Laporan: Jika pertanggalan kosong, tanggal laporan juga kosong
     auto_hplus1 = False
-    if not tanggal_laporan_iso:
-        if trip_end_iso and trip_start_iso and trip_end_iso != trip_start_iso:
-            tanggal_laporan_iso = get_hplus1_iso(trip_end_iso)
+    if trip_start_iso:
+        if not tanggal_laporan_iso:
+            target_trip_end = trip_end_iso or trip_start_iso
+            tanggal_laporan_iso = get_hplus1_iso(target_trip_end)
             auto_hplus1 = True
-        elif trip_end_iso or trip_start_iso:
-            tanggal_laporan_iso = get_hplus1_iso(trip_end_iso or trip_start_iso)
-            auto_hplus1 = True
-        elif tanggal_spt_iso:
-            tanggal_laporan_iso = get_hplus1_iso(tanggal_spt_iso)
-            auto_hplus1 = True
+    else:
+        tanggal_laporan_iso = ""
 
     # 5. Tabel Pelaksana
     pelaksana = []
