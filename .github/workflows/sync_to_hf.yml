@@ -10,12 +10,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          lfs: true
 
-      - name: Push to Hugging Face
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Hugging Face CLI
+        run: pip install -U "huggingface_hub[cli]"
+
+      - name: Push to Hugging Face Hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git push --force https://ryannovella:$HF_TOKEN@huggingface.co/spaces/ryannovella/studio main
+          hf upload ryannovella/studio . . --repo-type space \
+            --exclude ".git*" \
+            --exclude ".github*" \
+            --exclude ".env*" \
+            --exclude "output/*" \
+            --exclude "samples/*" \
+            --exclude "data/temp_media/*" \
+            --exclude "data/uploads/*" \
+            --exclude "data/logs/*" \
+            --exclude "*__pycache__*" \
+            --commit-message "Sync from GitHub commit ${{ github.sha }}"
