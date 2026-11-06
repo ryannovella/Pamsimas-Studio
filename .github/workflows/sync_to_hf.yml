@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -18,6 +20,10 @@ jobs:
 
       - name: Install Hugging Face CLI
         run: pip install -U "huggingface_hub[cli]"
+
+      - name: Generate version.json
+        run: |
+          python -c "import json, subprocess, datetime; h = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode().strip(); f = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(); c = subprocess.check_output(['git', 'rev-list', '--count', 'HEAD']).decode().strip(); d = subprocess.check_output(['git', 'log', '-1', '--format=%cd', '--date=short']).decode().strip(); m = subprocess.check_output(['git', 'log', '-1', '--format=%s']).decode().strip(); v = {'version': '4.1', 'commit': h, 'commit_full': f, 'commit_date': d, 'commit_message': m, 'commit_count': int(c), 'display_tag': f'v4.1.{c}', 'display': f'v4.1.{c} ({h})', 'full_display': f'v4.1.{c} · {h} ({d})', 'is_cloud': True}; open('version.json', 'w', encoding='utf-8').write(json.dumps(v, indent=2))"
 
       - name: Push to Hugging Face Hub
         env:

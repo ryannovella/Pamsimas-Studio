@@ -65,7 +65,7 @@ export class AppUpdater {
     if (dateEl) dateEl.textContent = data.commit_date || '-';
 
     const branchEl = document.getElementById('modalCurrentBranch');
-    if (branchEl) branchEl.textContent = data.branch || 'main';
+    if (branchEl) branchEl.textContent = data.is_cloud ? `${data.branch || 'main'} (Cloud)` : (data.branch || 'main');
 
     const msgEl = document.getElementById('modalCurrentCommitMsg');
     if (msgEl) {
@@ -152,6 +152,7 @@ export class AppUpdater {
             <strong>Tersedia pembaruan baru dari GitHub!</strong><br>
             Versi di GitHub lebih baru <strong>(${data.behind_count} commit)</strong>. 
             Versi terbaru: <code class="font-mono">${data.remote.commit}</code> (${data.remote.commit_date}).
+            ${data.can_apply === false ? `<div style="margin-top:6px; font-size:0.75rem; color:var(--text-dim);">${this.escapeHtml(data.message)}</div>` : ''}
           `;
         }
 
@@ -170,9 +171,13 @@ export class AppUpdater {
         }
 
         if (btnApply) {
-          btnApply.style.display = 'inline-flex';
-          btnApply.textContent = 'Update Sekarang';
-          btnApply.disabled = false;
+          if (data.can_apply === false) {
+            btnApply.style.display = 'none';
+          } else {
+            btnApply.style.display = 'inline-flex';
+            btnApply.textContent = 'Update Sekarang';
+            btnApply.disabled = false;
+          }
         }
       } else {
         // Already up to date
@@ -187,7 +192,7 @@ export class AppUpdater {
         if (statusText) {
           statusText.innerHTML = `
             <strong>Aplikasi sudah versi terbaru.</strong><br>
-            Tidak ada pembaruan baru di repositori GitHub. Commit aktif lokal <code class="font-mono">${data.current?.commit || ''}</code> telah sinkron dengan <code class="font-mono">origin/main</code>.
+            ${this.escapeHtml(data.message || 'Tidak ada pembaruan baru di repositori GitHub.')}
           `;
         }
       }
