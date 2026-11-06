@@ -157,7 +157,7 @@
                 <div class="form-group">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
                     <label class="form-label" style="margin-bottom:0;">Tanggal Laporan</label>
-                    <span id="reportTanggalLaporanTag" class="tag-subtle" title="Otomatis H+1 SPT (1 hari dinas) atau H+1 hari akhir dinas (multi-hari)">(H+1 SPT)</span>
+                    <span id="reportTanggalLaporanTag" class="tag-subtle" title="Otomatis H+1 hari kerja berikutnya (melewati weekend & libur nasional)">(H+1 SPT)</span>
                   </div>
                   <input type="date" id="reportTanggalLaporan" class="form-input form-input-sm" value="" onchange="window.reportBuilder ? window.reportBuilder.onTanggalLaporanChange(this.value) : null">
                   <span id="reportTanggalLaporanPreview" class="date-preview-label"></span>
@@ -1059,7 +1059,7 @@
         <!-- TAB CONTENT: GUIDE -->
         <div id="helpTabGuide" style="display:none; flex-direction:column; gap:12px;">
           <ul class="help-list">
-            <li><strong>Data Administrasi & SPT</strong>: Isi Kabupaten, Tahun, Nomor SPT, serta Tanggal SPT & Laporan. Tanggal laporan otomatis diset H+1 dari tanggal SPT.</li>
+            <li><strong>Data Administrasi & SPT</strong>: Isi Kabupaten, Tahun, Nomor SPT, serta Tanggal SPT & Laporan. Tanggal laporan otomatis diset H+1 hari kerja berikutnya (melewati akhir pekan & hari libur nasional).</li>
             <li><strong>Tim Pelaksana</strong>: Tambahkan nama personel dari master data atau ketik nama baru. Tabel tanda tangan dokumen akan disusun otomatis.</li>
             <li><strong>Data Desa & Catatan</strong>: Tulis temuan di tiap desa untuk diolah menjadi narasi resmi laporan.</li>
             <li><strong>Dokumentasi Foto</strong>: Unggah foto dan terapkan jadwal kegiatan serta watermark lokasi secara otomatis.</li>

@@ -30,7 +30,7 @@ from app.backend.logger import log_error, get_recent_logs, clear_logs, ERROR_LOG
 from app.backend.report_generator import (
     draft_village_narrative, generate_monev_docx, sanitize_pamsimas_text,
     build_structured_monev_narrative_local, format_to_indonesian_date,
-    normalize_personel_title
+    normalize_personel_title, get_village_kondisi_per_date, get_next_working_day
 )
 from app.backend.docx_inspector import inspect_and_import_monev_docx
 from app.backend.updater import get_version_info, check_for_updates, apply_update
@@ -296,18 +296,18 @@ def api_report_generate_docx():
 
         # Auto-draft official narrative for each village if notes exist but narrative is not yet composed
         kab = report_data.get("kabupaten", "")
-        tgl = format_to_indonesian_date(report_data.get("tanggal_laporan", ""))
         thn = report_data.get("tahun", "2026")
         for v in report_data.get("villages", []):
             notes = (v.get("notes") or "").strip()
             narrative = (v.get("narrative") or "").strip()
+            v_kondisi_date = get_village_kondisi_per_date(v, report_data)
             if notes and (not narrative or narrative == notes or len(narrative) < 60):
                 res_draft = draft_village_narrative(
                     notes=notes,
                     desa=v.get("desa", ""),
                     kecamatan=v.get("kecamatan", ""),
                     kabupaten=kab,
-                    tanggal=tgl,
+                    tanggal=v_kondisi_date,
                     tahun=thn
                 )
                 if res_draft.get("success") and res_draft.get("narrative"):
@@ -324,6 +324,13 @@ def api_report_generate_docx():
 
             if v.get("narrative"):
                 v["narrative"] = sanitize_pamsimas_text(v["narrative"])
+                # Pastikan tanggal 'kondisi per' pada kalimat pengantar narasi sesuai tanggal monev desa
+                v["narrative"] = re.sub(
+                    r'(kondisi\s+per\s+)[A-Za-z0-9\s–\-]+?(\s+(?:adalah\s+sebagai\s+berikut|menunjukkan|sebagai\s+berikut|merupakan|yakni)|[.:])',
+                    rf'\g<1>{v_kondisi_date}\g<2>',
+                    v["narrative"],
+                    flags=re.I
+                )
 
         processed_photos = []
         for p in photos_req:

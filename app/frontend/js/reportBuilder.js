@@ -1030,15 +1030,15 @@ export class ReportBuilder {
       } else if (isMultiDay && this.tanggalLaporan === hPlus1End) {
         tag.textContent = '(H+1 Hari Akhir)';
         tag.style.color = '#38bdf8';
-        tag.title = 'Otomatis dihitung H+1 dari hari akhir kegiatan dinas';
+        tag.title = 'Otomatis dihitung H+1 hari kerja dari hari akhir dinas (melewati weekend & libur nasional)';
       } else if (this.tanggalLaporan === hPlus1Spt) {
         tag.textContent = '(H+1 SPT)';
         tag.style.color = '#38bdf8';
-        tag.title = 'Otomatis dihitung H+1 dari Tanggal SPT';
+        tag.title = 'Otomatis dihitung H+1 hari kerja dari Tanggal SPT (melewati weekend & libur nasional)';
       } else {
         tag.textContent = isMultiDay ? '(H+1 Hari Akhir)' : '(H+1 SPT)';
         tag.style.color = '#38bdf8';
-        tag.title = 'Otomatis dihitung H+1';
+        tag.title = 'Otomatis dihitung H+1 hari kerja berikutnya (melewati weekend & libur nasional)';
       }
     }
     this.updateTanggalLaporanPreview();
@@ -4167,20 +4167,20 @@ export class ReportBuilder {
         message: 'Tanggal laporan belum ditentukan'
       });
     } else {
-      // Validasi ketentuan: H+1 hari akhir dinas jika multi-hari, atau H+1 Tanggal SPT jika 1 hari
+      // Validasi ketentuan: H+1 hari kerja berikutnya dari hari akhir dinas / SPT (bukan weekend & bukan hari libur nasional)
       if (isMultiDay && tglLap === hPlus1End) {
         items.push({
           field: 'tanggal_laporan',
           status: 'complete',
           label: 'Tanggal Laporan',
-          message: `Sesuai aturan: H+1 hari akhir dinas (${formatIndonesianDateOnly(tglLap)})`
+          message: `Sesuai aturan: H+1 hari kerja akhir dinas (${formatIndonesianDateOnly(tglLap)})`
         });
       } else if (!isMultiDay && (tglLap === hPlus1Spt || tglLap === hPlus1End)) {
         items.push({
           field: 'tanggal_laporan',
           status: 'complete',
           label: 'Tanggal Laporan',
-          message: `Sesuai aturan: H+1 Tanggal SPT (${formatIndonesianDateOnly(tglLap)})`
+          message: `Sesuai aturan: H+1 hari kerja Tanggal SPT (${formatIndonesianDateOnly(tglLap)})`
         });
       } else if (!tglSptVal && !lastTripDate) {
         items.push({
@@ -4191,14 +4191,14 @@ export class ReportBuilder {
         });
       } else {
         const saran = isMultiDay
-          ? `H+1 hari akhir dinas: ${formatIndonesianDateOnly(hPlus1End)}`
-          : `H+1 Tanggal SPT: ${formatIndonesianDateOnly(hPlus1Spt || hPlus1End)}`;
+          ? `H+1 hari kerja akhir dinas: ${formatIndonesianDateOnly(hPlus1End)}`
+          : `H+1 hari kerja Tanggal SPT: ${formatIndonesianDateOnly(hPlus1Spt || hPlus1End)}`;
 
         items.push({
           field: 'tanggal_laporan',
           status: 'incomplete',
           label: 'Tanggal Laporan',
-          message: `Perhatian: Tanggal laporan (${formatIndonesianDateOnly(tglLap)}) tidak sesuai ketentuan. Harusnya ${saran}.`
+          message: `Perhatian: Tanggal laporan (${formatIndonesianDateOnly(tglLap)}) tidak sesuai ketentuan. Harusnya ${saran} (bukan akhir pekan/hari libur nasional).`
         });
       }
     }

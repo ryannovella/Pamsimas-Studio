@@ -1,11 +1,11 @@
 {
   "version": "4.1",
-  "commit": "c159e4d",
-  "commit_full": "c159e4d8973979e40161770709b3c01f949a3923",
+  "commit": "4ed61c8",
+  "commit_full": "4ed61c88bb77ad6b0c268a834162e245a49911e3",
   "commit_date": "2026-11-06",
-  "commit_message": "feat(ui): add creator footer attribution by Ryannovella",
-  "commit_count": 29,
-  "display_tag": "v4.1.29",
-  "display": "v4.1.29 (c159e4d)",
-  "full_display": "v4.1.29 \u00b7 c159e4d (2026-11-06)"
+  "commit_message": "fix(report): synchronize village monev date, enforce working day report date, and optimize personnel pagination",
+  "commit_count": 31,
+  "display_tag": "v4.1.31",
+  "display": "v4.1.31 (4ed61c8)",
+  "full_display": "v4.1.31 · 4ed61c8 (2026-11-06)"
 }

@@ -156,22 +156,72 @@ export function formatIndonesianDateOnly(isoDate) {
   return `${dateObj.getDate()} ${INDO_MONTHS[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
 }
 
+// =========================================================
+// HARI LIBUR NASIONAL & CUTI BERSAMA INDONESIA (SKB 3 MENTERI)
+// =========================================================
+export const INDONESIAN_HOLIDAYS = new Set([
+  // 2024
+  '2024-01-01', '2024-02-08', '2024-02-09', '2024-02-10', '2024-03-11',
+  '2024-03-12', '2024-03-29', '2024-03-31', '2024-04-08', '2024-04-09',
+  '2024-04-10', '2024-04-11', '2024-04-12', '2024-04-15', '2024-05-01',
+  '2024-05-09', '2024-05-10', '2024-05-23', '2024-05-24', '2024-06-01',
+  '2024-06-17', '2024-06-18', '2024-07-07', '2024-08-17', '2024-09-16',
+  '2024-12-25', '2024-12-26',
+  // 2025
+  '2025-01-01', '2025-01-27', '2025-01-28', '2025-01-29', '2025-03-28',
+  '2025-03-29', '2025-03-31', '2025-04-01', '2025-04-02', '2025-04-03',
+  '2025-04-04', '2025-04-07', '2025-04-18', '2025-04-20', '2025-05-01',
+  '2025-05-12', '2025-05-13', '2025-05-29', '2025-05-30', '2025-06-01',
+  '2025-06-06', '2025-06-09', '2025-06-27', '2025-08-17', '2025-09-05',
+  '2025-12-25', '2025-12-26',
+  // 2026 (SKB 3 Menteri)
+  '2026-01-01', '2026-01-16', '2026-02-16', '2026-02-17', '2026-03-18',
+  '2026-03-19', '2026-03-20', '2026-03-21', '2026-03-22', '2026-03-23',
+  '2026-03-24', '2026-04-03', '2026-04-05', '2026-05-01', '2026-05-14',
+  '2026-05-15', '2026-05-27', '2026-05-28', '2026-05-31', '2026-06-01',
+  '2026-06-16', '2026-08-17', '2026-08-25', '2026-12-24', '2026-12-25',
+  // 2027
+  '2027-01-01', '2027-02-06', '2027-03-10', '2027-03-11', '2027-03-26',
+  '2027-05-01', '2027-05-06', '2027-05-16', '2027-05-20', '2027-06-01',
+  '2027-06-06', '2027-08-15', '2027-08-17', '2027-12-25',
+]);
+
+export function isIndonesianHoliday(isoStr) {
+  if (!isoStr) return false;
+  return INDONESIAN_HOLIDAYS.has(String(isoStr).slice(0, 10));
+}
+
 /**
- * Menghitung H+1 dari tanggal ISO (YYYY-MM-DD)
+ * Menghitung H+1 hari kerja perjalanan dinas terakhir yang valid:
+ * - Melewati akhir pekan (Sabtu & Minggu)
+ * - Melewati hari libur nasional Indonesia (SKB 3 Menteri)
  */
-export function getNextDayIso(isoDate) {
+export function getNextWorkingDayIso(isoDate) {
   if (!isoDate) return '';
   const s = String(isoDate).trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
     const parts = s.slice(0, 10).split('-').map(Number);
     const d = new Date(parts[0], parts[1] - 1, parts[2]);
     d.setDate(d.getDate() + 1);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    const formatIso = dt => {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const day = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    while (d.getDay() === 0 || d.getDay() === 6 || isIndonesianHoliday(formatIso(d))) {
+      d.setDate(d.getDate() + 1);
+    }
+    return formatIso(d);
   }
   return '';
+}
+
+/**
+ * Menghitung H+1 dari tanggal ISO (YYYY-MM-DD) sesuai aturan hari kerja kedinasan
+ */
+export function getNextDayIso(isoDate) {
+  return getNextWorkingDayIso(isoDate);
 }
 
 /**

@@ -3,12 +3,13 @@ import io
 import sys
 import re
 import json
+import math
 import requests
 import subprocess
 import tempfile
 import shutil
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+from typing import List, Dict, Any, Optional, Union
+from datetime import datetime, date, timedelta
 from PIL import Image, ImageOps
 
 try:
@@ -320,7 +321,10 @@ def build_structured_monev_narrative_local(
     kab_str = kabupaten.strip() or "Kabupaten Magelang"
     kab_clean = re.sub(r"^(?:Kabupaten|Kota)\s*", "", kab_str, flags=re.I).strip()
     kab_full = f"Kabupaten {kab_clean}" if not kab_str.lower().startswith(("kabupaten", "kota")) else kab_str
-    tgl_str = format_to_indonesian_date(tanggal.strip()) or "21 September 2026"
+    
+    explicit_date = extract_monev_date_from_notes(notes_clean, tahun)
+    effective_tgl = explicit_date or (tanggal or "").strip()
+    tgl_str = format_to_indonesian_date(effective_tgl) or f"21 September {tahun}"
 
     intro = f"Hasil monitoring dan evaluasi pelaksanaan Kegiatan Pamsimas TA {tahun} di Desa {desa_str}, Kecamatan {kec_str}, {kab_full}, kondisi per {tgl_str} adalah sebagai berikut:"
 
@@ -429,12 +433,16 @@ def draft_village_narrative(
         if items:
             extra_str = "\nData Tambahan: " + ", ".join(items)
 
+    explicit_date = extract_monev_date_from_notes(notes_clean, tahun)
+    effective_tgl = explicit_date or (tanggal or "").strip()
+    formatted_tgl = format_to_indonesian_date(effective_tgl) or f"21 September {tahun}"
+
     prompt = (
         f"Data Wilayah:\n"
         f"- Desa: {desa}\n"
         f"- Kecamatan: {kecamatan}\n"
         f"- Kabupaten: {kabupaten}\n"
-        f"- Tanggal Pemantauan: {format_to_indonesian_date(tanggal)}\n"
+        f"- Tanggal Pemantauan: {formatted_tgl}\n"
         f"- Tahun Anggaran: {tahun}{extra_str}\n\n"
         f"Catatan Mentah Lapangan:\n{notes_clean}\n\n"
         f"INSTRUKSI KHUSUS ANTI-PEMALSUAN (SANGAT KETAT):\n"
@@ -518,6 +526,13 @@ def draft_village_narrative(
                     if text:
                         # Post-processing Anti-Slop & KBBI enforcement
                         text = sanitize_pamsimas_text(text)
+                        if formatted_tgl:
+                            text = re.sub(
+                                r'(kondisi\s+per\s+)[A-Za-z0-9\s–\-]+?(\s+(?:adalah\s+sebagai\s+berikut|menunjukkan|sebagai\s+berikut|merupakan|yakni)|[.:])',
+                                rf'\g<1>{formatted_tgl}\g<2>',
+                                text,
+                                flags=re.I
+                            )
 
                         # Jika terpotong oleh MAX_TOKENS di tengah kalimat, coba model berikutnya
                         if finish_reason == "MAX_TOKENS" and not text.endswith((".", "!", "?", ":", ")")):
@@ -899,6 +914,249 @@ def parse_date_range_str(val: str):
     return p_single, None
 
 
+# ==============================================================================
+# HARI LIBUR NASIONAL & CUTI BERSAMA INDONESIA (SKB 3 MENTERI)
+# ==============================================================================
+INDONESIAN_HOLIDAYS = {
+    # 2024
+    "2024-01-01", "2024-02-08", "2024-02-09", "2024-02-10", "2024-03-11",
+    "2024-03-12", "2024-03-29", "2024-03-31", "2024-04-08", "2024-04-09",
+    "2024-04-10", "2024-04-11", "2024-04-12", "2024-04-15", "2024-05-01",
+    "2024-05-09", "2024-05-10", "2024-05-23", "2024-05-24", "2024-06-01",
+    "2024-06-17", "2024-06-18", "2024-07-07", "2024-08-17", "2024-09-16",
+    "2024-12-25", "2024-12-26",
+    # 2025
+    "2025-01-01", "2025-01-27", "2025-01-28", "2025-01-29", "2025-03-28",
+    "2025-03-29", "2025-03-31", "2025-04-01", "2025-04-02", "2025-04-03",
+    "2025-04-04", "2025-04-07", "2025-04-18", "2025-04-20", "2025-05-01",
+    "2025-05-12", "2025-05-13", "2025-05-29", "2025-05-30", "2025-06-01",
+    "2025-06-06", "2025-06-09", "2025-06-27", "2025-08-17", "2025-09-05",
+    "2025-12-25", "2025-12-26",
+    # 2026 (SKB 3 Menteri)
+    "2026-01-01", "2026-01-16", "2026-02-16", "2026-02-17", "2026-03-18",
+    "2026-03-19", "2026-03-20", "2026-03-21", "2026-03-22", "2026-03-23",
+    "2026-03-24", "2026-04-03", "2026-04-05", "2026-05-01", "2026-05-14",
+    "2026-05-15", "2026-05-27", "2026-05-28", "2026-05-31", "2026-06-01",
+    "2026-06-16", "2026-08-17", "2026-08-25", "2026-12-24", "2026-12-25",
+    # 2027
+    "2027-01-01", "2027-02-06", "2027-03-10", "2027-03-11", "2027-03-26",
+    "2027-05-01", "2027-05-06", "2027-05-16", "2027-05-20", "2027-06-01",
+    "2027-06-06", "2027-08-15", "2027-08-17", "2027-12-25",
+}
+
+
+def is_indonesian_holiday(dt: Any) -> bool:
+    """Memeriksa apakah suatu tanggal merupakan Hari Libur Nasional / Cuti Bersama resmi Indonesia."""
+    if not dt:
+        return False
+    iso = dt.strftime("%Y-%m-%d") if hasattr(dt, "strftime") else str(dt)[:10]
+    return iso in INDONESIAN_HOLIDAYS
+
+
+def get_next_working_day(date_input: Any) -> str:
+    """
+    Menghitung H+1 perjalanan dinas terakhir yang valid:
+    - Melewati hari libur akhir pekan (Sabtu & Minggu)
+    - Melewati hari libur nasional Indonesia (SKB 3 Menteri)
+    Mengembalikan teks tanggal resmi Indonesia, misal: '2 November 2026'.
+    """
+    if not date_input:
+        return ""
+    d_obj = None
+    if isinstance(date_input, datetime):
+        d_obj = date_input.date()
+    elif isinstance(date_input, date):
+        d_obj = date_input
+    else:
+        s_val = str(date_input).strip()
+        parts = parse_date_parts(s_val)
+        if parts:
+            d_obj = date(parts[0], parts[1], parts[2])
+    
+    if not d_obj:
+        return str(date_input)
+
+    # Tambahkan minimal 1 hari (H+1)
+    cur = d_obj + timedelta(days=1)
+    while cur.weekday() >= 5 or cur.strftime("%Y-%m-%d") in INDONESIAN_HOLIDAYS:
+        cur += timedelta(days=1)
+
+    indo_months = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+    return f"{cur.day} {indo_months[cur.month]} {cur.year}"
+
+
+def get_next_working_day_iso(date_input: Any) -> str:
+    """Mengembalikan format ISO YYYY-MM-DD dari H+1 hari kerja berikutnya (bukan weekend / libur nasional)."""
+    if not date_input:
+        return ""
+    d_obj = None
+    if isinstance(date_input, datetime):
+        d_obj = date_input.date()
+    elif isinstance(date_input, date):
+        d_obj = date_input
+    else:
+        s_val = str(date_input).strip()
+        parts = parse_date_parts(s_val)
+        if parts:
+            d_obj = date(parts[0], parts[1], parts[2])
+    
+    if not d_obj:
+        return str(date_input)
+
+    cur = d_obj + timedelta(days=1)
+    while cur.weekday() >= 5 or cur.strftime("%Y-%m-%d") in INDONESIAN_HOLIDAYS:
+        cur += timedelta(days=1)
+
+    return cur.strftime("%Y-%m-%d")
+
+
+def ensure_working_day(date_input: Any) -> str:
+    """
+    Memastikan tanggal laporan jatuh pada hari kerja:
+    Jika bertepatan dengan weekend atau hari libur nasional,
+    secara otomatis dimajukan ke hari kerja berikutnya.
+    """
+    if not date_input:
+        return ""
+    d_obj = None
+    if isinstance(date_input, datetime):
+        d_obj = date_input.date()
+    elif isinstance(date_input, date):
+        d_obj = date_input
+    else:
+        s_val = str(date_input).strip()
+        parts = parse_date_parts(s_val)
+        if parts:
+            d_obj = date(parts[0], parts[1], parts[2])
+    
+    if not d_obj:
+        return str(date_input)
+
+    cur = d_obj
+    while cur.weekday() >= 5 or cur.strftime("%Y-%m-%d") in INDONESIAN_HOLIDAYS:
+        cur += timedelta(days=1)
+
+    indo_months = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+    return f"{cur.day} {indo_months[cur.month]} {cur.year}"
+
+
+def extract_monev_date_from_notes(notes: str, default_year: str = "2026") -> Optional[str]:
+    """
+    Mengekstrak tanggal monev yang disebutkan secara eksplisit pada catatan lapangan,
+    misal: 'melakukan monev pada tanggal 10 oktober', 'hasil per 10 oktober', 'monev 10 oktober'.
+    Mengabaikan tanggal-tanggal non-monev (kontrak, pencairan, target selesai, BAP, dll.).
+    Mengembalikan format teks resmi Indonesia, misal: '10 Oktober 2026'.
+    """
+    if not notes:
+        return None
+    raw_notes = str(notes).strip()
+
+    indo_months = {
+        'januari': 1, 'februari': 2, 'maret': 3, 'april': 4, 'mei': 5, 'juni': 6,
+        'juli': 7, 'agustus': 8, 'september': 9, 'oktober': 10, 'november': 11, 'desember': 12,
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'mei': 5, 'jun': 6,
+        'jul': 7, 'agt': 8, 'agust': 8, 'sep': 9, 'sept': 9, 'okt': 10, 'nov': 11, 'des': 12
+    }
+
+    # Pola eksplisit yang mengikat tanggal secara langsung dengan kegiatan monev / kondisi per
+    patterns = [
+        # melakukan monev pada tanggal 10 oktober / kunjungan monev tanggal 10 oktober
+        r'(?:melakukan|melaksanakan|mengadakan|kegiatan|kunjungan|agenda|tim)?\s*(?:monev|monitoring|pemantauan|peninjauan)(?:\s+lapangan|\s+dan\s+evaluasi)?\s*(?:pada\s+tanggal|tanggal|tgl\.?|pada)?\s*(\d{1,2}(?:\s*[-–]\s*\d{1,2})?\s+[A-Za-z]+(?:\s+\d{4})?)',
+        # hasil per 10 oktober / kondisi per 10 oktober / catatan per 10 oktober
+        r'(?:hasil|kondisi|capaian|progres|data|catatan)\s+(?:monev\s+|lapangan\s+)?per\s*(?:tanggal|tgl\.?|hari)?\s*(\d{1,2}(?:\s*[-–]\s*\d{1,2})?\s+[A-Za-z]+(?:\s+\d{4})?)',
+        # per tanggal 10 oktober (di awal kalimat atau setelah tanda baca)
+        r'(?:^|[.;\n])\s*(?:catatan\s+)?per\s+(?:tanggal|tgl\.?)\s*(\d{1,2}(?:\s*[-–]\s*\d{1,2})?\s+[A-Za-z]+(?:\s+\d{4})?)',
+        # monev 10 oktober / monev tgl 10 oktober
+        r'\bmonev\s+(?:tgl\.?|tanggal\s+)?(\d{1,2}(?:\s*[-–]\s*\d{1,2})?\s+[A-Za-z]+(?:\s+\d{4})?)'
+    ]
+
+    for pat in patterns:
+        m = re.search(pat, raw_notes, re.I)
+        if m:
+            matched_text = m.group(1).strip()
+            # Cek jika format rentang '5 - 7 oktober' -> gunakan tanggal terakhir rentang
+            m_range = re.search(r'(\d{1,2})\s*[-–]\s*(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{4}))?', matched_text)
+            if m_range:
+                d = int(m_range.group(2))
+                m_str = m_range.group(3).lower()
+                y = m_range.group(4) or default_year
+                if m_str in indo_months:
+                    m_name = [k for k, v in indo_months.items() if v == indo_months[m_str] and len(k) > 3][0].title()
+                    return f"{d} {m_name} {y}"
+            m_single = re.search(r'(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{4}))?', matched_text)
+            if m_single:
+                d = int(m_single.group(1))
+                m_str = m_single.group(2).lower()
+                y = m_single.group(3) or default_year
+                if m_str in indo_months:
+                    m_name = [k for k, v in indo_months.items() if v == indo_months[m_str] and len(k) > 3][0].title()
+                    return f"{d} {m_name} {y}"
+
+    return None
+
+
+def get_village_kondisi_per_date(village: Dict[str, Any], report_data: Dict[str, Any]) -> str:
+    """
+    Menentukan tanggal resmi 'kondisi per [Tanggal]' untuk suatu desa:
+    1. Memeriksa apakah catatan lapangan (notes) secara eksplisit menyebutkan tanggal monev
+       (misal 'melakukan monev pada tanggal 10 Oktober', 'hasil per 10 Oktober', 'monev 10 Oktober').
+       Abaikan tanggal-tanggal non-monev (kontrak, pencairan, target, dsb.).
+    2. Jika tidak ada tanggal monev eksplisit di catatan lapangan:
+       Menyesuaikan dengan tanggal hari terakhir dinas pada desa / SPT yang bersangkutan:
+       - Jika desa membawa trip_end_date atau tanggal dinas desa, gunakan hari terakhir dinasnya.
+       - Jika tidak, gunakan trip_end_date dari report_data (atau hari terakhir rentang tanggal_spt).
+       - Jika 1 hari dinas, gunakan hari dinas tersebut.
+    """
+    thn = str(report_data.get("tahun") or "2026").strip()
+    notes = village.get("notes") or village.get("catatan") or village.get("narrative") or ""
+    explicit_date = extract_monev_date_from_notes(notes, default_year=thn)
+    if explicit_date:
+        return explicit_date
+
+    indo_months_list = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+
+    # Cek tanggal dinas spesifik pada objek desa jika ada
+    v_end = village.get("trip_end_date") or village.get("tanggal_akhir") or village.get("tanggal")
+    if v_end:
+        p_v_end = parse_date_parts(str(v_end))
+        if p_v_end:
+            y, m, d = p_v_end
+            m_name = indo_months_list[m] if 1 <= m <= 12 else str(m)
+            return f"{d} {m_name} {y}"
+
+    # Cek trip_end_date pada report_data
+    r_end = (report_data.get("trip_end_date") or "").strip()
+    if r_end:
+        p_r_end = parse_date_parts(r_end)
+        if p_r_end:
+            y, m, d = p_r_end
+            m_name = indo_months_list[m] if 1 <= m <= 12 else str(m)
+            return f"{d} {m_name} {y}"
+
+    # Cek rentang tanggal_spt pada report_data
+    tgl_spt_raw = (report_data.get("tanggal_spt") or "").strip()
+    if tgl_spt_raw:
+        p_s_range, p_e_range = parse_date_range_str(tgl_spt_raw)
+        target_p = p_e_range or p_s_range
+        if target_p:
+            y, m, d = target_p
+            m_name = indo_months_list[m] if 1 <= m <= 12 else str(m)
+            return f"{d} {m_name} {y}"
+
+    # Cek trip_start_date pada report_data
+    r_start = (report_data.get("trip_start_date") or "").strip()
+    if r_start:
+        p_r_start = parse_date_parts(r_start)
+        if p_r_start:
+            y, m, d = p_r_start
+            m_name = indo_months_list[m] if 1 <= m <= 12 else str(m)
+            return f"{d} {m_name} {y}"
+
+    # Fallback ke tanggal_laporan
+    tgl_lap = (report_data.get("tanggal_laporan") or "").strip()
+    return format_to_indonesian_date(tgl_lap) or f"21 September {thn}"
+
+
 def normalize_personel_title(name: str) -> str:
     """
     Merapikan penulisan nama dan gelar akademik/profesi personel sesuai kaidah KBBI/EYD:
@@ -1183,8 +1441,33 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
         if not ordered_candidates:
             return False
 
-        # Jika WordCraft CLI atau pypdf tidak tersedia, gunakan fallback aturan prioritas utama
+        # Fallback estimasi kapasitas halaman jika WordCraft CLI atau pypdf tidak tersedia
+        def estimate_space_sufficient(doc_obj):
+            needed_lines = 4.0 + (len(clean_pelaksana) * 2.5)
+            lines_per_page = 36.0
+            total_lines = 0.0
+            for p in doc_obj.paragraphs:
+                txt = p.text.strip()
+                if "dibuat di" in txt.lower() or "pembuat laporan" in txt.lower():
+                    break
+                pPr = p._element.pPr
+                if pPr is not None and pPr.xpath('./w:pageBreakBefore'):
+                    total_lines = math.ceil(total_lines / lines_per_page) * lines_per_page
+                if not txt:
+                    total_lines += 0.5
+                    continue
+                char_len = len(txt)
+                p_lines = max(1, math.ceil(char_len / 85.0))
+                total_lines += p_lines * 1.25 + 0.35
+
+            current_page_used = total_lines % lines_per_page
+            remaining_lines = lines_per_page - current_page_used
+            return remaining_lines >= needed_lines
+
         if not wc_cli or not pypdf:
+            # Periksa terlebih dahulu apakah space masih cukup tanpa page break
+            if estimate_space_sufficient(doc):
+                return False
             primary_cand = ordered_candidates[0]
             pPr = primary_cand[1]._element.get_or_add_pPr()
             if not pPr.xpath('./w:pageBreakBefore'):
@@ -1205,12 +1488,6 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
                 personel_pages = {}
                 pembuat_page = None
                 dibuat_page = None
-                primary_cand_page = None
-
-                # Prefix unik paragraf prioritas utama (tindak lanjut & rekomendasi desa terakhir)
-                target_cand_txt = ordered_candidates[0][2]
-                words = re.sub(r"[*•:.]", " ", target_cand_txt).split()
-                target_prefix = " ".join(words[:6]) if len(words) >= 6 else target_cand_txt
 
                 for p_idx, page in enumerate(reader.pages, 1):
                     txt = page.extract_text() or ""
@@ -1218,8 +1495,6 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
                         pembuat_page = p_idx
                     if "Dibuat di" in txt and dibuat_page is None:
                         dibuat_page = p_idx
-                    if target_prefix and target_prefix in txt and primary_cand_page is None:
-                        primary_cand_page = p_idx
                     for name in clean_pelaksana:
                         parts = name.split()
                         prefix = " ".join(parts[:2]) if len(parts) >= 2 else name
@@ -1230,15 +1505,13 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
                     return False, set()
 
                 table_page = min(pages_seen)
-                # Split terdeteksi jika:
+                # Split terdeteksi HANYA JIKA:
                 # 1. Tabel personel terpotong di lebih dari satu halaman (len(pages_seen) > 1)
                 # 2. 'Pembuat Laporan' terpisah dari tabel tanda tangan (pembuat_page != table_page)
                 # 3. 'Dibuat di Semarang' terpisah dari tabel tanda tangan (dibuat_page != table_page)
-                # 4. Tabel berada di halaman baru terpisah dari butir tindak lanjut desa terakhir (primary_cand_page < table_page)
                 is_split = (len(pages_seen) > 1) or \
                            (pembuat_page is not None and pembuat_page != table_page) or \
-                           (dibuat_page is not None and dibuat_page != table_page) or \
-                           (primary_cand_page is not None and primary_cand_page < table_page)
+                           (dibuat_page is not None and dibuat_page != table_page)
                 return is_split, pages_seen
             finally:
                 for f in [temp_docx, temp_pdf]:
@@ -1250,6 +1523,7 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
 
         is_split, pages_seen = check_split_state(doc)
         if not is_split:
+            # Space masih cukup dan seluruh tabel berada pada halaman yang sama tanpa page break
             return False
 
         for c_idx, p_cand, txt in ordered_candidates:
@@ -1263,15 +1537,6 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
                 return True
             else:
                 pPr.remove(br_elem)
-
-        # Fallback kuat: jika deteksi WordCraft masih mendeteksi selisih namun aturan pengguna tegas,
-        # pasang page break pada prioritas utama (Tindak lanjut dan rekomendasi) agar tidak terpotong.
-        primary_cand = ordered_candidates[0]
-        pPr = primary_cand[1]._element.get_or_add_pPr()
-        if not pPr.xpath('./w:pageBreakBefore'):
-            pPr.append(OxmlElement("w:pageBreakBefore"))
-            doc.save(docx_path)
-            return True
 
         return False
     except Exception as ex:
@@ -1314,7 +1579,29 @@ def generate_monev_docx(
     tahun = str(report_data.get("tahun", "2026")).strip()
     nomor_spt = report_data.get("nomor_spt", "CK07/T/Bpbpk11/2026/1766").strip()
     tanggal_spt = format_to_indonesian_date(report_data.get("tanggal_spt", "").strip())
-    tanggal_laporan = format_to_indonesian_date(report_data.get("tanggal_laporan", "21 September 2026").strip())
+    
+    # Resolusi Tanggal Laporan:
+    # Wajib H+1 perjalanan dinas terakhir TAPI tidak boleh weekend (Sabtu & Minggu) dan bukan libur nasional Indonesia.
+    raw_lap = (report_data.get("tanggal_laporan") or "").strip()
+    if raw_lap:
+        tanggal_laporan = ensure_working_day(raw_lap)
+    else:
+        # Hitung H+1 hari kerja dari trip_end_date / tanggal_spt / trip_start_date
+        r_end = (report_data.get("trip_end_date") or "").strip()
+        if not r_end and tanggal_spt:
+            p_s, p_e = parse_date_range_str(tanggal_spt)
+            target_p = p_e or p_s
+            if target_p:
+                indo_m = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+                r_end = f"{target_p[2]} {indo_m[target_p[1]]} {target_p[0]}"
+        if not r_end:
+            r_end = (report_data.get("trip_start_date") or "").strip()
+        if r_end:
+            tanggal_laporan = get_next_working_day(r_end)
+        else:
+            tanggal_laporan = ensure_working_day(f"21 September {tahun}")
+    
+    tanggal_laporan = format_to_indonesian_date(tanggal_laporan)
     tempat_pembuatan = "Semarang"
 
     villages = report_data.get("villages", [])
@@ -1501,6 +1788,7 @@ def generate_monev_docx(
         kec_name = (v.get("kecamatan") or "").strip()
         notes_raw = (v.get("notes") or "").strip()
         narrative = (v.get("narrative") or v.get("hasil") or "").strip()
+        v_kondisi_date = get_village_kondisi_per_date(v, report_data)
 
         # Otomatis ubah catatan lapangan menjadi narasi profesional komprehensif jika belum disusun atau masih berupa raw notes
         if notes_raw and (not narrative or narrative == notes_raw or len(narrative) < 60):
@@ -1510,7 +1798,7 @@ def generate_monev_docx(
                     desa=desa_name,
                     kecamatan=kec_name,
                     kabupaten=kabupaten_full,
-                    tanggal=tanggal_laporan,
+                    tanggal=v_kondisi_date,
                     tahun=tahun
                 )
                 if res_draft.get("success") and res_draft.get("narrative"):
@@ -1526,6 +1814,13 @@ def generate_monev_docx(
 
         # Sanitasi ketat: eliminasi kata 'proyek'/'program'/'program pamsimas' & standarisasi KBBI
         narrative = sanitize_pamsimas_text(narrative)
+        if narrative:
+            narrative = re.sub(
+                r'(kondisi\s+per\s+)[A-Za-z0-9\s–\-]+?(\s+(?:adalah\s+sebagai\s+berikut|menunjukkan|sebagai\s+berikut|merupakan|yakni)|[.:])',
+                rf'\g<1>{v_kondisi_date}\g<2>',
+                narrative,
+                flags=re.I
+            )
 
         heading_text = f"{v_idx + 1}. Desa {desa_name}, Kecamatan {kec_name}" if len(villages) > 1 else f"1. Desa {desa_name}, Kecamatan {kec_name}"
         # Heading desa murni bold hitam Arial 11pt, spasi sebelum 6pt
@@ -1612,7 +1907,7 @@ def generate_monev_docx(
                 insert_before_target(p_blt)
         else:
             p_default = make_xml_paragraph(
-                text=f"Hasil monitoring dan evaluasi pelaksanaan Kegiatan Pamsimas TA {tahun} di Desa {desa_name}, Kecamatan {kec_name}, {kabupaten_full}, kondisi per {tanggal_laporan} menunjukkan pekerjaan fisik dan administrasi berjalan sesuai rencana.",
+                text=f"Hasil monitoring dan evaluasi pelaksanaan Kegiatan Pamsimas TA {tahun} di Desa {desa_name}, Kecamatan {kec_name}, {kabupaten_full}, kondisi per {v_kondisi_date} menunjukkan pekerjaan fisik dan administrasi berjalan sesuai rencana.",
                 font_name="Arial", font_size_pt=11.0, alignment="both", line_spacing=1.5, space_after_pt=4
             )
             insert_before_target(p_default)

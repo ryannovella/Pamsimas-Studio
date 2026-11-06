@@ -40,15 +40,21 @@ def parse_indo_date_to_iso(text: str) -> str:
 
 
 def get_hplus1_iso(iso_date: str) -> str:
-    """Menghitung H+1 dari tanggal ISO YYYY-MM-DD."""
+    """Menghitung H+1 hari kerja berikutnya (melewati akhir pekan & hari libur nasional Indonesia)."""
     if not iso_date:
         return ""
     try:
-        parts = [int(p) for p in iso_date.split("-")]
-        d = datetime(parts[0], parts[1], parts[2]) + timedelta(days=1)
-        return d.strftime("%Y-%m-%d")
+        from app.backend.report_generator import get_next_working_day_iso
+        return get_next_working_day_iso(iso_date)
     except Exception:
-        return ""
+        try:
+            parts = [int(p) for p in iso_date.split("-")]
+            d = datetime(parts[0], parts[1], parts[2]) + timedelta(days=1)
+            while d.weekday() >= 5:
+                d += timedelta(days=1)
+            return d.strftime("%Y-%m-%d")
+        except Exception:
+            return ""
 
 
 def format_indo_date_from_iso(iso_str: str) -> str:
