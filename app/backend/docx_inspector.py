@@ -588,3 +588,288 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
             "items": audit_items
         }
     }
+
+
+def normalize_kabupaten_name(name: str) -> str:
+    """Menormalisasi nama kabupaten untuk perbandingan (menghapus awalan 'kabupaten'/'kab'/'kota' dan lowercase)."""
+    if not name:
+        return ""
+    s = re.sub(r"^(?:kabupaten|kab\.?|kota)\s+", "", name.strip(), flags=re.I)
+    s = re.sub(r"[^a-zA-Z0-9\s]", "", s).strip().lower()
+    return s
+
+
+def merge_inspected_monev_reports(reports: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Menggabungkan 2 hingga 3 laporan monev yang telah diinspeksi.
+    Aturan:
+    1. Validasi kabupaten: Jika kabupaten antar dokumen berbeda, tolak.
+    2. Urutkan dokumen secara kronologis berdasarkan tanggal dinas (trip_start_date).
+    3. Nomor SPT & Tanggal SPT dikosongkan untuk diisi manual oleh user.
+    4. Rentang dinas digabung menjadi rentang dinas penuh (min start s/d max end).
+    5. Tanggal laporan otomatis diset ke H+1 hari kerja setelah tanggal dinas berakhir.
+    6. Daftar pelaksana kedinasan digabung tanpa duplikasi.
+    7. Desa yang sama digabungkan menjadi 1 entri (narasi digabung jika beda, dideduplikasi jika identik).
+    8. Foto-foto diurutkan rapi per desa secara kronologis (foto hari ke-1 disusul foto hari berikutnya).
+    """
+    if not reports:
+        return {"success": False, "error": "Tidak ada dokumen untuk digabungkan"}
+
+    if len(reports) == 1:
+        return reports[0]
+
+    if len(reports) > 3:
+        return {"success": False, "error": "Maksimal 3 dokumen yang dapat digabungkan sekaligus"}
+
+    # 1. Validasi Kabupaten
+    kab_map = {}
+    for idx, rep in enumerate(reports):
+        raw_kab = (rep.get("report_data", {}).get("kabupaten") or "").strip()
+        norm_kab = normalize_kabupaten_name(raw_kab)
+        fn = rep.get("filename", f"Dokumen {idx + 1}")
+        if norm_kab:
+            kab_map[fn] = (raw_kab, norm_kab)
+
+    distinct_norm_kabs = set(k[1] for k in kab_map.values())
+    if len(distinct_norm_kabs) > 1:
+        details = ", ".join([f"'{fn}' ({k[0]})" for fn, k in kab_map.items()])
+        return {
+            "success": False,
+            "error": f"Penggabungan ditolak: Dokumen berasal dari kabupaten yang berbeda ({details}). Seluruh dokumen yang digabungkan harus berada dalam kabupaten yang sama."
+        }
+
+    # Ambil nama kabupaten kanonikal
+    canonical_kabupaten = ""
+    for rep in reports:
+        k = (rep.get("report_data", {}).get("kabupaten") or "").strip()
+        if k:
+            canonical_kabupaten = k
+            break
+
+    # 2. Urutkan Dokumen Secara Kronologis (sesuai trip_start_date)
+    def _get_sort_key(r):
+        rd = r.get("report_data", {})
+        return rd.get("trip_start_date") or rd.get("trip_end_date") or rd.get("tanggal_spt") or "9999-99-99"
+
+    sorted_reports = sorted(reports, key=_get_sort_key)
+
+    # 3. Rentang Dinas Penuh & Tanggal Laporan
+    all_start_dates = []
+    all_end_dates = []
+    for rep in sorted_reports:
+        rd = rep.get("report_data", {})
+        s = (rd.get("trip_start_date") or "").strip()
+        e = (rd.get("trip_end_date") or "").strip()
+        if s:
+            all_start_dates.append(s)
+        if e:
+            all_end_dates.append(e)
+
+    all_dates = sorted(list(set(all_start_dates + all_end_dates)))
+    if all_dates:
+        merged_trip_start = all_dates[0]
+        merged_trip_end = all_dates[-1]
+    else:
+        merged_trip_start = ""
+        merged_trip_end = ""
+
+    # Tanggal Laporan: H+1 hari kerja setelah akhir dinas
+    if merged_trip_end:
+        tanggal_laporan_iso = get_hplus1_iso(merged_trip_end)
+    elif merged_trip_start:
+        tanggal_laporan_iso = get_hplus1_iso(merged_trip_start)
+    else:
+        tanggal_laporan_iso = ""
+
+    # Nomor & Tanggal SPT dikosongkan agar user mengisi sendiri
+    nomor_spt = ""
+    tanggal_spt_iso = ""
+
+    # Tahun & Tempat Pembuatan
+    tahun = merged_trip_start[:4] if (merged_trip_start and len(merged_trip_start) >= 4) else (sorted_reports[0].get("report_data", {}).get("tahun") or "2026")
+    tempat_pembuatan = sorted_reports[0].get("report_data", {}).get("tempat_pembuatan") or "Semarang"
+
+    # 4. Gabungkan Daftar Pelaksana Kedinasan (Deduplikasi nama)
+    merged_pelaksana = []
+    seen_pelaksana = set()
+    for rep in sorted_reports:
+        for p in rep.get("report_data", {}).get("pelaksana", []):
+            if not p:
+                continue
+            p_clean = normalize_personel_title(str(p).strip())
+            if not p_clean:
+                continue
+            p_key = re.sub(r"[^a-zA-Z0-9]", "", p_clean.lower())
+            if p_key not in seen_pelaksana:
+                seen_pelaksana.add(p_key)
+                merged_pelaksana.append(p_clean)
+
+    include_pelaksana = any(rep.get("report_data", {}).get("include_pelaksana", False) for rep in sorted_reports) or len(merged_pelaksana) > 0
+
+    # 5. Gabungkan Desa & Narasi / Catatan Lapangan
+    def _merge_narratives(t1: str, t2: str) -> str:
+        s1 = (t1 or "").strip()
+        s2 = (t2 or "").strip()
+        if not s1:
+            return s2
+        if not s2:
+            return s1
+        if s1 == s2 or s2 in s1:
+            return s1
+        if s1 in s2:
+            return s2
+        return f"{s1}\n\n{s2}"
+
+    merged_villages = []
+    village_map = {}  # key: norm_desa -> village dict
+    for rep in sorted_reports:
+        for v in rep.get("report_data", {}).get("villages", []):
+            d_name = (v.get("desa") or "").strip()
+            if not d_name:
+                continue
+            d_key = re.sub(r"[^a-zA-Z0-9]", "", d_name.lower())
+            if d_key in village_map:
+                target_v = village_map[d_key]
+                if not target_v.get("kecamatan") and v.get("kecamatan"):
+                    target_v["kecamatan"] = v.get("kecamatan")
+                target_v["narrative"] = _merge_narratives(target_v.get("narrative", ""), v.get("narrative", ""))
+                target_v["notes"] = target_v["narrative"]
+            else:
+                new_v = {
+                    "id": v.get("id") or f"v_{d_key}",
+                    "desa": d_name,
+                    "kecamatan": v.get("kecamatan") or "",
+                    "narrative": (v.get("narrative") or "").strip(),
+                    "notes": (v.get("notes") or v.get("narrative") or "").strip()
+                }
+                village_map[d_key] = new_v
+                merged_villages.append(new_v)
+
+    if not merged_villages:
+        merged_villages = [{
+            "id": "v_init",
+            "desa": "",
+            "kecamatan": "",
+            "notes": "",
+            "narrative": ""
+        }]
+
+    # 6. Susun Foto Berdasarkan Desa & Kronologis Dokumen
+    # Foto dikelompokkan sesuai urutan desa, dan di dalam desa diurutkan dari dokumen hari ke-1, ke-2, dst.
+    merged_photos = []
+    seen_photo_keys = set()
+
+    for v in merged_villages:
+        v_desa_norm = re.sub(r"[^a-zA-Z0-9]", "", v.get("desa", "").lower())
+        if not v_desa_norm:
+            continue
+        for rep in sorted_reports:
+            for p in rep.get("photos", []):
+                p_desa = (p.get("desa") or "").strip()
+                p_desa_norm = re.sub(r"[^a-zA-Z0-9]", "", p_desa.lower())
+                if p_desa_norm == v_desa_norm:
+                    # Deduplikasi foto jika persis sama
+                    p_key = p.get("url") or (p.get("filename"), p.get("width"), p.get("height"), p_desa)
+                    if p_key in seen_photo_keys:
+                        continue
+                    seen_photo_keys.add(p_key)
+                    # Pastikan info kabupaten konsisten
+                    p_copy = dict(p)
+                    if not p_copy.get("kabupaten") and canonical_kabupaten:
+                        p_copy["kabupaten"] = canonical_kabupaten
+                    merged_photos.append(p_copy)
+
+    # Tambahkan sisa foto yang belum terpetakan ke desa manapun
+    for rep in sorted_reports:
+        for p in rep.get("photos", []):
+            p_desa = (p.get("desa") or "").strip()
+            p_key = p.get("url") or (p.get("filename"), p.get("width"), p.get("height"), p_desa)
+            if p_key not in seen_photo_keys:
+                seen_photo_keys.add(p_key)
+                p_copy = dict(p)
+                if not p_copy.get("kabupaten") and canonical_kabupaten:
+                    p_copy["kabupaten"] = canonical_kabupaten
+                merged_photos.append(p_copy)
+
+    # 7. Susun Audit Report Hasil Merge
+    audit_items = []
+    # Item 1: Kabupaten
+    if canonical_kabupaten:
+        audit_items.append({"field": "kabupaten", "status": "complete", "label": "Kabupaten", "message": f"Terdeteksi: Kabupaten {canonical_kabupaten}"})
+    else:
+        audit_items.append({"field": "kabupaten", "status": "incomplete", "label": "Kabupaten", "message": "Belum terdeteksi di dokumen"})
+
+    # Item 2: Nomor SPT
+    audit_items.append({"field": "nomor_spt", "status": "incomplete", "label": "Nomor SPT", "message": "Dikosongkan otomatis saat merge (silakan diisi manual)"})
+
+    # Item 3: Tanggal SPT
+    audit_items.append({"field": "tanggal_spt", "status": "incomplete", "label": "Tanggal SPT", "message": "Dikosongkan otomatis saat merge (silakan diisi manual)"})
+
+    # Item 4: Jadwal Perjalanan Dinas
+    if merged_trip_start:
+        trip_txt = f"{merged_trip_start} s/d {merged_trip_end}" if merged_trip_end and merged_trip_end != merged_trip_start else f"{merged_trip_start} (1 Hari)"
+        audit_items.append({"field": "trip_dates", "status": "complete", "label": "Jadwal Dinas", "message": f"Rentang dinas gabungan: {trip_txt}"})
+    else:
+        audit_items.append({"field": "trip_dates", "status": "incomplete", "label": "Jadwal Dinas", "message": "Belum tercantum di dokumen"})
+
+    # Item 5: Tanggal Laporan
+    if tanggal_laporan_iso:
+        audit_items.append({"field": "tanggal_laporan", "status": "complete", "label": "Tanggal Laporan", "message": f"Otomatis H+1 hari kerja setelah dinas berakhir: {tanggal_laporan_iso}"})
+    else:
+        audit_items.append({"field": "tanggal_laporan", "status": "incomplete", "label": "Tanggal Laporan", "message": "Belum tercantum di dokumen"})
+
+    # Item 6: Tabel Pelaksana
+    if merged_pelaksana:
+        audit_items.append({"field": "pelaksana", "status": "complete", "label": "Tabel Pelaksana", "message": f"Ditemukan {len(merged_pelaksana)} personil gabungan tanpa duplikasi"})
+    else:
+        audit_items.append({"field": "pelaksana", "status": "incomplete", "label": "Tabel Pelaksana", "message": "Belum ada personil pelaksana dinas"})
+
+    # Item 7: Desa & Narasi
+    valid_villages = [v for v in merged_villages if v.get("desa")]
+    if valid_villages:
+        v_names = ", ".join([v["desa"] for v in valid_villages[:3]]) + ("..." if len(valid_villages) > 3 else "")
+        audit_items.append({"field": "villages", "status": "complete", "label": "Desa & Narasi", "message": f"Ditemukan {len(valid_villages)} desa gabungan ({v_names})"})
+    else:
+        audit_items.append({"field": "villages", "status": "incomplete", "label": "Desa & Narasi", "message": "Belum ada desa yang teridentifikasi"})
+
+    # Item 8: Foto Dokumentasi
+    if merged_photos:
+        audit_items.append({"field": "photos", "status": "complete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(merged_photos)} foto dokumentasi tersusun berurutan"})
+    else:
+        audit_items.append({"field": "photos", "status": "incomplete", "label": "Foto Dokumentasi", "message": "Belum ada foto dokumentasi lapangan"})
+
+    completed_cnt = sum(1 for a in audit_items if a["status"] == "complete")
+    total_cnt = len(audit_items)
+    score_pct = int((completed_cnt / total_cnt) * 100)
+    summary_text = f"{len(sorted_reports)} Dokumen berhasil digabungkan ({score_pct}% Terisi). Rentang dinas {merged_trip_start} s/d {merged_trip_end}, {len(valid_villages)} desa, dan {len(merged_photos)} foto berhasil disatukan."
+
+    filenames = [r.get("filename", "") for r in sorted_reports if r.get("filename")]
+    combined_filename = " + ".join(filenames) if filenames else "Dokumen-Gabungan.docx"
+
+    return {
+        "success": True,
+        "is_merged": True,
+        "merged_count": len(sorted_reports),
+        "filename": combined_filename,
+        "report_data": {
+            "kabupaten": canonical_kabupaten,
+            "tahun": tahun,
+            "nomor_spt": nomor_spt,
+            "tanggal_spt": tanggal_spt_iso,
+            "tanggal_laporan": tanggal_laporan_iso,
+            "tempat_pembuatan": tempat_pembuatan,
+            "trip_start_date": merged_trip_start,
+            "trip_end_date": merged_trip_end,
+            "include_pelaksana": include_pelaksana,
+            "pelaksana": merged_pelaksana,
+            "villages": merged_villages
+        },
+        "photos": merged_photos,
+        "audit_report": {
+            "score_percent": score_pct,
+            "completed_count": completed_cnt,
+            "incomplete_count": total_cnt - completed_cnt,
+            "summary": summary_text,
+            "items": audit_items
+        }
+    }

@@ -32,7 +32,7 @@ from app.backend.report_generator import (
     build_structured_monev_narrative_local, format_to_indonesian_date,
     normalize_personel_title, get_village_kondisi_per_date, get_next_working_day
 )
-from app.backend.docx_inspector import inspect_and_import_monev_docx
+from app.backend.docx_inspector import inspect_and_import_monev_docx, merge_inspected_monev_reports
 from app.backend.updater import get_version_info, check_for_updates, apply_update
 
 app = Bottle()
@@ -384,22 +384,59 @@ def api_report_import_existing_docx():
     inspects present and missing sections, extracts administrative data,
     personnel, villages, field notes/narratives, and embedded photos,
     and returns a structured data payload with an audit readiness report.
+    Supports single docx or merging multiple (up to 3) docx files.
     """
     try:
-        upload = request.files.get("file") or request.files.get("doc_file")
-        if not upload or not upload.filename.lower().endswith(".docx"):
+        uploads = []
+        if hasattr(request.files, "getall"):
+            uploads = request.files.getall("files") or request.files.getall("file")
+        if not uploads:
+            single = request.files.get("files") or request.files.get("file") or request.files.get("doc_file")
+            if single:
+                uploads = [single]
+
+        if not uploads:
             response.status = 400
             response.content_type = "application/json"
             return json.dumps({"success": False, "error": "Harap pilih berkas Word (.docx) yang valid"})
 
-        os.makedirs(DOCX_UPLOADS_DIR, exist_ok=True)
-        filename = upload.filename
-        save_path = os.path.join(DOCX_UPLOADS_DIR, f"inspect_{uuid.uuid4().hex[:8]}_{filename}")
-        upload.save(save_path)
+        if len(uploads) > 3:
+            response.status = 400
+            response.content_type = "application/json"
+            return json.dumps({"success": False, "error": "Maksimal 3 dokumen yang dapat digabungkan sekaligus"})
 
-        res = inspect_and_import_monev_docx(save_path)
+        os.makedirs(DOCX_UPLOADS_DIR, exist_ok=True)
+
+        inspected_reports = []
+        for upload in uploads:
+            if not upload or not getattr(upload, "filename", "").lower().endswith(".docx"):
+                response.status = 400
+                response.content_type = "application/json"
+                return json.dumps({"success": False, "error": f"Berkas '{getattr(upload, 'filename', 'unknown')}' bukan berkas Word (.docx) yang valid"})
+
+            filename = upload.filename
+            save_path = os.path.join(DOCX_UPLOADS_DIR, f"inspect_{uuid.uuid4().hex[:8]}_{filename}")
+            upload.save(save_path)
+
+            res = inspect_and_import_monev_docx(save_path)
+            if not res.get("success"):
+                response.status = 400
+                response.content_type = "application/json"
+                return json.dumps({"success": False, "error": f"Gagal membaca '{filename}': {res.get('error')}"})
+            res["filename"] = filename
+            inspected_reports.append(res)
+
+        if len(inspected_reports) == 1:
+            final_res = inspected_reports[0]
+        else:
+            final_res = merge_inspected_monev_reports(inspected_reports)
+            if not final_res.get("success"):
+                response.status = 400
+                response.content_type = "application/json"
+                return json.dumps(final_res)
+
         response.content_type = "application/json"
-        return json.dumps(res)
+        return json.dumps(final_res)
     except Exception as e:
         log_error("api_report_import_existing_docx", e)
         response.status = 500

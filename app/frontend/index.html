@@ -55,9 +55,9 @@
           <span>Kelengkapan: <strong id="reportAuditToolbarScore" style="color:var(--text-main);">0%</strong></span>
         </button>
 
-        <!-- Upload Existing Docx -->
-        <input type="file" id="reportExistingDocxInput" accept=".docx" style="display:none;" onchange="window.reportBuilder.handleExistingDocxUpload(event)">
-        <button type="button" class="btn btn-secondary btn-sm" id="btnUploadExistingDocx" onclick="document.getElementById('reportExistingDocxInput').click()" title="Upload file laporan Word (.docx) (Ctrl+O)">
+        <!-- Upload Existing Docx (Supports 1-3 files to merge) -->
+        <input type="file" id="reportExistingDocxInput" accept=".docx" multiple style="display:none;" onchange="window.reportBuilder.handleExistingDocxUpload(event)">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnUploadExistingDocx" onclick="document.getElementById('reportExistingDocxInput').click()" title="Upload & Merge file laporan Word (.docx) (Bisa pilih hingga 3 berkas sekaligus) (Ctrl+O)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           <span>Upload .docx</span>
         </button>

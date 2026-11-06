@@ -3703,28 +3703,40 @@ export class ReportBuilder {
   // EXISTING / IN-PROGRESS DOCX IMPORT & AUDIT DETECTOR
   // =========================================================
   async handleExistingDocxUpload(event) {
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
+    const rawFiles = event.target.files ? Array.from(event.target.files) : [];
+    if (rawFiles.length === 0) return;
 
-    if (!file.name.toLowerCase().endsWith('.docx')) {
-      this.showToast('Pilih berkas dokumen Word (.docx).', 'warning');
+    if (rawFiles.length > 3) {
+      this.showToast('Maksimal 3 dokumen yang dapat digabungkan sekaligus.', 'warning');
       event.target.value = '';
       return;
     }
 
+    for (const f of rawFiles) {
+      if (!f.name.toLowerCase().endsWith('.docx')) {
+        this.showToast(`Berkas "${f.name}" bukan berkas Word (.docx).`, 'warning');
+        event.target.value = '';
+        return;
+      }
+    }
+
+    const isMultiple = rawFiles.length > 1;
     const btn = document.getElementById('btnUploadExistingDocx');
     const origBtnHtml = btn ? btn.innerHTML : '';
     if (btn) {
       btn.disabled = true;
       btn.innerHTML = `
         <span class="spinner-border spinner-border-sm" role="status" style="width:13px; height:13px; border-width:2px; display:inline-block; border-radius:50%; border:2px solid #38bdf8; border-top-color:transparent; animation:spin 0.6s linear infinite; margin-right:4px;"></span>
-        <span>Membaca Dokumen...</span>
+        <span>${isMultiple ? `Menggabungkan ${rawFiles.length} Dokumen...` : 'Membaca Dokumen...'}</span>
       `;
     }
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      for (const f of rawFiles) {
+        formData.append('files', f);
+      }
+      formData.append('file', rawFiles[0]);
 
       const res = await fetch('/api/report/import_existing_docx', {
         method: 'POST',
@@ -3732,7 +3744,8 @@ export class ReportBuilder {
       });
 
       if (!res.ok) {
-        throw new Error(`Server status ${res.status}`);
+        const errJson = await res.json().catch(() => null);
+        throw new Error((errJson && errJson.error) || `Server status ${res.status}`);
       }
 
       const data = await res.json();
@@ -3801,10 +3814,17 @@ export class ReportBuilder {
             const key = dName.toLowerCase();
             if (seen.has(key)) {
               const existing = seen.get(key);
-              if (!existing.notes && v.notes) existing.notes = v.notes;
-              else if (existing.notes && v.notes && existing.notes !== v.notes) existing.notes += '\n\n' + v.notes;
-              if (!existing.narrative && v.narrative) existing.narrative = v.narrative;
-              else if (existing.narrative && v.narrative && existing.narrative !== v.narrative) existing.narrative += '\n\n' + v.narrative;
+              const mergeText = (oldT, newT) => {
+                const s1 = (oldT || '').trim();
+                const s2 = (newT || '').trim();
+                if (!s1) return s2;
+                if (!s2) return s1;
+                if (s1 === s2 || s1.includes(s2)) return s1;
+                if (s2.includes(s1)) return s2;
+                return s1 + '\n\n' + s2;
+              };
+              existing.notes = mergeText(existing.notes, v.notes);
+              existing.narrative = mergeText(existing.narrative, v.narrative);
               if (!existing.kecamatan && v.kecamatan) existing.kecamatan = v.kecamatan;
             } else {
               const item = {
@@ -3909,12 +3929,18 @@ export class ReportBuilder {
 
       // 6. Render Panel Audit Kelengkapan Dokumen
       if (data.audit_report) {
-        this.currentLoadedDocxName = data.filename || file.name;
+        this.currentLoadedDocxName = data.filename || (rawFiles.length === 1 ? rawFiles[0].name : 'Dokumen-Gabungan.docx');
         this.renderAuditCard(data.audit_report, this.currentLoadedDocxName, true);
       }
 
       this.updatePhotoUploadState();
-      this.showToast(`Dokumen "${file.name}" berhasil dibuka dan dianalisis.`, 'success');
+      if (data.is_merged || rawFiles.length > 1) {
+        const vCount = (this.villages || []).filter(v => v.desa).length;
+        const pCount = (this.photos || []).length;
+        this.showToast(`Berhasil menggabungkan ${data.merged_count || rawFiles.length} dokumen (${vCount} Desa, ${pCount} Foto). Nomor & Tanggal SPT dikosongkan untuk diisi manual.`, 'success', 6000);
+      } else {
+        this.showToast(`Dokumen "${rawFiles[0].name}" berhasil dibuka dan dianalisis.`, 'success');
+      }
 
     } catch (err) {
       this.showToast('Gagal membaca dokumen: ' + (err.message || 'Terjadi kesalahan'), 'error');
