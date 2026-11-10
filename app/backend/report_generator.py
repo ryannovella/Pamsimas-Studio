@@ -38,6 +38,7 @@ from app.backend.stamper import apply_stamp
 from app.backend.logger import log_error
 
 DEFAULT_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+DEFAULT_FALLBACK_API_KEY = os.environ.get("GEMINI_API_KEY_FALLBACK", "")
 GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 SYSTEM_INSTRUCTION_ANTI_SLOP = """Anda adalah penyusun laporan teknis resmi Kegiatan Pamsimas (Penyediaan Air Minum dan Sanitasi Berbasis Masyarakat) Balai Prasarana Permukiman Wilayah (BPPW / BPBPK) Jawa Tengah, Kementerian Pekerjaan Umum (Kementerian PU).
@@ -425,7 +426,18 @@ def draft_village_narrative(
             "fallback": False
         }
 
-    key = api_key or os.environ.get("GEMINI_API_KEY") or DEFAULT_API_KEY
+    keys_to_try = []
+    if api_key:
+        keys_to_try.append(api_key.strip())
+    env_primary = (os.environ.get("GEMINI_API_KEY") or DEFAULT_API_KEY or "").strip()
+    if env_primary and env_primary not in keys_to_try:
+        keys_to_try.append(env_primary)
+    env_fallback = (os.environ.get("GEMINI_API_KEY_FALLBACK") or DEFAULT_FALLBACK_API_KEY or "").strip()
+    if env_fallback and env_fallback not in keys_to_try:
+        keys_to_try.append(env_fallback)
+
+    if not keys_to_try:
+        keys_to_try.append("")
 
     extra_str = ""
     if extra_data:
@@ -485,85 +497,96 @@ def draft_village_narrative(
     last_err = ""
     last_refusal_text = ""
 
-    for m in models_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
-        # Jika model sebelumnya menolak karena kata kiasan/aneh, gunakan instruksi abstraksi teknis objektif
-        current_payload = payload
-        if last_refusal_text:
-            abstracted_prompt = (
-                prompt
-                + "\n\nINSTRUKSI KHUSUS ABSTRAKSI KEDINASAN:\n"
-                "Apabila catatan lapangan di atas mengandung ungkapan eksperimental, kiasan, hiperbola, atau istilah non-standar, "
-                "JANGAN MENOLAK pembuatan laporan. Saring, netralkan, dan abstraksikan substansinya menjadi narasi teknis "
-                "pelaksanaan Kegiatan Pamsimas yang 100% formal, sopan, objektif, dan sesuai etika dokumen kedinasan Kementerian PU "
-                "(fokuskan pada aspek karakteristik sumber air, kondisi teknis sarana di lapangan, penguatan kelembagaan KPSPAMS, "
-                "serta koordinasi pemerintah desa dan masyarakat)."
-            )
-            current_payload = {
-                **payload,
-                "contents": [{"parts": [{"text": abstracted_prompt}]}]
-            }
+    for current_key in keys_to_try:
+        if not current_key:
+            continue
+        key_exhausted = False
+        for m in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={current_key}"
+            # Jika model sebelumnya menolak karena kata kiasan/aneh, gunakan instruksi abstraksi teknis objektif
+            current_payload = payload
+            if last_refusal_text:
+                abstracted_prompt = (
+                    prompt
+                    + "\n\nINSTRUKSI KHUSUS ABSTRAKSI KEDINASAN:\n"
+                    "Apabila catatan lapangan di atas mengandung ungkapan eksperimental, kiasan, hiperbola, atau istilah non-standar, "
+                    "JANGAN MENOLAK pembuatan laporan. Saring, netralkan, dan abstraksikan substansinya menjadi narasi teknis "
+                    "pelaksanaan Kegiatan Pamsimas yang 100% formal, sopan, objektif, dan sesuai etika dokumen kedinasan Kementerian PU "
+                    "(fokuskan pada aspek karakteristik sumber air, kondisi teknis sarana di lapangan, penguatan kelembagaan KPSPAMS, "
+                    "serta koordinasi pemerintah desa dan masyarakat)."
+                )
+                current_payload = {
+                    **payload,
+                    "contents": [{"parts": [{"text": abstracted_prompt}]}]
+                }
 
-        try:
-            resp = requests.post(url, json=current_payload, headers={"Content-Type": "application/json"}, timeout=20)
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    cand = candidates[0]
-                    finish_reason = cand.get("finishReason", "")
-                    parts = cand.get("content", {}).get("parts", [])
-                    # Gabungkan seluruh bagian teks non-thought agar tidak pernah terpotong
-                    text_chunks = [
-                        p.get("text", "")
-                        for p in parts
-                        if isinstance(p, dict) and not p.get("thought") and p.get("text")
-                    ]
-                    text = "\n".join(text_chunks).strip()
-                    if not text and parts and isinstance(parts[0], dict):
-                        text = (parts[0].get("text") or "").strip()
+            try:
+                resp = requests.post(url, json=current_payload, headers={"Content-Type": "application/json"}, timeout=20)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        cand = candidates[0]
+                        finish_reason = cand.get("finishReason", "")
+                        parts = cand.get("content", {}).get("parts", [])
+                        # Gabungkan seluruh bagian teks non-thought agar tidak pernah terpotong
+                        text_chunks = [
+                            p.get("text", "")
+                            for p in parts
+                            if isinstance(p, dict) and not p.get("thought") and p.get("text")
+                        ]
+                        text = "\n".join(text_chunks).strip()
+                        if not text and parts and isinstance(parts[0], dict):
+                            text = (parts[0].get("text") or "").strip()
 
-                    if text:
-                        # Post-processing Anti-Slop & KBBI enforcement
-                        text = sanitize_pamsimas_text(text)
-                        if formatted_tgl:
-                            text = re.sub(
-                                r'(kondisi\s+per\s+)[A-Za-z0-9\s–\-]+?(\s+(?:adalah\s+sebagai\s+berikut|menunjukkan|sebagai\s+berikut|merupakan|yakni)|[.:])',
-                                rf'\g<1>{formatted_tgl}\g<2>',
-                                text,
-                                flags=re.I
+                        if text:
+                            # Post-processing Anti-Slop & KBBI enforcement
+                            text = sanitize_pamsimas_text(text)
+                            if formatted_tgl:
+                                text = re.sub(
+                                    r'(kondisi\s+per\s+)[A-Za-z0-9\s–\-]+?(\s+(?:adalah\s+sebagai\s+berikut|menunjukkan|sebagai\s+berikut|merupakan|yakni)|[.:])',
+                                    rf'\g<1>{formatted_tgl}\g<2>',
+                                    text,
+                                    flags=re.I
+                                )
+
+                            # Jika terpotong oleh MAX_TOKENS di tengah kalimat, coba model berikutnya
+                            if finish_reason == "MAX_TOKENS" and not text.endswith((".", "!", "?", ":", ")")):
+                                last_err = f"Model {m} truncated by MAX_TOKENS"
+                                continue
+
+                            # Cek apakah output berupa kalimat penolakan AI (Refusal)
+                            if is_ai_refusal_text(text):
+                                # Simpan teks penolakan yang utuh (tidak terpotong) dan coba model berikutnya dengan abstraksi
+                                if len(text) > len(last_refusal_text):
+                                    last_refusal_text = text
+                                continue
+
+                            usage = data.get("usageMetadata", {})
+                            return {
+                                "success": True,
+                                "narrative": text,
+                                "model_used": m,
+                                "token_usage": usage
+                            }
+                        elif finish_reason in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "RECITATION"):
+                            last_refusal_text = (
+                                last_refusal_text
+                                or "Catatan lapangan mengandung istilah yang memerlukan abstraksi teknis."
                             )
-
-                        # Jika terpotong oleh MAX_TOKENS di tengah kalimat, coba model berikutnya
-                        if finish_reason == "MAX_TOKENS" and not text.endswith((".", "!", "?", ":", ")")):
-                            last_err = f"Model {m} truncated by MAX_TOKENS"
                             continue
-
-                        # Cek apakah output berupa kalimat penolakan AI (Refusal)
-                        if is_ai_refusal_text(text):
-                            # Simpan teks penolakan yang utuh (tidak terpotong) dan coba model berikutnya dengan abstraksi
-                            if len(text) > len(last_refusal_text):
-                                last_refusal_text = text
-                            continue
-
-                        usage = data.get("usageMetadata", {})
-                        return {
-                            "success": True,
-                            "narrative": text,
-                            "model_used": m,
-                            "token_usage": usage
-                        }
-                    elif finish_reason in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "RECITATION"):
-                        last_refusal_text = (
-                            last_refusal_text
-                            or "Catatan lapangan mengandung istilah yang memerlukan abstraksi teknis."
-                        )
-                        continue
-            else:
-                last_err = f"Model {m} status {resp.status_code}: {resp.text[:120]}"
+                else:
+                    last_err = f"Model {m} status {resp.status_code}: {resp.text[:120]}"
+                    # Jika kuota habis atau autentikasi gagal (401, 402, 403, 429), segera beralih ke fallback key berikutnya
+                    if resp.status_code in (401, 402, 403, 429):
+                        key_exhausted = True
+                        break
+                    continue
+            except Exception as e:
+                last_err = f"Model {m} error: {str(e)}"
                 continue
-        except Exception as e:
-            last_err = f"Model {m} error: {str(e)}"
+
+        if key_exhausted:
             continue
 
     # Jika seluruh model menolak karena kebijakan konten namun ada respons utuh dari model,

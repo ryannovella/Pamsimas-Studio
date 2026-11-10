@@ -11,6 +11,7 @@ echo ========================================================
 if exist "%~dp0.env" (
     for /f "usebackq tokens=1,* delims==" %%i in ("%~dp0.env") do (
         if /i "%%i"=="GEMINI_API_KEY" set "GEMINI_API_KEY=%%j"
+        if /i "%%i"=="GEMINI_API_KEY_FALLBACK" set "GEMINI_API_KEY_FALLBACK=%%j"
     )
 )
 
