@@ -426,6 +426,9 @@ def draft_village_narrative(
             "fallback": False
         }
 
+    from app.backend.config import reload_env_vars
+    reload_env_vars()
+
     keys_to_try = []
     if api_key:
         keys_to_try.append(api_key.strip())
@@ -576,14 +579,15 @@ def draft_village_narrative(
                             )
                             continue
                 else:
-                    last_err = f"Model {m} status {resp.status_code}: {resp.text[:120]}"
-                    # Jika kuota habis atau autentikasi gagal (401, 402, 403, 429), segera beralih ke fallback key berikutnya
-                    if resp.status_code in (401, 402, 403, 429):
+                    err_resp_snippet = resp.text[:120].replace('\n', ' ')
+                    last_err = f"Key ...{current_key[-6:]} Model {m} HTTP {resp.status_code}: {err_resp_snippet}"
+                    # Jika kuota habis atau autentikasi gagal (400 Invalid Argument key, 401, 402, 403, 429), segera beralih ke fallback key berikutnya
+                    if resp.status_code in (400, 401, 402, 403, 429):
                         key_exhausted = True
                         break
                     continue
             except Exception as e:
-                last_err = f"Model {m} error: {str(e)}"
+                last_err = f"Key ...{current_key[-6:]} Model {m} error: {str(e)}"
                 continue
 
         if key_exhausted:
@@ -601,12 +605,14 @@ def draft_village_narrative(
 
     # RESILIENT FALLBACK: Jika seluruh model AI terkendala (koneksi internet offline / kuota habis),
     # hentikan pembuatan laporan dan kembalikan status kegagalan koneksi agar tidak menghasilkan laporan kosong/kurang lengkap.
+    if last_err:
+        log_error("draft_village_narrative_all_failed", details=f"Keys tried: {len(keys_to_try)} | Last error: {last_err}")
     return {
         "success": False,
         "narrative": "",
         "model_used": "none",
         "fallback": True,
-        "error": "Koneksi internet tidak terhubung atau layanan AI sedang tidak dapat dijangkau. Pembuatan laporan dihentikan agar catatan lapangan dapat diolah secara lengkap."
+        "error": f"Layanan AI tidak dapat dijangkau ({last_err}). Pembuatan laporan dihentikan agar catatan lapangan dapat diolah secara lengkap." if last_err else "Koneksi internet tidak terhubung atau layanan AI sedang tidak dapat dijangkau. Pembuatan laporan dihentikan agar catatan lapangan dapat diolah secara lengkap."
     }
 
 

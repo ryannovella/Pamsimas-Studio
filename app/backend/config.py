@@ -8,16 +8,20 @@ BASE_DIR  = os.path.dirname(_APP_DIR)                    # .../Laporan Monev Pam
 
 # Load .env if present
 _env_path = os.path.join(BASE_DIR, ".env")
-if os.path.exists(_env_path):
-    try:
-        with open(_env_path, "r", encoding="utf-8") as _f:
-            for _line in _f:
-                _line = _line.strip()
-                if _line and not _line.startswith("#") and "=" in _line:
-                    _k, _v = _line.split("=", 1)
-                    os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
-    except Exception:
-        pass
+def reload_env_vars():
+    """Memuat dan memperbarui variabel environment dari file .env secara realtime."""
+    if os.path.exists(_env_path):
+        try:
+            with open(_env_path, "r", encoding="utf-8") as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if _line and not _line.startswith("#") and "=" in _line:
+                        _k, _v = _line.split("=", 1)
+                        os.environ[_k.strip()] = _v.strip().strip('"').strip("'")
+        except Exception:
+            pass
+
+reload_env_vars()
 
 WEB_DIR        = os.path.join(BASE_DIR, "app", "frontend")
 DATA_DIR       = os.path.join(BASE_DIR, "data")
