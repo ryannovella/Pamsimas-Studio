@@ -338,13 +338,29 @@ def api_report_generate_docx():
             p_data = dict(p)
             url = p.get("dataUrl") or p.get("url") or ""
             target_bytes = None
-            if url.startswith("/temp_media/"):
-                fname = os.path.basename(url.split("?")[0])
-                for root, _, fs in os.walk(DOCX_MEDIA_DIR):
-                    if fname in fs:
-                        with open(os.path.join(root, fname), "rb") as f:
-                            target_bytes = f.read()
-                        break
+            if "/temp_media/" in url:
+                clean_rel = url.split("/temp_media/", 1)[1].split("?")[0].lstrip("/\\")
+                exact_path = os.path.abspath(os.path.join(DOCX_MEDIA_DIR, os.path.normpath(clean_rel)))
+                media_root = os.path.abspath(DOCX_MEDIA_DIR)
+                try:
+                    is_within_media = os.path.commonpath([media_root, exact_path]) == media_root
+                except Exception:
+                    is_within_media = False
+
+                if is_within_media and os.path.isfile(exact_path):
+                    with open(exact_path, "rb") as f:
+                        target_bytes = f.read()
+                else:
+                    fname = os.path.basename(clean_rel)
+                    for root, _, fs in os.walk(DOCX_MEDIA_DIR):
+                        if fname in fs:
+                            cand_p = os.path.join(root, fname)
+                            try:
+                                with open(cand_p, "rb") as f:
+                                    target_bytes = f.read()
+                                break
+                            except Exception:
+                                pass
             elif url.startswith("data:image"):
                 try:
                     target_bytes = base64.b64decode(url.split(",", 1)[1])
@@ -357,6 +373,24 @@ def api_report_generate_docx():
             if target_bytes:
                 p_data["bytes"] = target_bytes
                 processed_photos.append(p_data)
+            elif p.get("path"):
+                cand_path = os.path.abspath(p["path"])
+                allowed_roots = [os.path.abspath(DOCX_MEDIA_DIR), os.path.abspath(DOCX_UPLOADS_DIR)]
+                is_safe = False
+                for ar in allowed_roots:
+                    try:
+                        if os.path.commonpath([ar, cand_path]) == ar:
+                            is_safe = True
+                            break
+                    except Exception:
+                        pass
+                if is_safe and os.path.isfile(cand_path):
+                    try:
+                        with open(cand_path, "rb") as f:
+                            p_data["bytes"] = f.read()
+                        processed_photos.append(p_data)
+                    except Exception:
+                        pass
 
         output_file = generate_monev_docx(report_data, processed_photos)
         fn = os.path.basename(output_file)

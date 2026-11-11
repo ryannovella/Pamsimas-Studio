@@ -1,11 +1,11 @@
 {
   "version": "4.1",
-  "commit": "4bc8e61",
-  "commit_full": "4bc8e61748abfcbe496cfd02f250445ac24b0771",
-  "commit_date": "2026-11-06",
-  "commit_message": "feat(report): support multi-docx upload and intelligent chronological report merging",
-  "commit_count": 32,
-  "display_tag": "v4.1.32",
-  "display": "v4.1.32 (4bc8e61)",
-  "full_display": "v4.1.32 · 4bc8e61 (2026-11-06)"
+  "commit": "bafd7f4",
+  "commit_full": "bafd7f4eecfa1784e0fe330713badaf3a166f79e",
+  "commit_date": "2026-11-11",
+  "commit_message": "fix(report): prevent temp media purge and secure photo resolution during multi-docx merge",
+  "commit_count": 37,
+  "display_tag": "v4.1.37",
+  "display": "v4.1.37",
+  "full_display": "v4.1.37 (2026-11-11)"
 }

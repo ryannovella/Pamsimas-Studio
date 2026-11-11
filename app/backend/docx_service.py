@@ -601,20 +601,23 @@ def format_detected_date(day: int, month_name: str, year: int, default_time: str
     except Exception:
         return f"{day} {month_name.capitalize()} {year} {default_time} WIB"
 
-def clear_media_cache(keep_tokens: Optional[List[str]] = None):
-    """Removes stale extracted media files and subdirectories."""
+def clear_media_cache(keep_tokens: Optional[List[str]] = None, max_age_hours: float = 24.0):
+    """Removes stale extracted media files and subdirectories older than max_age_hours."""
     keep = set(keep_tokens or [])
     if not os.path.exists(DOCX_MEDIA_DIR):
         return
+    now = time.time()
     for f in os.listdir(DOCX_MEDIA_DIR):
-        if f in keep:
+        if f in keep or f == ".gitkeep":
             continue
         p = os.path.join(DOCX_MEDIA_DIR, f)
         try:
-            if os.path.isdir(p):
-                shutil.rmtree(p, ignore_errors=True)
-            else:
-                os.remove(p)
+            mtime = os.path.getmtime(p)
+            if (now - mtime) > max_age_hours * 3600.0:
+                if os.path.isdir(p):
+                    shutil.rmtree(p, ignore_errors=True)
+                else:
+                    os.remove(p)
         except Exception:
             pass
 

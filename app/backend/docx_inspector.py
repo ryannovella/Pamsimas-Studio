@@ -1,6 +1,7 @@
 import os
 import re
 import uuid
+import hashlib
 import docx
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
@@ -746,6 +747,10 @@ def merge_inspected_monev_reports(reports: List[Dict[str, Any]]) -> Dict[str, An
             return s2
         return f"{s1}\n\n{s2}"
 
+    def _norm_village_key(name: str) -> str:
+        s = re.sub(r"^(?:desa|kelurahan)\s+", "", (name or "").strip(), flags=re.I)
+        return re.sub(r"[^a-zA-Z0-9]", "", s.lower())
+
     merged_villages = []
     village_map = {}  # key: norm_desa -> village dict
     for rep in sorted_reports:
@@ -753,7 +758,7 @@ def merge_inspected_monev_reports(reports: List[Dict[str, Any]]) -> Dict[str, An
             d_name = (v.get("desa") or "").strip()
             if not d_name:
                 continue
-            d_key = re.sub(r"[^a-zA-Z0-9]", "", d_name.lower())
+            d_key = _norm_village_key(d_name)
             if d_key in village_map:
                 target_v = village_map[d_key]
                 if not target_v.get("kecamatan") and v.get("kecamatan"):
@@ -786,16 +791,18 @@ def merge_inspected_monev_reports(reports: List[Dict[str, Any]]) -> Dict[str, An
     seen_photo_keys = set()
 
     for v in merged_villages:
-        v_desa_norm = re.sub(r"[^a-zA-Z0-9]", "", v.get("desa", "").lower())
+        v_desa_norm = _norm_village_key(v.get("desa", ""))
         if not v_desa_norm:
             continue
         for rep in sorted_reports:
             for p in rep.get("photos", []):
                 p_desa = (p.get("desa") or "").strip()
-                p_desa_norm = re.sub(r"[^a-zA-Z0-9]", "", p_desa.lower())
+                p_desa_norm = _norm_village_key(p_desa)
                 if p_desa_norm == v_desa_norm:
                     # Deduplikasi foto jika persis sama
-                    p_key = p.get("url") or (p.get("filename"), p.get("width"), p.get("height"), p_desa)
+                    raw_u = (p.get("url") or p.get("dataUrl") or "").split("?")[0]
+                    u_key = hashlib.md5(raw_u.encode()).hexdigest() if raw_u.startswith("data:") else raw_u
+                    p_key = u_key or (p.get("id"), p.get("filename"), p.get("width"), p.get("height"), p_desa_norm)
                     if p_key in seen_photo_keys:
                         continue
                     seen_photo_keys.add(p_key)
@@ -809,7 +816,10 @@ def merge_inspected_monev_reports(reports: List[Dict[str, Any]]) -> Dict[str, An
     for rep in sorted_reports:
         for p in rep.get("photos", []):
             p_desa = (p.get("desa") or "").strip()
-            p_key = p.get("url") or (p.get("filename"), p.get("width"), p.get("height"), p_desa)
+            p_desa_norm = _norm_village_key(p_desa)
+            raw_u = (p.get("url") or p.get("dataUrl") or "").split("?")[0]
+            u_key = hashlib.md5(raw_u.encode()).hexdigest() if raw_u.startswith("data:") else raw_u
+            p_key = u_key or (p.get("id"), p.get("filename"), p.get("width"), p.get("height"), p_desa_norm)
             if p_key not in seen_photo_keys:
                 seen_photo_keys.add(p_key)
                 p_copy = dict(p)

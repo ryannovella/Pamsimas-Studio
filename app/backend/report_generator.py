@@ -33,7 +33,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 from app.backend.config import (
-    BASE_DIR, OUTPUT_DIR, STAMP_FONT_PATH, FALLBACK_FONT_PATH
+    BASE_DIR, OUTPUT_DIR, STAMP_FONT_PATH, FALLBACK_FONT_PATH,
+    DOCX_MEDIA_DIR, DOCX_UPLOADS_DIR
 )
 from app.backend.stamper import apply_stamp
 from app.backend.logger import log_error
@@ -2198,9 +2199,20 @@ def generate_monev_docx(
             img_bytes = photo_item.get("bytes")
             if isinstance(img_bytes, list):
                 img_bytes = bytes(img_bytes)
-            if not img_bytes and photo_item.get("path") and os.path.exists(photo_item["path"]):
-                with open(photo_item["path"], "rb") as f:
-                    img_bytes = f.read()
+            if not img_bytes and photo_item.get("path"):
+                cand_path = os.path.abspath(photo_item["path"])
+                allowed_roots = [os.path.abspath(DOCX_MEDIA_DIR), os.path.abspath(DOCX_UPLOADS_DIR)]
+                is_safe = False
+                for ar in allowed_roots:
+                    try:
+                        if os.path.commonpath([ar, cand_path]) == ar:
+                            is_safe = True
+                            break
+                    except Exception:
+                        pass
+                if is_safe and os.path.isfile(cand_path):
+                    with open(cand_path, "rb") as f:
+                        img_bytes = f.read()
 
             if img_bytes:
                 is_original = bool(photo_item.get("already_stamped") or photo_item.get("keep_original") or photo_item.get("is_original"))
@@ -2249,12 +2261,15 @@ def generate_monev_docx(
                 except Exception as e:
                     log_error("photo_table_stamping", e)
 
-                para = cell.paragraphs[0]
-                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                para.paragraph_format.space_before = Pt(4)
-                para.paragraph_format.space_after = Pt(4)
-                run = para.add_run()
-                run.add_picture(io.BytesIO(img_bytes), width=Inches(3.10))
+                try:
+                    para = cell.paragraphs[0]
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    para.paragraph_format.space_before = Pt(4)
+                    para.paragraph_format.space_after = Pt(4)
+                    run = para.add_run()
+                    run.add_picture(io.BytesIO(img_bytes), width=Inches(3.10))
+                except Exception as e:
+                    log_error("photo_table_add_picture", e)
 
         tbl_photo_elem = photo_table._tbl
         body_parent.remove(tbl_photo_elem)
