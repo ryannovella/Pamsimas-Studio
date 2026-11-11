@@ -20,6 +20,7 @@ import { Autocomplete, highlightText } from './autocomplete.js';
 export class ReportBuilder {
   constructor() {
     this.kabupaten = '';
+    this.kabupatens = [];
     this.tahun = '2026';
     this.sptPrefix = this.getStoredSptPrefix();
     this.sptSuffix = '';
@@ -38,6 +39,7 @@ export class ReportBuilder {
         id: 'v_init',
         desa: '',
         kecamatan: '',
+        kabupaten: '',
         notes: '',
         narrative: ''
       }
@@ -115,6 +117,8 @@ export class ReportBuilder {
     this.initTripPanel();
     this.initCropDrawEvents();
     this.bindStaticEvents();
+    this.initKabupatenAutocomplete();
+    this.renderKabupatenChips();
     await this.fetchLocations();
     await this.fetchPersonel();
     this.renderPelaksanaList();
@@ -244,8 +248,124 @@ export class ReportBuilder {
     }
   }
 
+  setKabupatens(kabs) {
+    if (!Array.isArray(kabs)) {
+      if (typeof kabs === 'string' && kabs.trim()) {
+        kabs = kabs.split(/[,;/]|\s+dan\s+/i).map(s => s.trim()).filter(Boolean);
+      } else {
+        kabs = [];
+      }
+    }
+    const cleanList = [];
+    kabs.forEach(k => {
+      const c = (k || '').replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
+      if (c && !cleanList.some(item => item.toLowerCase() === c.toLowerCase())) {
+        cleanList.push(c);
+      }
+    });
+    this.kabupatens = cleanList;
+    this.kabupaten = cleanList.join(', ');
+    const hiddenInp = document.getElementById('reportKabupaten');
+    if (hiddenInp) hiddenInp.value = this.kabupaten;
+    if (this.quickKab && cleanList[0]) this.quickKab.value = cleanList[0];
+    this.renderKabupatenChips();
+    this.updateMultiKabIndicator();
+    this.updateDocumentTitlePreview();
+    this.evaluateRealtimeAudit();
+    this.renderVillages();
+    this.updateQuickVillageTargetOptions();
+  }
+
+  addKabupaten(kabName) {
+    const c = (kabName || '').replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
+    if (!c) return false;
+    if (this.kabupatens.some(k => k.toLowerCase() === c.toLowerCase())) return false;
+    this.kabupatens.push(c);
+    this.kabupaten = this.kabupatens.join(', ');
+    const hiddenInp = document.getElementById('reportKabupaten');
+    if (hiddenInp) hiddenInp.value = this.kabupaten;
+    if (this.quickKab && !this.quickKab.value) this.quickKab.value = c;
+    this.renderKabupatenChips();
+    this.updateMultiKabIndicator();
+    this.updateDocumentTitlePreview();
+    this.evaluateRealtimeAudit();
+    this.renderVillages();
+    this.updateQuickVillageTargetOptions();
+    return true;
+  }
+
+  removeKabupaten(kabName) {
+    if (this.lockedSegments.administrasi) {
+      this.showToast('Segmen Data Administrasi sedang terkunci.', 'warning');
+      return;
+    }
+    const c = (kabName || '').trim().toLowerCase();
+    this.kabupatens = this.kabupatens.filter(k => k.toLowerCase() !== c);
+    this.kabupaten = this.kabupatens.join(', ');
+    const hiddenInp = document.getElementById('reportKabupaten');
+    if (hiddenInp) hiddenInp.value = this.kabupaten;
+    this.renderKabupatenChips();
+    this.updateMultiKabIndicator();
+    this.updateDocumentTitlePreview();
+    this.evaluateRealtimeAudit();
+    this.renderVillages();
+    this.updateQuickVillageTargetOptions();
+  }
+
+  updateMultiKabIndicator() {
+    const ind = document.getElementById('multiKabIndicator');
+    if (ind) {
+      ind.style.display = this.kabupatens.length > 1 ? 'inline-block' : 'none';
+      if (this.kabupatens.length > 1) {
+        ind.textContent = `${this.kabupatens.length} Kab`;
+      }
+    }
+  }
+
+  renderKabupatenChips() {
+    const chipsContainer = document.getElementById('reportKabupatenChips');
+    const inputEl = document.getElementById('reportKabupatenInput');
+    if (!chipsContainer) return;
+
+    chipsContainer.innerHTML = this.kabupatens.map(k => `
+      <span class="kab-chip">
+        <span>Kab. ${this.escapeHtml(k)}</span>
+        <button type="button" class="chip-remove" onclick="event.stopPropagation(); window.reportBuilder.removeKabupaten('${this.escapeHtml(k)}')" title="Hapus ${this.escapeHtml(k)}">&times;</button>
+      </span>
+    `).join('');
+
+    if (inputEl) {
+      if (this.kabupatens.length === 0) {
+        inputEl.placeholder = 'Pilih kabupaten...';
+      } else {
+        inputEl.placeholder = '+ Tambah...';
+      }
+    }
+  }
+
+  renderVillageKabOptions(currentKab) {
+    const defaultKab = (currentKab || this.kabupatens[0] || 'Magelang').replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
+    let kabs = [...this.kabupatens];
+    if (defaultKab && !kabs.some(k => k.toLowerCase() === defaultKab.toLowerCase())) {
+      kabs.push(defaultKab);
+    }
+    if (kabs.length === 0) {
+      kabs = ['Magelang'];
+    }
+    return kabs.map(k => `
+      <option value="${this.escapeHtml(k)}"${k.toLowerCase() === defaultKab.toLowerCase() ? ' selected' : ''}>Kab. ${this.escapeHtml(k)}</option>
+    `).join('');
+  }
+
+  getVillageKabupaten(v) {
+    if (v && v.kabupaten && v.kabupaten.trim()) {
+      return v.kabupaten.replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
+    }
+    return this.kabupatens[0] || this.kabupaten || 'Magelang';
+  }
+
   initKabupatenAutocomplete() {
-    const inputEl = document.getElementById('reportKabupaten');
+    const inputEl = document.getElementById('reportKabupatenInput') || document.getElementById('reportKabupaten');
     if (!inputEl) return;
     if (this.kabupatenAutocomplete) {
       this.kabupatenAutocomplete.destroy();
@@ -265,29 +385,50 @@ export class ReportBuilder {
         `;
       },
       onSelect: (kab) => {
-        inputEl.value = kab;
-        this.kabupaten = kab;
-        if (this.quickKab) this.quickKab.value = kab;
-        this.updateDocumentTitlePreview();
-        this.evaluateRealtimeAudit();
+        this.addKabupaten(kab);
+        inputEl.value = '';
+        setTimeout(() => inputEl.focus(), 50);
       }
     });
+
+    // Event listener untuk menambahkan via Enter / Koma dan backspace hapus chip terakhir
+    if (!inputEl._kabListenerBound) {
+      inputEl._kabListenerBound = true;
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+          if (this.kabupatenAutocomplete && this.kabupatenAutocomplete.isOpen && this.kabupatenAutocomplete.items.length > 0) {
+            return;
+          }
+          e.preventDefault();
+          const val = inputEl.value.trim().replace(/^,+|,+$/g, '');
+          if (val) {
+            const match = this.locations?.find(l => (l.kabupaten || '').toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '').trim() === val.toLowerCase());
+            const finalVal = match ? match.kabupaten.replace(/^(?:kabupaten|kota)\s*/i, '').trim() : val;
+            this.addKabupaten(finalVal);
+            inputEl.value = '';
+          }
+        } else if (e.key === 'Backspace' && !inputEl.value && this.kabupatens.length > 0) {
+          this.removeKabupaten(this.kabupatens[this.kabupatens.length - 1]);
+        }
+      });
+    }
   }
 
   searchKabupatens(query) {
     if (!this.locations || this.locations.length === 0) return [];
     const q = (query || '').trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '');
     const uniqueKabs = [...new Set(this.locations.map(l => (l.kabupaten || '').replace(/^(?:Kabupaten|Kota)\s*/i, '').trim()))].filter(Boolean);
+    const availableKabs = uniqueKabs.filter(k => !this.kabupatens.some(sel => sel.toLowerCase() === k.toLowerCase()));
 
     // KASUS 1: Query kosong (User klik kolom kabupaten)
     if (!q) {
-      return uniqueKabs.sort((a, b) => a.localeCompare(b)).slice(0, 15);
+      return availableKabs.sort((a, b) => a.localeCompare(b)).slice(0, 15);
     }
 
     // KASUS 2: Query terisi (Pencarian per-huruf)
     const matches = [];
     let hasExact = false;
-    for (const kab of uniqueKabs) {
+    for (const kab of availableKabs) {
       const kabLower = kab.toLowerCase();
       let score = 0;
       if (kabLower === q) {
@@ -309,10 +450,8 @@ export class ReportBuilder {
       }
     }
 
-    // Jika sudah ada nama kabupaten yang cocok persis (misal user klik kolom yang sudah terisi),
-    // tampilkan juga kabupaten lainnya di bawahnya agar mudah berganti opsi
     if (hasExact) {
-      for (const kab of uniqueKabs) {
+      for (const kab of availableKabs) {
         if (!matches.some(m => m.kab.toLowerCase() === kab.toLowerCase())) {
           matches.push({ kab, score: 10 });
         }
@@ -341,15 +480,16 @@ export class ReportBuilder {
           input: inputDesa,
           minChars: 0,
           maxResults: 15,
-          getItems: (query) => this.searchVillages(query),
+          getItems: (query) => this.searchVillages(query, v.kabupaten),
           renderItem: (item, query) => {
             const qClean = (query || '').trim().replace(/^desa\s+/i, '');
+            const kabClean = (item.kabupaten || '').replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
             return `
               <div class="autocomplete-item-main">
                 <span>Desa <strong>${highlightText(item.desa, qClean)}</strong></span>
               </div>
               <div class="autocomplete-item-sub">
-                <span>Kecamatan ${highlightText(item.kecamatan, qClean)}</span>
+                <span>Kecamatan ${highlightText(item.kecamatan, qClean)}${kabClean ? ' • Kab. ' + kabClean : ''}</span>
               </div>
             `;
           },
@@ -375,7 +515,7 @@ export class ReportBuilder {
           input: inputKec,
           minChars: 0,
           maxResults: 15,
-          getItems: (query) => this.searchKecamatans(query),
+          getItems: (query) => this.searchKecamatans(query, v.kabupaten),
           renderItem: (kec, query) => {
             const qClean = (query || '').trim().replace(/^kec(?:amatan)?\s+/i, '');
             return `
@@ -395,18 +535,30 @@ export class ReportBuilder {
     });
   }
 
-  searchVillages(query) {
+  searchVillages(query, targetKab = null) {
     if (!this.locations || this.locations.length === 0) return [];
     const q = (query || '').trim().toLowerCase().replace(/^desa\s+/, '');
-    const curKab = (this.kabupaten || '').trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '');
+    
+    // Tentukan pool kabupaten
+    const kabsToFilter = [];
+    if (targetKab && targetKab.trim()) {
+      kabsToFilter.push(targetKab.trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, ''));
+    } else if (this.kabupatens.length > 0) {
+      this.kabupatens.forEach(k => kabsToFilter.push(k.trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '')));
+    } else if (this.kabupaten && this.kabupaten.trim()) {
+      kabsToFilter.push(this.kabupaten.trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, ''));
+    }
 
-    // Kumpulan lokasi: strictly filter hanya pada kabupaten aktif jika sudah dipilih!
     let pool = this.locations;
-    if (curKab) {
-      pool = this.locations.filter(loc => {
+    if (kabsToFilter.length > 0) {
+      const scopedPool = this.locations.filter(loc => {
         const kabClean = (loc.kabupaten || '').toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '').trim();
-        return kabClean === curKab || kabClean.includes(curKab) || curKab.includes(kabClean);
+        return kabsToFilter.some(fk => kabClean === fk || kabClean.includes(fk) || fk.includes(kabClean));
       });
+      // Gunakan scopedPool jika query kosong atau jika ada hasil di scopedPool
+      if (!q || scopedPool.length > 0) {
+        pool = scopedPool;
+      }
     }
 
     // KASUS 1: Query kosong (User klik kolom desa tanpa mengetik)
@@ -479,18 +631,28 @@ export class ReportBuilder {
     return matches.slice(0, 20);
   }
 
-  searchKecamatans(query) {
+  searchKecamatans(query, targetKab = null) {
     if (!this.locations || this.locations.length === 0) return [];
     const q = (query || '').trim().toLowerCase().replace(/^kec(?:amatan)?\s+/, '');
-    const curKab = (this.kabupaten || '').trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '');
+    
+    const kabsToFilter = [];
+    if (targetKab && targetKab.trim()) {
+      kabsToFilter.push(targetKab.trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, ''));
+    } else if (this.kabupatens.length > 0) {
+      this.kabupatens.forEach(k => kabsToFilter.push(k.trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '')));
+    } else if (this.kabupaten && this.kabupaten.trim()) {
+      kabsToFilter.push(this.kabupaten.trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, ''));
+    }
 
-    // Kumpulan lokasi: strictly filter hanya pada kabupaten aktif jika sudah dipilih!
     let pool = this.locations;
-    if (curKab) {
-      pool = this.locations.filter(loc => {
+    if (kabsToFilter.length > 0) {
+      const scopedPool = this.locations.filter(loc => {
         const kabClean = (loc.kabupaten || '').toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '').trim();
-        return kabClean === curKab || kabClean.includes(curKab) || curKab.includes(kabClean);
+        return kabsToFilter.some(fk => kabClean === fk || kabClean.includes(fk) || fk.includes(kabClean));
       });
+      if (!q || scopedPool.length > 0) {
+        pool = scopedPool;
+      }
     }
 
     const uniqueKecs = [...new Set(pool.map(l => (l.kecamatan || '').trim()))].filter(Boolean);
@@ -778,34 +940,11 @@ export class ReportBuilder {
       });
     }
 
-    // Kabupaten change & Enter Autocomplete
+    // Kabupaten change & Auto-Sync
     const kabInput = document.getElementById('reportKabupaten');
     if (kabInput) {
-      kabInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const val = kabInput.value.trim();
-          if (val && this.locations && this.locations.length > 0) {
-            const uniqueKabs = [...new Set(this.locations.map(l => l.kabupaten.replace(/^(?:Kabupaten|Kota)\s*/i, '').trim()))];
-            const matchedKab = this.findBestMatch(val, uniqueKabs);
-            if (matchedKab) {
-              kabInput.value = matchedKab;
-              this.kabupaten = matchedKab;
-              if (this.quickKab) this.quickKab.value = this.kabupaten;
-              this.updateDocumentTitlePreview();
-              this.evaluateRealtimeAudit();
-              kabInput.blur();
-            }
-          }
-        }
-      });
-      kabInput.addEventListener('input', (e) => {
-        this.kabupaten = e.target.value.trim();
-        if (this.quickKab && !this.quickKab.value) {
-          this.quickKab.value = this.kabupaten;
-        }
-        this.updateDocumentTitlePreview();
-        this.evaluateRealtimeAudit();
+      kabInput.addEventListener('change', (e) => {
+        this.setKabupatens(e.target.value);
       });
     }
 
@@ -1206,9 +1345,15 @@ export class ReportBuilder {
   updateDocumentTitlePreview() {
     const el = document.getElementById('reportTitlePreview');
     if (el) {
-      const kabClean = (this.kabupaten || '').replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
-      if (kabClean) {
-        el.textContent = `Monev Pamsimas Kab. ${kabClean} (TA ${this.tahun})`;
+      if (this.kabupatens.length === 1) {
+        el.textContent = `Monev Pamsimas Kab. ${this.kabupatens[0]} (TA ${this.tahun})`;
+      } else if (this.kabupatens.length === 2) {
+        el.textContent = `Monev Pamsimas Kab. ${this.kabupatens[0]} & ${this.kabupatens[1]} (TA ${this.tahun})`;
+      } else if (this.kabupatens.length > 2) {
+        el.textContent = `Monev Pamsimas Kab. ${this.kabupatens[0]} dkk (${this.kabupatens.length} Kab.) (TA ${this.tahun})`;
+      } else if (this.kabupaten && this.kabupaten.trim()) {
+        const clean = this.kabupaten.replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
+        el.textContent = `Monev Pamsimas Kab. ${clean} (TA ${this.tahun})`;
       } else {
         el.textContent = `Laporan Monev Pamsimas (TA ${this.tahun})`;
       }
@@ -1571,8 +1716,13 @@ export class ReportBuilder {
       photo.time_str = item.timeStr;
       photo.desa = targetVillage.desa || photo.desa || '';
       photo.kecamatan = targetVillage.kecamatan || photo.kecamatan || '';
-      photo.kabupaten = this.kabupaten || 'Magelang';
+      photo.kabupaten = targetVillage.kabupaten || this.kabupatens[0] || this.kabupaten || 'Magelang';
       photo.provinsi = 'Jawa Tengah';
+
+      if (item.isoDate) {
+        targetVillage.survey_date = item.isoDate;
+        targetVillage.tanggal = item.isoDate;
+      }
 
       // Titik koordinat acak terarah di sekitaran daerah desa terkait (rentang 5 meter s/d 2 KM)
       const baseCoords = this.getVillageCoordinates(photo.desa, photo.kabupaten);
@@ -1757,11 +1907,18 @@ export class ReportBuilder {
       this.villageAutocompletes.clear();
     }
 
-    container.innerHTML = this.villages.map((v, idx) => `
+    const isMultiKab = this.kabupatens.length > 1;
+
+    container.innerHTML = this.villages.map((v, idx) => {
+      const vKab = this.getVillageKabupaten(v);
+      return `
       <div class="village-card" id="card_${v.id}">
         <div class="village-card-header">
           <div class="village-header-left">
             <span class="village-index-badge">Desa #${idx + 1}</span>
+            <span class="village-kab-badge" id="vKabBadge_${v.id}" style="${isMultiKab ? '' : 'display:none;'}">
+              Kab. ${this.escapeHtml(vKab)}
+            </span>
             <strong class="village-title" id="vTitle_${v.id}">
               ${v.desa ? 'Desa ' + this.escapeHtml(v.desa) : 'Desa Baru'}
               ${v.kecamatan ? ' (' + this.escapeHtml(v.kecamatan) + ')' : ''}
@@ -1777,6 +1934,25 @@ export class ReportBuilder {
           </div>
         </div>
 
+        ${isMultiKab ? `
+        <!-- Form 3 Kolom: Kabupaten, Kecamatan, Desa -->
+        <div class="form-row village-loc-grid village-loc-grid-3" style="margin-bottom:8px;">
+          <div class="form-group" style="margin-bottom:0; position:relative;">
+            <label class="form-label">Kabupaten</label>
+            <select id="kab_${v.id}" class="form-select form-input-sm" onchange="window.reportBuilder.onVillageFieldChange('${v.id}', 'kabupaten', this.value)">
+              ${this.renderVillageKabOptions(v.kabupaten)}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0; position:relative;">
+            <label class="form-label">Kecamatan</label>
+            <input type="text" id="kec_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.kecamatan)}" placeholder="Kecamatan..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'kecamatan', this.value)">
+          </div>
+          <div class="form-group" style="margin-bottom:0; position:relative;">
+            <label class="form-label">Nama Desa</label>
+            <input type="text" id="desa_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.desa)}" placeholder="Nama desa..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'desa', this.value)">
+          </div>
+        </div>
+        ` : `
         <!-- Nama Desa & Kecamatan -->
         <div class="form-row form-grid-2" style="margin-bottom:8px;">
           <div class="form-group" style="margin-bottom:0; position:relative;">
@@ -1788,6 +1964,7 @@ export class ReportBuilder {
             <input type="text" id="kec_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.kecamatan)}" placeholder="Kecamatan..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'kecamatan', this.value)">
           </div>
         </div>
+        `}
 
         <!-- Catatan Lapangan -->
         <div class="form-group" style="margin-bottom:0;">
@@ -1797,7 +1974,8 @@ export class ReportBuilder {
           <textarea class="form-textarea" rows="3" placeholder="Catatan lapangan..." oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'notes', this.value)">${this.escapeHtml(v.notes)}</textarea>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     this.initVillageAutocompletes();
   }
@@ -1855,29 +2033,34 @@ export class ReportBuilder {
     v.desa = desaName;
     v.kecamatan = kecName;
     v.narrative = ''; // Reset narrative agar otomatis diproses AI dengan lokasi baru
-
-    // Otomatis update form kabupaten jika belum diisi atau masih kosong
-    if (kabName && (!this.kabupaten || this.kabupaten.trim() === '')) {
-      const kabClean = kabName.replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
-      this.kabupaten = kabClean;
-      const kabInput = document.getElementById('reportKabupaten');
-      if (kabInput) kabInput.value = kabClean;
-      this.updateDocumentTitlePreview();
+    const kabClean = kabName.replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
+    if (kabClean) {
+      v.kabupaten = kabClean;
+      if (!this.kabupatens.some(k => k.toLowerCase() === kabClean.toLowerCase())) {
+        this.addKabupaten(kabClean);
+      }
     }
 
     // Update DOM inputs langsung tanpa merusak fokus atau form lain
     const inpDesa = document.getElementById(`desa_${v.id}`);
     const inpKec = document.getElementById(`kec_${v.id}`);
+    const selKab = document.getElementById(`kab_${v.id}`);
     const vTitle = document.getElementById(`vTitle_${v.id}`);
+    const vKabBadge = document.getElementById(`vKabBadge_${v.id}`);
     const notice = document.getElementById(`autofillNotice_${v.id}`);
 
     if (inpDesa) inpDesa.value = desaName;
     if (inpKec) inpKec.value = kecName;
+    if (selKab && kabClean) selKab.value = kabClean;
+    if (vKabBadge) {
+      vKabBadge.textContent = `Kab. ${kabClean || this.getVillageKabupaten(v)}`;
+      vKabBadge.style.display = this.kabupatens.length > 1 ? 'inline-block' : 'none';
+    }
     if (vTitle) {
       vTitle.textContent = `Desa ${desaName}${kecName ? ' (' + kecName + ')' : ''}`;
     }
     if (notice) {
-      notice.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" style="vertical-align:middle; margin-right:3px;"><polyline points="20 6 9 17 4 12"/></svg> Kecamatan ${kecName} otomatis disesuaikan`;
+      notice.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" style="vertical-align:middle; margin-right:3px;"><polyline points="20 6 9 17 4 12"/></svg> Kecamatan ${kecName}${kabClean ? ' (Kab. ' + kabClean + ')' : ''} otomatis disesuaikan`;
       notice.style.display = 'inline';
       setTimeout(() => {
         const el = document.getElementById(`autofillNotice_${villageId}`);
@@ -1899,7 +2082,7 @@ export class ReportBuilder {
       const targetV = validVillages[idx % validVillages.length] || validVillages[0];
       p.desa = targetV.desa || p.desa || '';
       p.kecamatan = targetV.kecamatan || p.kecamatan || '';
-      p.kabupaten = this.kabupaten || p.kabupaten || 'Magelang';
+      p.kabupaten = targetV.kabupaten || this.kabupatens[0] || this.kabupaten || 'Magelang';
       const baseCoords = this.getVillageCoordinates(p.desa, p.kabupaten);
       const jittered = applyGpsJitter(baseCoords.lat, baseCoords.lon, 5, 2000);
       p.lat = jittered.lat;
@@ -1917,13 +2100,40 @@ export class ReportBuilder {
         v.narrative = '';
       }
 
-      // AUTOFILL KECAMATAN OTOMATIS KETIKA DESA DIKETIK
+      if (field === 'kabupaten') {
+        const kabClean = (value || '').replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
+        v.kabupaten = kabClean;
+        const vKabBadge = document.getElementById(`vKabBadge_${id}`);
+        if (vKabBadge) vKabBadge.textContent = `Kab. ${kabClean}`;
+        if (kabClean && !this.kabupatens.some(k => k.toLowerCase() === kabClean.toLowerCase())) {
+          this.addKabupaten(kabClean);
+        }
+        this.updateQuickVillageTargetOptions();
+        this.syncPhotosToVillages();
+      }
+
+      // AUTOFILL KECAMATAN & KABUPATEN OTOMATIS KETIKA DESA DIKETIK
       if (field === 'desa') {
         const match = this.getLocationMatch(value);
         if (match && match.kecamatan) {
           v.kecamatan = match.kecamatan;
           const inpKec = document.getElementById(`kec_${id}`);
           if (inpKec) inpKec.value = match.kecamatan;
+
+          if (match.kabupaten) {
+            const kabClean = match.kabupaten.replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
+            v.kabupaten = kabClean;
+            const selKab = document.getElementById(`kab_${id}`);
+            if (selKab) selKab.value = kabClean;
+            const vKabBadge = document.getElementById(`vKabBadge_${id}`);
+            if (vKabBadge) {
+              vKabBadge.textContent = `Kab. ${kabClean}`;
+              vKabBadge.style.display = this.kabupatens.length > 1 ? 'inline-block' : 'none';
+            }
+            if (!this.kabupatens.some(k => k.toLowerCase() === kabClean.toLowerCase())) {
+              this.addKabupaten(kabClean);
+            }
+          }
 
           const notice = document.getElementById(`autofillNotice_${id}`);
           if (notice) {
@@ -1933,15 +2143,6 @@ export class ReportBuilder {
               const el = document.getElementById(`autofillNotice_${id}`);
               if (el) el.style.display = 'none';
             }, 4000);
-          }
-
-          // Otomatis isi kabupaten jika belum diisi
-          if (match.kabupaten && (!this.kabupaten || this.kabupaten.trim() === '')) {
-            const kabClean = match.kabupaten.replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
-            this.kabupaten = kabClean;
-            const kabInput = document.getElementById('reportKabupaten');
-            if (kabInput) kabInput.value = kabClean;
-            this.updateDocumentTitlePreview();
           }
         }
       }
@@ -2005,7 +2206,13 @@ export class ReportBuilder {
     validVillages.forEach(v => {
       const dName = v.desa.trim();
       const kName = (v.kecamatan || '').trim();
-      const label = `Desa ${dName}${kName ? ' (' + kName + ')' : ''}`;
+      const vKab = (v.kabupaten || this.kabupatens[0] || '').trim();
+      let label = `Desa ${dName}`;
+      if (this.kabupatens.length > 1 && vKab) {
+        label += ` (${kName ? kName + ', ' : ''}Kab. ${vKab})`;
+      } else if (kName) {
+        label += ` (${kName})`;
+      }
       const isSel = currentVal.toLowerCase() === dName.toLowerCase() ? ' selected' : '';
       html += `<option value="${this.escapeHtml(dName)}"${isSel}>${this.escapeHtml(label)}</option>`;
     });
@@ -2019,7 +2226,7 @@ export class ReportBuilder {
     if (matched) {
       if (this.quickDesa) this.quickDesa.value = matched.desa || '';
       if (this.quickKec) this.quickKec.value = matched.kecamatan || '';
-      if (this.quickKab) this.quickKab.value = this.kabupaten || '';
+      if (this.quickKab) this.quickKab.value = matched.kabupaten || this.kabupatens[0] || this.kabupaten || '';
       this.onQuickDesaInput(matched.desa);
     }
   }
@@ -3646,7 +3853,7 @@ export class ReportBuilder {
 
   lockAllCompleteSegments() {
     // Kunci otomatis setiap segmen yang statusnya sudah terisi lengkap
-    if (this.kabupaten && this.nomorSpt && this.tanggalSpt) {
+    if ((this.kabupatens.length > 0 || this.kabupaten) && this.nomorSpt && this.tanggalSpt) {
       this.setSegmentLock('administrasi', true);
     }
     if (this.pelaksanaList && this.pelaksanaList.filter(Boolean).length > 0) {
@@ -3757,14 +3964,18 @@ export class ReportBuilder {
 
       // 1. Administrasi & SPT
       if (!this.lockedSegments.administrasi) {
-        this.kabupaten = rep.kabupaten || '';
+        if (Array.isArray(rep.kabupatens) && rep.kabupatens.length > 0) {
+          this.setKabupatens(rep.kabupatens);
+        } else if (rep.kabupaten) {
+          this.setKabupatens(rep.kabupaten);
+        } else {
+          this.setKabupatens([]);
+        }
         this.tahun = rep.tahun || '2026';
         this.tanggalSpt = rep.tanggal_spt || '';
         this.tanggalLaporan = rep.tanggal_laporan || '';
         this.tempatPembuatan = rep.tempat_pembuatan || 'Semarang';
 
-        const kabInp = document.getElementById('reportKabupaten');
-        if (kabInp) kabInp.value = this.kabupaten;
         const thnInp = document.getElementById('reportTahun');
         if (thnInp) thnInp.value = this.tahun;
         this.setReportNomorSpt(rep.nomor_spt || '');
@@ -3826,16 +4037,21 @@ export class ReportBuilder {
               existing.notes = mergeText(existing.notes, v.notes);
               existing.narrative = mergeText(existing.narrative, v.narrative);
               if (!existing.kecamatan && v.kecamatan) existing.kecamatan = v.kecamatan;
+              if (!existing.kabupaten && v.kabupaten) existing.kabupaten = v.kabupaten;
             } else {
               const item = {
                 id: 'v_' + Math.random().toString(36).substr(2, 9),
                 desa: dName,
                 kecamatan: v.kecamatan || '',
+                kabupaten: v.kabupaten || '',
                 notes: v.notes || '',
                 narrative: v.narrative || ''
               };
               seen.set(key, item);
               merged.push(item);
+              if (item.kabupaten && !this.kabupatens.some(k => k.toLowerCase() === item.kabupaten.toLowerCase())) {
+                this.addKabupaten(item.kabupaten);
+              }
             }
           }
           this.villages = merged.length > 0 ? merged : [
@@ -3843,6 +4059,7 @@ export class ReportBuilder {
               id: 'v_init',
               desa: '',
               kecamatan: '',
+              kabupaten: this.kabupatens[0] || '',
               notes: '',
               narrative: ''
             }
@@ -4070,13 +4287,20 @@ export class ReportBuilder {
     const items = [];
 
     // 1. Kabupaten
-    const kabClean = (this.kabupaten || '').trim();
-    if (kabClean) {
+    if (this.kabupatens.length > 1) {
       items.push({
         field: 'kabupaten',
         status: 'complete',
         label: 'Kabupaten',
-        message: `Terisi: Kabupaten ${kabClean}`
+        message: `Terisi: Multi-Kabupaten (${this.kabupatens.map(k => 'Kab. ' + k).join(', ')})`
+      });
+    } else if (this.kabupatens.length === 1 || (this.kabupaten && this.kabupaten.trim())) {
+      const kabDisp = this.kabupatens[0] || this.kabupaten.trim();
+      items.push({
+        field: 'kabupaten',
+        status: 'complete',
+        label: 'Kabupaten',
+        message: `Terisi: Kabupaten ${kabDisp}`
       });
     } else {
       items.push({
@@ -4455,6 +4679,7 @@ export class ReportBuilder {
     try {
       const reportData = {
         kabupaten: this.kabupaten,
+        kabupatens: this.kabupatens,
         tahun: this.tahun,
         nomor_spt: this.nomorSpt,
         tanggal_spt: toIndonesianDateText(this.tanggalSpt),
@@ -4466,6 +4691,7 @@ export class ReportBuilder {
         villages: this.villages.map(v => ({
           desa: v.desa,
           kecamatan: v.kecamatan,
+          kabupaten: v.kabupaten || this.kabupatens[0] || this.kabupaten,
           notes: v.notes,
           narrative: v.narrative || ''
         }))
@@ -4473,23 +4699,35 @@ export class ReportBuilder {
 
       const payload = {
         report_data: reportData,
-        photos: this.photos.map(p => ({
-          dataUrl: p.dataUrl,
-          filename: p.filename,
-          time_str: p.timeStr,
-          lat: p.lat,
-          lon: p.lon,
-          desa: p.desa,
-          kecamatan: p.kecamatan,
-          kabupaten: p.kabupaten || this.kabupaten,
-          provinsi: p.provinsi || 'Jawa Tengah',
-          custom_address: p.customAddress || '',
-          address_mode: p.address_mode || 'natural',
-          font_scale: p.font_scale || 1.0,
-          already_stamped: !!(p.is_original || p.alreadyStamped),
-          is_original: !!(p.is_original || p.alreadyStamped),
-          keep_original: !!(p.is_original || p.alreadyStamped)
-        }))
+        photos: this.photos.map(p => {
+          let pKab = p.kabupaten;
+          if (!pKab && p.desa) {
+            const vMatch = this.villages.find(v => (v.desa || '').trim().toLowerCase() === (p.desa || '').trim().toLowerCase());
+            if (vMatch && vMatch.kabupaten) {
+              pKab = vMatch.kabupaten;
+            }
+          }
+          if (!pKab) {
+            pKab = this.kabupatens[0] || this.kabupaten || 'Magelang';
+          }
+          return {
+            dataUrl: p.dataUrl,
+            filename: p.filename,
+            time_str: p.timeStr,
+            lat: p.lat,
+            lon: p.lon,
+            desa: p.desa,
+            kecamatan: p.kecamatan,
+            kabupaten: pKab,
+            provinsi: p.provinsi || 'Jawa Tengah',
+            custom_address: p.customAddress || '',
+            address_mode: p.address_mode || 'natural',
+            font_scale: p.font_scale || 1.0,
+            already_stamped: !!(p.is_original || p.alreadyStamped),
+            is_original: !!(p.is_original || p.alreadyStamped),
+            keep_original: !!(p.is_original || p.alreadyStamped)
+          };
+        })
       };
 
       const res = await fetch('/api/report/generate_docx', {

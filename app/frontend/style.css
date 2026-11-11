@@ -3255,6 +3255,106 @@ input[type="file"]::file-selector-button:hover {
   display: grid;
   grid-template-columns: 1fr 90px 1.2fr;
   gap: 8px;
+  align-items: start;
+}
+
+/* Multi-Kabupaten Tag/Chip Container */
+.multi-tag-input-container {
+  min-height: 31px;
+  background: var(--bg-input, #0f172a);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  cursor: text;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.multi-tag-input-container:focus-within {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35);
+}
+
+.tag-chips-wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.kab-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.4;
+  user-select: none;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.kab-chip .chip-remove {
+  background: none;
+  border: none;
+  color: rgba(56, 189, 248, 0.6);
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast);
+}
+
+.kab-chip .chip-remove:hover {
+  color: #f87171;
+}
+
+.tag-inline-input {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-main, #f1f5f9) !important;
+  font-size: 0.78rem !important;
+  padding: 2px 4px !important;
+  outline: none !important;
+  min-width: 60px;
+  flex: 1 1 70px;
+  height: 22px;
+  line-height: 22px;
+  margin: 0;
+}
+
+.tag-inline-input::placeholder {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+}
+
+.village-loc-grid-3 {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1.1fr;
+  gap: 8px;
+}
+
+.village-kab-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  margin-right: 6px;
 }
 
 .form-grid-spt {

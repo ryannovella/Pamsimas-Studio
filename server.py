@@ -302,11 +302,12 @@ def api_report_generate_docx():
             narrative = (v.get("narrative") or "").strip()
             v_kondisi_date = get_village_kondisi_per_date(v, report_data)
             if notes and (not narrative or narrative == notes or len(narrative) < 60):
+                v_kab = (v.get("kabupaten") or kab).strip()
                 res_draft = draft_village_narrative(
                     notes=notes,
                     desa=v.get("desa", ""),
                     kecamatan=v.get("kecamatan", ""),
-                    kabupaten=kab,
+                    kabupaten=v_kab,
                     tanggal=v_kondisi_date,
                     tahun=thn
                 )

@@ -369,9 +369,9 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
 
         if in_hasil_section and txt:
             # Heading desa harus diawali pola 'Desa <Nama>' (bukan kalimat narasi seperti 'Hasil monitoring...')
-            m_des = re.match(r"^(?:\d+[\.\)]\s*)?Desa\s+([A-Za-z0-9]+)(?:[\s,]+(?:Kecamatan|Kec\.?)\s+([A-Za-z0-9]+))?", txt, re.I)
+            m_des = re.match(r"^(?:\d+[\.\)]\s*)?Desa\s+([A-Za-z0-9]+)(?:[\s,]+(?:Kecamatan|Kec\.?)\s+([A-Za-z0-9]+))?(?:[\s,]+(?:Kabupaten|Kab\.?|Kota)\s+([A-Za-z0-9]+))?", txt, re.I)
             is_intro_sentence = bool(re.match(r"^(?:Hasil|Berdasarkan|Progres|Pelaksanaan|Kegiatan|Pekerjaan|Adapun|Catatan)\b", txt, re.I))
-            is_heading = m_des and len(txt.split()) <= 8 and not is_intro_sentence
+            is_heading = m_des and len(txt.split()) <= 10 and not is_intro_sentence
 
             if is_heading and m_des:
                 desa_name = fuzzy_match_village(m_des.group(1).strip())
@@ -386,13 +386,19 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
                     current_narrative_paras = []
 
                 kec_name = m_des.group(2).strip() if m_des.group(2) else ""
-                if not kec_name:
-                    _, _, looked_kec, _ = lookup_location(desa_name, "", kabupaten)
-                    kec_name = looked_kec
+                v_kab_cand = m_des.group(3).strip() if len(m_des.groups()) >= 3 and m_des.group(3) else ""
+                if not kec_name or not v_kab_cand:
+                    _, _, looked_kec, looked_kab = lookup_location(desa_name, "", kabupaten)
+                    if not kec_name:
+                        kec_name = looked_kec
+                    if not v_kab_cand and looked_kab:
+                        v_kab_cand = re.sub(r"^(?:Kabupaten|Kota)\s*", "", looked_kab, flags=re.I).strip()
+
                 current_desa = {
                     "id": f"v_{desa_name.lower()}",
                     "desa": desa_name,
                     "kecamatan": kec_name,
+                    "kabupaten": v_kab_cand or kabupaten,
                     "notes": "",
                     "narrative": ""
                 }
@@ -424,6 +430,8 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
                     existing["notes"] = existing["narrative"]
                 if not existing.get("kecamatan") and v.get("kecamatan"):
                     existing["kecamatan"] = v.get("kecamatan")
+                if not existing.get("kabupaten") and v.get("kabupaten"):
+                    existing["kabupaten"] = v.get("kabupaten")
             else:
                 v_map[d_key] = v
                 merged_villages.append(v)
@@ -492,12 +500,35 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
             "narrative": ""
         })
 
+    # Kumpulkan seluruh kabupaten terdeteksi (Multi-Kabupaten detection)
+    all_kabs = []
+    seen_kabs = set()
+    if kabupaten:
+        for p_k in re.split(r'[,;/]|\s+dan\s+', kabupaten, flags=re.I):
+            c_k = re.sub(r"^(?:Kabupaten|Kota)\s*", "", p_k, flags=re.I).strip()
+            if c_k and c_k.lower() not in seen_kabs:
+                seen_kabs.add(c_k.lower())
+                all_kabs.append(c_k)
+    for v in villages:
+        vk = (v.get("kabupaten") or "").strip()
+        if vk:
+            c_k = re.sub(r"^(?:Kabupaten|Kota)\s*", "", vk, flags=re.I).strip()
+            if c_k and c_k.lower() not in seen_kabs:
+                seen_kabs.add(c_k.lower())
+                all_kabs.append(c_k)
+
+    kabupatens = all_kabs
+    if kabupatens:
+        kabupaten = ", ".join(kabupatens)
+
     # 8. Checklist Audit Kelengkapan Dokumen
     audit_items = []
 
     # Item 1: Kabupaten
-    if kabupaten:
-        audit_items.append({"field": "kabupaten", "status": "complete", "label": "Kabupaten", "message": f"Terdeteksi: Kabupaten {kabupaten}"})
+    if len(kabupatens) > 1:
+        audit_items.append({"field": "kabupaten", "status": "complete", "label": "Kabupaten", "message": f"Terdeteksi: Multi-Kabupaten ({', '.join(kabupatens)})"})
+    elif kabupatens:
+        audit_items.append({"field": "kabupaten", "status": "complete", "label": "Kabupaten", "message": f"Terdeteksi: Kabupaten {kabupatens[0]}"})
     else:
         audit_items.append({"field": "kabupaten", "status": "incomplete", "label": "Kabupaten", "message": "Belum terdeteksi di dokumen"})
 
@@ -568,6 +599,7 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
         "filename": filename,
         "report_data": {
             "kabupaten": kabupaten,
+            "kabupatens": kabupatens,
             "tahun": tahun,
             "nomor_spt": nomor_spt,
             "tanggal_spt": tanggal_spt_iso,
@@ -621,30 +653,24 @@ def merge_inspected_monev_reports(reports: List[Dict[str, Any]]) -> Dict[str, An
     if len(reports) > 3:
         return {"success": False, "error": "Maksimal 3 dokumen yang dapat digabungkan sekaligus"}
 
-    # 1. Validasi Kabupaten
-    kab_map = {}
-    for idx, rep in enumerate(reports):
-        raw_kab = (rep.get("report_data", {}).get("kabupaten") or "").strip()
-        norm_kab = normalize_kabupaten_name(raw_kab)
-        fn = rep.get("filename", f"Dokumen {idx + 1}")
-        if norm_kab:
-            kab_map[fn] = (raw_kab, norm_kab)
-
-    distinct_norm_kabs = set(k[1] for k in kab_map.values())
-    if len(distinct_norm_kabs) > 1:
-        details = ", ".join([f"'{fn}' ({k[0]})" for fn, k in kab_map.items()])
-        return {
-            "success": False,
-            "error": f"Penggabungan ditolak: Dokumen berasal dari kabupaten yang berbeda ({details}). Seluruh dokumen yang digabungkan harus berada dalam kabupaten yang sama."
-        }
-
-    # Ambil nama kabupaten kanonikal
-    canonical_kabupaten = ""
+    # 1. Konsolidasi Kabupaten (Mendukung Multi-Kabupaten dalam satu Laporan / SPT)
+    all_kabs = []
+    seen_kabs = set()
     for rep in reports:
-        k = (rep.get("report_data", {}).get("kabupaten") or "").strip()
-        if k:
-            canonical_kabupaten = k
-            break
+        rd = rep.get("report_data", {})
+        k_list = rd.get("kabupatens") or []
+        if not k_list:
+            raw_k = (rd.get("kabupaten") or "").strip()
+            if raw_k:
+                k_list = [p.strip() for p in re.split(r'[,;/]|\s+dan\s+', raw_k, flags=re.I) if p.strip()]
+        for k in k_list:
+            c = re.sub(r"^(?:Kabupaten|Kota)\s*", "", k, flags=re.I).strip()
+            if c and c.lower() not in seen_kabs:
+                seen_kabs.add(c.lower())
+                all_kabs.append(c)
+
+    canonical_kabupatens = all_kabs
+    canonical_kabupaten = ", ".join(all_kabs) if all_kabs else "Magelang"
 
     # 2. Urutkan Dokumen Secara Kronologis (sesuai trip_start_date)
     def _get_sort_key(r):
@@ -794,7 +820,9 @@ def merge_inspected_monev_reports(reports: List[Dict[str, Any]]) -> Dict[str, An
     # 7. Susun Audit Report Hasil Merge
     audit_items = []
     # Item 1: Kabupaten
-    if canonical_kabupaten:
+    if len(canonical_kabupatens) > 1:
+        audit_items.append({"field": "kabupaten", "status": "complete", "label": "Kabupaten", "message": f"Terdeteksi: Multi-Kabupaten ({canonical_kabupaten})"})
+    elif canonical_kabupaten:
         audit_items.append({"field": "kabupaten", "status": "complete", "label": "Kabupaten", "message": f"Terdeteksi: Kabupaten {canonical_kabupaten}"})
     else:
         audit_items.append({"field": "kabupaten", "status": "incomplete", "label": "Kabupaten", "message": "Belum terdeteksi di dokumen"})
@@ -853,6 +881,7 @@ def merge_inspected_monev_reports(reports: List[Dict[str, Any]]) -> Dict[str, An
         "filename": combined_filename,
         "report_data": {
             "kabupaten": canonical_kabupaten,
+            "kabupatens": canonical_kabupatens,
             "tahun": tahun,
             "nomor_spt": nomor_spt,
             "tanggal_spt": tanggal_spt_iso,

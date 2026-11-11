@@ -1149,7 +1149,7 @@ def get_village_kondisi_per_date(village: Dict[str, Any], report_data: Dict[str,
     indo_months_list = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
 
     # Cek tanggal dinas spesifik pada objek desa jika ada
-    v_end = village.get("trip_end_date") or village.get("tanggal_akhir") or village.get("tanggal")
+    v_end = village.get("trip_end_date") or village.get("tanggal_akhir") or village.get("tanggal") or village.get("survey_date")
     if v_end:
         p_v_end = parse_date_parts(str(v_end))
         if p_v_end:
@@ -1299,6 +1299,84 @@ def format_spt_full_date(report_data: Dict[str, Any]) -> str:
     return ""
 
 
+def resolve_kabupatens(report_data: Dict[str, Any], villages: Optional[List[Dict[str, Any]]] = None) -> List[str]:
+    """
+    Mengambil dan menormalkan seluruh nama kabupaten/kota dari report_data dan villages.
+    Menghilangkan duplikat serta menjaga urutan kemunculan.
+    Contoh output: ['Magelang', 'Temanggung'] atau ['Kota Semarang', 'Kendal']
+    """
+    raw_list: List[str] = []
+
+    # 1. Dari field kabupatens (jika berupa list)
+    if isinstance(report_data.get("kabupatens"), list):
+        for k in report_data["kabupatens"]:
+            if isinstance(k, str) and k.strip():
+                raw_list.append(k.strip())
+
+    # 2. Dari field kabupaten (bisa string tunggal, comma-separated, atau konjungsi 'dan')
+    kab_val = report_data.get("kabupaten")
+    if isinstance(kab_val, list):
+        for k in kab_val:
+            if isinstance(k, str) and k.strip():
+                raw_list.append(k.strip())
+    elif isinstance(kab_val, str) and kab_val.strip():
+        parts = re.split(r'[,;/]|\s+dan\s+', kab_val, flags=re.I)
+        for p in parts:
+            p_clean = p.strip()
+            if p_clean:
+                raw_list.append(p_clean)
+
+    # 3. Dari setiap desa di villages
+    target_villages = villages if villages is not None else report_data.get("villages", [])
+    for v in (target_villages or []):
+        v_kab = (v.get("kabupaten") or "").strip()
+        if v_kab:
+            raw_list.append(v_kab)
+
+    # Normalisasi dan deduplikasi dengan mempertahankan urutan
+    seen = set()
+    cleaned_list = []
+    for item in raw_list:
+        is_kota = bool(re.match(r"^Kota\s+", item.strip(), re.I))
+        c = re.sub(r"^(?:Kabupaten|Kota)\s*", "", item, flags=re.I).strip()
+        final_name = f"Kota {c}" if is_kota else c
+        if final_name and final_name.lower() not in seen:
+            seen.add(final_name.lower())
+            cleaned_list.append(final_name)
+
+    if not cleaned_list:
+        cleaned_list = ["Magelang"]
+
+    return cleaned_list
+
+
+def format_kabupaten_phrase(kab_list: List[str]) -> str:
+    """
+    Menghasilkan frasa resmi daftar kabupaten untuk dokumen kedinasan:
+    - 1 kab: 'Kabupaten Magelang' (atau 'Kota Semarang')
+    - 2 kab: 'Kabupaten Magelang dan Kabupaten Temanggung'
+    - 3+ kab: 'Kabupaten Magelang, Kabupaten Temanggung, dan Kabupaten Boyolali'
+    """
+    if not kab_list:
+        return "Kabupaten Magelang"
+
+    full_names = []
+    for k in kab_list:
+        k_str = k.strip()
+        if k_str.lower().startswith("kota"):
+            full_names.append(k_str)
+        else:
+            clean = re.sub(r"^(?:Kabupaten)\s*", "", k_str, flags=re.I).strip()
+            full_names.append(f"Kabupaten {clean}")
+
+    if len(full_names) == 1:
+        return full_names[0]
+    elif len(full_names) == 2:
+        return f"{full_names[0]} dan {full_names[1]}"
+    else:
+        return ", ".join(full_names[:-1]) + f", dan {full_names[-1]}"
+
+
 def build_compact_report_filename(report_data: Dict[str, Any], villages: List[Dict[str, Any]]) -> str:
     """
     Menghasilkan nama berkas dokumen Monev yang ringkas dan padat sesuai standar kedinasan:
@@ -1307,7 +1385,7 @@ def build_compact_report_filename(report_data: Dict[str, Any], villages: List[Di
     Contoh:
     - 1 Hari: '15-Agustus-2026_Magelang_Baleagung.docx'
     - Multi-Hari (Bulan Sama): '13-15-Agustus-2026_Magelang_Jambewangi-dkk.docx'
-    - Multi-Hari (Beda Bulan): '30-Agustus-02-September-2026_Wonogiri_Sugihan-Gebangharjo.docx'
+    - Multi-Kabupaten: '13-15-Agustus-2026_Magelang-Temanggung_Baleagung-Mandisari.docx'
     """
     indo_months = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
 
@@ -1353,8 +1431,16 @@ def build_compact_report_filename(report_data: Dict[str, Any], villages: List[Di
         date_tag = clean_tgl
 
     # Kabupaten (ringkas tanpa prefiks 'Kabupaten' / 'Kota')
-    kab_raw = report_data.get("kabupaten") or ""
-    clean_kab = re.sub(r"^(?:Kabupaten|Kota)\s*", "", kab_raw, flags=re.I).strip().replace(" ", "-") or "Jawa-Tengah"
+    kab_list = resolve_kabupatens(report_data, villages)
+    clean_kabs = [k.replace(" ", "-") for k in kab_list if k.strip()]
+    if not clean_kabs:
+        clean_kab = "Jawa-Tengah"
+    elif len(clean_kabs) == 1:
+        clean_kab = clean_kabs[0]
+    elif len(clean_kabs) == 2:
+        clean_kab = f"{clean_kabs[0]}-{clean_kabs[1]}"
+    else:
+        clean_kab = f"{clean_kabs[0]}-dkk"
 
     # Desa (ringkas dan padat)
     desa_list = []
@@ -1605,9 +1691,11 @@ def generate_monev_docx(
             pass
 
     # Metadata extraction
-    kabupaten = report_data.get("kabupaten", "Magelang").strip()
-    kabupaten_clean = re.sub(r"^(?:Kabupaten|Kota)\s*", "", kabupaten, flags=re.I).strip()
-    kabupaten_full = f"Kabupaten {kabupaten_clean}" if not kabupaten.lower().startswith(("kabupaten", "kota")) else kabupaten
+    villages = report_data.get("villages", [])
+    kab_list = resolve_kabupatens(report_data, villages)
+    kabupaten_phrase = format_kabupaten_phrase(kab_list)
+    kabupaten_clean = kab_list[0] if kab_list else "Magelang"
+    kabupaten_full = f"Kota {kabupaten_clean}" if (kab_list and kab_list[0].lower().startswith("kota")) else f"Kabupaten {kabupaten_clean}"
 
     tahun = str(report_data.get("tahun", "2026")).strip()
     nomor_spt = report_data.get("nomor_spt", "CK07/T/Bpbpk11/2026/1766").strip()
@@ -1637,7 +1725,6 @@ def generate_monev_docx(
     tanggal_laporan = format_to_indonesian_date(tanggal_laporan)
     tempat_pembuatan = "Semarang"
 
-    villages = report_data.get("villages", [])
     pelaksana_raw = report_data.get("pelaksana", [])
     pelaksana = []
     for p in pelaksana_raw:
@@ -1650,7 +1737,7 @@ def generate_monev_docx(
 
     # 2. Update Title P01 (Centered, Arial 12pt Bold, Line Spacing 1.5, Pure Black)
     p_title = doc.paragraphs[1]
-    p_title.text = f"Monitoring dan Evaluasi Kegiatan Pamsimas {kabupaten_full} TA {tahun}"
+    p_title.text = f"Monitoring dan Evaluasi Kegiatan Pamsimas {kabupaten_phrase} TA {tahun}"
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_title.paragraph_format.line_spacing = 1.5
     for r in p_title.runs:
@@ -1667,13 +1754,13 @@ def generate_monev_docx(
         v_kec = v0.get("kecamatan") or ""
         loc_str = f" (Desa {v_desa}, Kecamatan {v_kec})" if v_desa else ""
         p_umum3.text = (
-            f"Kegiatan Monitoring dan Evaluasi (Monev) Pamsimas Tahun Anggaran {tahun} di {kabupaten_full} "
+            f"Kegiatan Monitoring dan Evaluasi (Monev) Pamsimas Tahun Anggaran {tahun} di {kabupaten_phrase} "
             f"dilaksanakan untuk memperoleh gambaran kondisi dan kemajuan pelaksanaan kegiatan di tingkat desa{loc_str}, "
             f"mengidentifikasi permasalahan yang dihadapi, serta memastikan pelaksanaan kegiatan tetap sesuai dengan target dan ketentuan yang telah ditetapkan."
         )
     else:
         p_umum3.text = (
-            f"Kegiatan Monitoring dan Evaluasi (Monev) Pamsimas Tahun Anggaran {tahun} di {kabupaten_full} "
+            f"Kegiatan Monitoring dan Evaluasi (Monev) Pamsimas Tahun Anggaran {tahun} di {kabupaten_phrase} "
             f"dilaksanakan untuk memperoleh gambaran kondisi dan kemajuan pelaksanaan kegiatan di tingkat desa, "
             f"mengidentifikasi permasalahan yang dihadapi, serta memastikan pelaksanaan kegiatan tetap sesuai dengan target dan ketentuan yang telah ditetapkan."
         )
@@ -1698,7 +1785,7 @@ def generate_monev_docx(
 
     # 4. Update P18 (3. Ruang Lingkup point 1)
     p_lingkup1 = doc.paragraphs[18]
-    p_lingkup1.text = f"Monitoring dan Evaluasi pelaksanaan Kegiatan Pamsimas Tahun Anggaran {tahun} di tingkat {kabupaten_full}."
+    p_lingkup1.text = f"Monitoring dan Evaluasi pelaksanaan Kegiatan Pamsimas Tahun Anggaran {tahun} di tingkat {kabupaten_phrase}."
     p_lingkup1.paragraph_format.line_spacing = 1.5
     for r in p_lingkup1.runs:
         r.font.name = "Arial"
@@ -1731,7 +1818,7 @@ def generate_monev_docx(
 
     # 6. Update P28 (A. Kegiatan yang Dilaksanakan point 2)
     p_keg2 = doc.paragraphs[28]
-    p_keg2.text = f"Monitoring dan Evaluasi progres pelaksanaan Kegiatan Pamsimas TA {tahun} di {kabupaten_full}."
+    p_keg2.text = f"Monitoring dan Evaluasi progres pelaksanaan Kegiatan Pamsimas TA {tahun} di {kabupaten_phrase}."
     p_keg2.paragraph_format.line_spacing = 1.5
     for r in p_keg2.runs:
         r.font.name = "Arial"
@@ -1819,6 +1906,9 @@ def generate_monev_docx(
     for v_idx, v in enumerate(villages):
         desa_name = (v.get("desa") or v.get("nama_desa") or "").strip()
         kec_name = (v.get("kecamatan") or "").strip()
+        v_kab_raw = (v.get("kabupaten") or (kab_list[0] if kab_list else "")).strip()
+        v_kab_clean = re.sub(r"^(?:Kabupaten|Kota)\s*", "", v_kab_raw, flags=re.I).strip()
+        v_kab_full = f"Kota {v_kab_clean}" if v_kab_raw.lower().startswith("kota") else f"Kabupaten {v_kab_clean}"
         notes_raw = (v.get("notes") or "").strip()
         narrative = (v.get("narrative") or v.get("hasil") or "").strip()
         v_kondisi_date = get_village_kondisi_per_date(v, report_data)
@@ -1830,7 +1920,7 @@ def generate_monev_docx(
                     notes=notes_raw,
                     desa=desa_name,
                     kecamatan=kec_name,
-                    kabupaten=kabupaten_full,
+                    kabupaten=v_kab_full,
                     tanggal=v_kondisi_date,
                     tahun=tahun
                 )
@@ -1855,7 +1945,10 @@ def generate_monev_docx(
                 flags=re.I
             )
 
-        heading_text = f"{v_idx + 1}. Desa {desa_name}, Kecamatan {kec_name}" if len(villages) > 1 else f"1. Desa {desa_name}, Kecamatan {kec_name}"
+        if len(kab_list) > 1:
+            heading_text = f"{v_idx + 1}. Desa {desa_name}, Kecamatan {kec_name}, {v_kab_full}"
+        else:
+            heading_text = f"{v_idx + 1}. Desa {desa_name}, Kecamatan {kec_name}" if len(villages) > 1 else f"1. Desa {desa_name}, Kecamatan {kec_name}"
         # Heading desa murni bold hitam Arial 11pt, spasi sebelum 6pt
         p_hdr = make_xml_paragraph(text=heading_text, bold=True, font_name="Arial", font_size_pt=11.0, alignment="both", line_spacing=1.5, space_before_pt=6, space_after_pt=2)
         insert_before_target(p_hdr)
@@ -1940,7 +2033,7 @@ def generate_monev_docx(
                 insert_before_target(p_blt)
         else:
             p_default = make_xml_paragraph(
-                text=f"Hasil monitoring dan evaluasi pelaksanaan Kegiatan Pamsimas TA {tahun} di Desa {desa_name}, Kecamatan {kec_name}, {kabupaten_full}, kondisi per {v_kondisi_date} menunjukkan pekerjaan fisik dan administrasi berjalan sesuai rencana.",
+                text=f"Hasil monitoring dan evaluasi pelaksanaan Kegiatan Pamsimas TA {tahun} di Desa {desa_name}, Kecamatan {kec_name}, {v_kab_full}, kondisi per {v_kondisi_date} menunjukkan pekerjaan fisik dan administrasi berjalan sesuai rencana.",
                 font_name="Arial", font_size_pt=11.0, alignment="both", line_spacing=1.5, space_after_pt=4
             )
             insert_before_target(p_default)
@@ -2122,7 +2215,16 @@ def generate_monev_docx(
                         d_val = photo_item.get("dusun", "")
                         ds_val = photo_item.get("desa", "")
                         kc_val = photo_item.get("kecamatan", "")
-                        kb_val = photo_item.get("kabupaten", kabupaten_full)
+                        raw_photo_kb = photo_item.get("kabupaten")
+                        if not raw_photo_kb and ds_val:
+                            for vm in villages:
+                                if (vm.get("desa") or "").strip().lower() == ds_val.strip().lower():
+                                    raw_photo_kb = vm.get("kabupaten")
+                                    break
+                        if not raw_photo_kb:
+                            raw_photo_kb = kabupaten_full
+                        raw_clean_kb = re.sub(r"^(?:Kabupaten|Kota)\s*", "", str(raw_photo_kb), flags=re.I).strip()
+                        kb_val = f"Kota {raw_clean_kb}" if str(raw_photo_kb).lower().startswith("kota") else f"Kabupaten {raw_clean_kb}"
                         c_addr = photo_item.get("custom_address") or photo_item.get("address")
 
                         stamped_img = apply_stamp(

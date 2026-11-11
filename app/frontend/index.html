@@ -147,8 +147,15 @@
               </div>
               <div class="form-grid-admin">
                 <div class="form-group" style="position:relative;">
-                  <label class="form-label">Kabupaten</label>
-                  <input type="text" id="reportKabupaten" class="form-input form-input-sm" value="" placeholder="Kabupaten..." autocomplete="off">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                    <label class="form-label" style="margin-bottom:0;">Kabupaten / Kota</label>
+                    <span id="multiKabIndicator" class="tag-subtle" style="display:none; color:#38bdf8; border-color:rgba(56,189,248,0.3); background:rgba(56,189,248,0.08); font-size:0.62rem; padding:1px 5px;" title="Laporan mencakup lebih dari satu kabupaten">Multi-Kab</span>
+                  </div>
+                  <div class="multi-tag-input-container" id="reportKabupatenWrapper" onclick="document.getElementById('reportKabupatenInput')?.focus()">
+                    <div id="reportKabupatenChips" class="tag-chips-wrap"></div>
+                    <input type="text" id="reportKabupatenInput" class="tag-inline-input" placeholder="Pilih kabupaten..." autocomplete="off" spellcheck="false">
+                  </div>
+                  <input type="hidden" id="reportKabupaten" value="">
                 </div>
                 <div class="form-group">
                   <label class="form-label">Tahun</label>

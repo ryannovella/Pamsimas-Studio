@@ -586,37 +586,57 @@ export function generateTripSchedule({
     }
   }
 
-  let photoDayAllocations = [];
-  if (numDays === 1) {
-    photoDayAllocations = photoVillageAllocations.map(p => ({
-      ...p,
-      isoDate: tripDates[0],
-      dayIndex: 0
-    }));
-  } else if (numDays === numVillages) {
-    photoDayAllocations = photoVillageAllocations.map(p => ({
-      ...p,
-      isoDate: tripDates[p.villageIndex] || tripDates[tripDates.length - 1],
-      dayIndex: p.villageIndex
-    }));
-  } else {
-    const basePerDay = Math.floor(photoCount / numDays);
-    const remDay = photoCount % numDays;
-    let dayPIdx = 0;
-    for (let dIdx = 0; dIdx < numDays; dIdx++) {
-      const countThisDay = basePerDay + (dIdx < remDay ? 1 : 0);
-      for (let c = 0; c < countThisDay; c++) {
-        if (dayPIdx < photoVillageAllocations.length) {
-          photoDayAllocations.push({
-            ...photoVillageAllocations[dayPIdx],
-            isoDate: tripDates[dIdx],
-            dayIndex: dIdx
-          });
-          dayPIdx++;
-        }
-      }
+  // Pemetaan hari ke desa:
+  // 1. Jika ada desa yang membawa tanggal spesifik (isoDate / survey_date / tanggal)
+  // 2. Jika numDays === 1: semua desa di hari yang sama secara berurutan.
+  // 3. Jika numDays > 1:
+  //    - Kelompokkan desa per kabupaten.
+  //    - Jika jumlah hari dinas == jumlah kabupaten (contoh: 2 hari, 2 kabupaten: Magelang & Temanggung):
+  //      Hari 1 untuk seluruh desa di Kabupaten 1, Hari 2 untuk seluruh desa di Kabupaten 2.
+  //    - Secara umum, petakan desa secara utuh ke hari (jangan memecah satu desa ke dua hari berbeda).
+  const distinctKabs = [];
+  validVillages.forEach(v => {
+    const k = (v.kabupaten || '').trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '');
+    if (k && !distinctKabs.includes(k)) {
+      distinctKabs.push(k);
     }
-  }
+  });
+
+  const villageDayMap = new Map();
+  validVillages.forEach((v, vIdx) => {
+    // Cek tanggal eksplisit
+    const explicitDate = v.survey_date || v.date || v.tanggal;
+    if (explicitDate && tripDates.includes(explicitDate)) {
+      villageDayMap.set(vIdx, explicitDate);
+      return;
+    }
+
+    if (numDays === 1) {
+      villageDayMap.set(vIdx, tripDates[0]);
+    } else if (numDays === numVillages) {
+      villageDayMap.set(vIdx, tripDates[vIdx]);
+    } else if (distinctKabs.length > 1 && distinctKabs.length === numDays) {
+      // 2 hari untuk 2 kabupaten, dsb.
+      const k = (v.kabupaten || '').trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '');
+      const kabIdx = distinctKabs.indexOf(k);
+      const targetDay = kabIdx >= 0 && kabIdx < numDays ? kabIdx : Math.min(numDays - 1, Math.floor(vIdx * numDays / numVillages));
+      villageDayMap.set(vIdx, tripDates[targetDay]);
+    } else {
+      // Petakan desa secara proporsional per hari
+      const targetDay = Math.min(numDays - 1, Math.floor(vIdx * numDays / numVillages));
+      villageDayMap.set(vIdx, tripDates[targetDay]);
+    }
+  });
+
+  const photoDayAllocations = photoVillageAllocations.map(p => {
+    const isoDate = villageDayMap.get(p.villageIndex) || tripDates[0];
+    const dayIndex = tripDates.indexOf(isoDate) >= 0 ? tripDates.indexOf(isoDate) : 0;
+    return {
+      ...p,
+      isoDate,
+      dayIndex
+    };
+  });
 
   const parseTimeToMin = (tStr, defH, defM) => {
     const m = (tStr || "").match(/(\d{1,2}):(\d{2})/);
@@ -663,6 +683,7 @@ export function generateTripSchedule({
     }
 
     const stepMin = span / (k - 1);
+    let lastMin = dayStart - 1;
     for (let i = 0; i < k; i++) {
       let curMin = Math.round(dayStart + i * stepMin);
 
@@ -671,12 +692,14 @@ export function generateTripSchedule({
         curMin += jit[(dayIdx * 5 + i * 7) % jit.length];
       }
 
-      if (curMin > dayEndLimit) curMin = dayEndLimit - (k - 1 - i) * 2;
-      if (curMin < dayStart) curMin = dayStart + i * 2;
+      if (curMin > dayEndLimit) curMin = dayEndLimit - (k - 1 - i) * 1;
+      if (curMin <= lastMin) curMin = lastMin + 1;
 
       if (curMin % 5 === 0) {
-        curMin = (curMin + 2 <= dayEndLimit) ? curMin + 2 : curMin - 2;
+        curMin = (curMin + 1 <= dayEndLimit && curMin + 1 > lastMin) ? curMin + 1 : (curMin - 1 > lastMin ? curMin - 1 : curMin + 2);
       }
+      if (curMin <= lastMin) curMin = lastMin + 1;
+      lastMin = curMin;
 
       const hh = Math.floor(curMin / 60);
       const mm = curMin % 60;
