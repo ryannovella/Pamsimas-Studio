@@ -93,10 +93,15 @@ export function renderStampedPhoto(canvas, imgObj, meta, showRaw = false) {
       desaClean = `Desa ${desaClean}`;
     }
 
+    let kabClean = (meta?.kabupaten || '').trim();
+    if (kabClean && !kabClean.toLowerCase().startsWith('kabupaten') && !kabClean.toLowerCase().startsWith('kota')) {
+      kabClean = `Kabupaten ${kabClean}`;
+    }
+
     if (meta?.dusun) lines.push(meta.dusun.trim());
     if (desaClean) lines.push(desaClean);
     if (kecClean) lines.push(kecClean);
-    if (meta?.kabupaten) lines.push(meta.kabupaten.trim());
+    if (kabClean) lines.push(kabClean);
     if (meta?.provinsi) lines.push(meta.provinsi.trim());
   }
 

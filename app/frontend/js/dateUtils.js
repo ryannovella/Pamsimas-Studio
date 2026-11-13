@@ -541,7 +541,8 @@ export function generateTripSchedule({
   endTimeStr = "15:47:38",
   villages = [],
   photoCount = 0,
-  tz = "WIB"
+  tz = "WIB",
+  forceReschedule = false
 }) {
   if (photoCount <= 0) return [];
 
@@ -587,46 +588,106 @@ export function generateTripSchedule({
   }
 
   // Pemetaan hari ke desa:
-  // 1. Jika ada desa yang membawa tanggal spesifik (isoDate / survey_date / tanggal)
+  // 1. Cek apakah ada tanggal eksplisit per desa yang valid (dan bukan sekadar cache satu tanggal lama).
   // 2. Jika numDays === 1: semua desa di hari yang sama secara berurutan.
-  // 3. Jika numDays > 1:
+  // 3. Jika numDays > 1 dan multiple kabupaten:
   //    - Kelompokkan desa per kabupaten.
-  //    - Jika jumlah hari dinas == jumlah kabupaten (contoh: 2 hari, 2 kabupaten: Magelang & Temanggung):
-  //      Hari 1 untuk seluruh desa di Kabupaten 1, Hari 2 untuk seluruh desa di Kabupaten 2.
-  //    - Secara umum, petakan desa secara utuh ke hari (jangan memecah satu desa ke dua hari berbeda).
+  //    - Petakan hari dinas secara runtut & utuh per kabupaten (Kabupaten 1 pada hari 1, Kabupaten 2 pada hari 2, dst).
+  //    - Jika jumlah hari lebih banyak dari kabupaten, bagi rentang hari per kabupaten secara proporsional.
+  // 4. Jika numDays > 1 dan single kabupaten:
+  //    - Petakan desa secara proporsional melintasi hari dinas.
   const distinctKabs = [];
-  validVillages.forEach(v => {
-    const k = (v.kabupaten || '').trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '');
-    if (k && !distinctKabs.includes(k)) {
-      distinctKabs.push(k);
+  const kabToVillages = new Map();
+
+  validVillages.forEach((v, vIdx) => {
+    let k = (v.kabupaten || '').trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '');
+    if (!k) {
+      k = distinctKabs[0] || 'kabupaten_default';
     }
+    if (!distinctKabs.includes(k)) {
+      distinctKabs.push(k);
+      kabToVillages.set(k, []);
+    }
+    kabToVillages.get(k).push(vIdx);
   });
+
+  // Deteksi apakah seluruh tanggal eksplisit cuma menumpuk di 1 hari lama padahal sekarang multi-hari
+  const explicitDates = validVillages.map(v => v.survey_date || v.date || v.tanggal).filter(Boolean);
+  const allExplicitIdentical = explicitDates.length > 0 && explicitDates.every(d => d === explicitDates[0]);
+  const shouldUseExplicit = !forceReschedule && !(numDays > 1 && allExplicitIdentical);
 
   const villageDayMap = new Map();
-  validVillages.forEach((v, vIdx) => {
-    // Cek tanggal eksplisit
-    const explicitDate = v.survey_date || v.date || v.tanggal;
-    if (explicitDate && tripDates.includes(explicitDate)) {
-      villageDayMap.set(vIdx, explicitDate);
-      return;
-    }
+  const numKabs = distinctKabs.length;
 
-    if (numDays === 1) {
-      villageDayMap.set(vIdx, tripDates[0]);
-    } else if (numDays === numVillages) {
-      villageDayMap.set(vIdx, tripDates[vIdx]);
-    } else if (distinctKabs.length > 1 && distinctKabs.length === numDays) {
-      // 2 hari untuk 2 kabupaten, dsb.
-      const k = (v.kabupaten || '').trim().toLowerCase().replace(/^(?:kabupaten|kota)\s*/i, '');
-      const kabIdx = distinctKabs.indexOf(k);
-      const targetDay = kabIdx >= 0 && kabIdx < numDays ? kabIdx : Math.min(numDays - 1, Math.floor(vIdx * numDays / numVillages));
-      villageDayMap.set(vIdx, tripDates[targetDay]);
+  if (shouldUseExplicit) {
+    validVillages.forEach((v, vIdx) => {
+      const expDate = v.survey_date || v.date || v.tanggal;
+      if (expDate && tripDates.includes(expDate)) {
+        villageDayMap.set(vIdx, expDate);
+      }
+    });
+  }
+
+  if (numDays === 1) {
+    validVillages.forEach((_, vIdx) => {
+      if (!villageDayMap.has(vIdx)) {
+        villageDayMap.set(vIdx, tripDates[0]);
+      }
+    });
+  } else if (numKabs > 1) {
+    // KASUS MULTIPLE KABUPATEN + MULTIPLE DAY
+    if (numKabs === numDays) {
+      // Pas 1 kabupaten per hari (misal 2 hari: Magelang di Hari 1, Temanggung di Hari 2)
+      distinctKabs.forEach((k, kabIdx) => {
+        const vList = kabToVillages.get(k) || [];
+        vList.forEach(vIdx => {
+          if (!villageDayMap.has(vIdx)) {
+            villageDayMap.set(vIdx, tripDates[kabIdx]);
+          }
+        });
+      });
+    } else if (numDays > numKabs) {
+      // Lebih banyak hari daripada kabupaten (misal 3 hari, 2 kabupaten)
+      let currentDayIdx = 0;
+      distinctKabs.forEach((k, kabIdx) => {
+        const vList = kabToVillages.get(k) || [];
+        const remKabs = numKabs - kabIdx;
+        const remDays = numDays - currentDayIdx;
+        let daysForThisKab = Math.max(1, Math.round((vList.length / numVillages) * numDays));
+        if (kabIdx === numKabs - 1) {
+          daysForThisKab = remDays;
+        } else {
+          daysForThisKab = Math.min(remDays - (remKabs - 1), daysForThisKab);
+        }
+        vList.forEach((vIdx, innerIdx) => {
+          if (!villageDayMap.has(vIdx)) {
+            const dayOffset = Math.min(daysForThisKab - 1, Math.floor(innerIdx * daysForThisKab / vList.length));
+            villageDayMap.set(vIdx, tripDates[currentDayIdx + dayOffset]);
+          }
+        });
+        currentDayIdx += daysForThisKab;
+      });
     } else {
-      // Petakan desa secara proporsional per hari
-      const targetDay = Math.min(numDays - 1, Math.floor(vIdx * numDays / numVillages));
-      villageDayMap.set(vIdx, tripDates[targetDay]);
+      // Lebih sedikit hari daripada kabupaten (misal 2 hari, 3 kabupaten)
+      distinctKabs.forEach((k, kabIdx) => {
+        const targetDay = Math.min(numDays - 1, Math.floor(kabIdx * numDays / numKabs));
+        const vList = kabToVillages.get(k) || [];
+        vList.forEach(vIdx => {
+          if (!villageDayMap.has(vIdx)) {
+            villageDayMap.set(vIdx, tripDates[targetDay]);
+          }
+        });
+      });
     }
-  });
+  } else {
+    // KASUS SINGLE KABUPATEN + MULTIPLE DAY
+    validVillages.forEach((_, vIdx) => {
+      if (!villageDayMap.has(vIdx)) {
+        const targetDay = Math.min(numDays - 1, Math.floor(vIdx * numDays / numVillages));
+        villageDayMap.set(vIdx, tripDates[targetDay]);
+      }
+    });
+  }
 
   const photoDayAllocations = photoVillageAllocations.map(p => {
     const isoDate = villageDayMap.get(p.villageIndex) || tripDates[0];
@@ -654,7 +715,8 @@ export function generateTripSchedule({
   const nonRoundSecPool = [18, 23, 27, 34, 38, 42, 47, 53, 58];
   const finalSchedule = new Array(photoCount);
 
-  Object.keys(byDay).forEach((isoDate, dayIdx) => {
+  const sortedDays = Object.keys(byDay).sort();
+  sortedDays.forEach((isoDate, dayIdx) => {
     const dayPhotos = byDay[isoDate];
     const k = dayPhotos.length;
     const parts = isoDate.split('-').map(Number);
