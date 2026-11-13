@@ -3491,11 +3491,7 @@ input[type="file"]::file-selector-button:hover {
   letter-spacing: -0.01em;
 }
 
-.autofill-notice {
-  font-size: 0.68rem;
-  color: #34d399;
-  font-weight: 500;
-}
+
 
 /* Trip Panel */
 .doc-trip-panel {

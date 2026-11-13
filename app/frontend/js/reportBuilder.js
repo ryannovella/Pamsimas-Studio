@@ -2008,7 +2008,6 @@ export class ReportBuilder {
             </strong>
           </div>
           <div class="village-header-right">
-            <span id="autofillNotice_${v.id}" class="autofill-notice" style="display:none;"></span>
             ${this.villages.length > 1 ? `
               <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.removeVillage('${v.id}')" title="Hapus desa ini">
                 Hapus
@@ -2018,7 +2017,7 @@ export class ReportBuilder {
         </div>
 
         ${isMultiKab ? `
-        <!-- Form 3 Kolom: Kabupaten, Kecamatan, Desa -->
+        <!-- Form 3 Kolom: Kabupaten > Nama Desa > Kecamatan (Autofill) -->
         <div class="form-row village-loc-grid village-loc-grid-3" style="margin-bottom:8px;">
           <div class="form-group" style="margin-bottom:0; position:relative;">
             <label class="form-label">Kabupaten</label>
@@ -2027,16 +2026,16 @@ export class ReportBuilder {
             </select>
           </div>
           <div class="form-group" style="margin-bottom:0; position:relative;">
-            <label class="form-label">Kecamatan</label>
-            <input type="text" id="kec_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.kecamatan)}" placeholder="Kecamatan..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'kecamatan', this.value)">
-          </div>
-          <div class="form-group" style="margin-bottom:0; position:relative;">
             <label class="form-label">Nama Desa</label>
             <input type="text" id="desa_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.desa)}" placeholder="Nama desa..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'desa', this.value)">
           </div>
+          <div class="form-group" style="margin-bottom:0; position:relative;">
+            <label class="form-label">Kecamatan</label>
+            <input type="text" id="kec_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.kecamatan)}" placeholder="Kecamatan (autofill)..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'kecamatan', this.value)">
+          </div>
         </div>
         ` : `
-        <!-- Nama Desa & Kecamatan -->
+        <!-- Form 2 Kolom: Nama Desa > Kecamatan (Autofill) -->
         <div class="form-row form-grid-2" style="margin-bottom:8px;">
           <div class="form-group" style="margin-bottom:0; position:relative;">
             <label class="form-label">Nama Desa</label>
@@ -2044,7 +2043,7 @@ export class ReportBuilder {
           </div>
           <div class="form-group" style="margin-bottom:0; position:relative;">
             <label class="form-label">Kecamatan</label>
-            <input type="text" id="kec_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.kecamatan)}" placeholder="Kecamatan..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'kecamatan', this.value)">
+            <input type="text" id="kec_${v.id}" class="form-input form-input-sm" value="${this.escapeHtml(v.kecamatan)}" placeholder="Kecamatan (autofill)..." autocomplete="off" oninput="window.reportBuilder.onVillageFieldChange('${v.id}', 'kecamatan', this.value)">
           </div>
         </div>
         `}
@@ -2142,14 +2141,6 @@ export class ReportBuilder {
     if (vTitle) {
       vTitle.textContent = `Desa ${desaName}${kecName ? ' (' + kecName + ')' : ''}`;
     }
-    if (notice) {
-      notice.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" style="vertical-align:middle; margin-right:3px;"><polyline points="20 6 9 17 4 12"/></svg> Kecamatan ${kecName}${kabClean ? ' (Kab. ' + kabClean + ')' : ''} otomatis disesuaikan`;
-      notice.style.display = 'inline';
-      setTimeout(() => {
-        const el = document.getElementById(`autofillNotice_${villageId}`);
-        if (el) el.style.display = 'none';
-      }, 4000);
-    }
 
     this.updateQuickVillageTargetOptions();
     this.syncPhotosToVillages();
@@ -2233,16 +2224,6 @@ export class ReportBuilder {
             if (!this.kabupatens.some(k => k.toLowerCase() === kabClean.toLowerCase())) {
               this.addKabupaten(kabClean);
             }
-          }
-
-          const notice = document.getElementById(`autofillNotice_${id}`);
-          if (notice) {
-            notice.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" style="vertical-align:middle; margin-right:3px;"><polyline points="20 6 9 17 4 12"/></svg> Kecamatan ${match.kecamatan} otomatis disesuaikan`;
-            notice.style.display = 'inline';
-            setTimeout(() => {
-              const el = document.getElementById(`autofillNotice_${id}`);
-              if (el) el.style.display = 'none';
-            }, 4000);
           }
         }
       }
@@ -3362,9 +3343,11 @@ export class ReportBuilder {
         <!-- Canvas Media Preview (Word Aspect 4:3) -->
         <div class="doc-cell-media" onclick="window.reportBuilder.handleCardMediaClick(event, '${p.id}', ${idx})">
           <canvas id="reportTableCanvas_${p.id}"></canvas>
-          <span class="doc-live-badge ${isOriginal ? 'badge-raw' : ''}" style="display:inline-flex; align-items:center; gap:3px; position:absolute; top:6px; right:6px; font-size:0.62rem;">
-            ${isOriginal ? 'Foto Asli' : (isCropped ? 'Disesuaikan' : 'Watermark')}
-          </span>
+          ${isOriginal ? `
+            <span class="doc-live-badge badge-raw" style="display:inline-flex; align-items:center; gap:3px; position:absolute; top:6px; right:6px; font-size:0.62rem;">
+              Foto Asli
+            </span>
+          ` : ''}
         </div>
 
         <!-- Caption (mirip tabel dokumen Word) -->

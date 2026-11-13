@@ -164,7 +164,6 @@
                 <div class="form-group">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
                     <label class="form-label" style="margin-bottom:0;">Tanggal Laporan</label>
-                    <span id="reportTanggalLaporanTag" class="tag-subtle" title="Otomatis H+1 hari kerja berikutnya (melewati weekend & libur nasional)">(H+1 SPT)</span>
                   </div>
                   <input type="date" id="reportTanggalLaporan" class="form-input form-input-sm" value="" onchange="window.reportBuilder ? window.reportBuilder.onTanggalLaporanChange(this.value) : null">
                   <span id="reportTanggalLaporanPreview" class="date-preview-label"></span>
@@ -310,7 +309,6 @@
                   <div class="form-group" id="reportTripStartDateGroup">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
                       <label class="form-label" id="reportTripStartDateLabel" style="margin-bottom:0;">Tanggal Dinas</label>
-                      <span class="tag-subtle" title="Otomatis mengikuti Tanggal SPT">(Sama dgn SPT)</span>
                     </div>
                     <input type="date" id="reportTripStartDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()">
                   </div>
@@ -351,7 +349,7 @@
                     <polyline points="17 8 12 3 7 8"/>
                     <line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
-                  <span class="dropzone-text" id="reportPhotoDropZoneText">Pilih atau seret berkas foto dokumentasi ke sini</span>
+                  <span class="dropzone-text" id="reportPhotoDropZoneText">Pilih atau seret foto dokumentasi ke sini</span>
                 </div>
                 <div class="dropzone-disabled-notice" id="reportPhotoDisabledNotice" style="display:none;">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -593,7 +591,7 @@
                   </div>
                   <div style="font-size:0.68rem; color:#94a3b8; margin-top:3px; display:flex; align-items:center; justify-content:center; gap:6px;">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m10 15 5-3-5-3v6z"/></svg>
-                    <span>Simulasi Tabel 2 Kolom Dokumen Word • Tarik & geser (drag & drop) kartu untuk menyusun urutan foto di dokumen</span>
+                    <span>Tabel Dokumen Word • Geser foto untuk mengatur urutan</span>
                   </div>
                 </div>
                 <div id="reportPhotosTableContainer" style="display:flex; flex-direction:column; gap:8px;"></div>
