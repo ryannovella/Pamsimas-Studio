@@ -568,11 +568,39 @@
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     <span>Hapus Seleksi (<span id="reportDeleteSelectedCount">0</span>)</span>
                   </button>
+
+                  <div style="width:1px; height:14px; background:rgba(255,255,255,0.12); margin:0 2px;"></div>
+
+                  <!-- Group 4: Toggle Tampilan (Simulasi Tabel Word vs Kartu Grid) -->
+                  <div class="view-mode-toggle" style="display:inline-flex; align-items:center; background:rgba(15,23,42,0.65); padding:2px; border-radius:5px; border:1px solid rgba(255,255,255,0.12);">
+                    <button type="button" class="btn btn-xs btn-active" id="btnViewModeTable" onclick="window.reportBuilder.setPhotoViewMode('table')" title="Tampilan Simulasi Tabel 2 Kolom Dokumen Word (.docx)" style="display:flex; align-items:center; gap:4px; padding:2px 7px; font-size:0.68rem; font-weight:600;">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="12" y1="9" x2="12" y2="21"/></svg>
+                      <span>Simulasi Tabel Word</span>
+                    </button>
+                    <button type="button" class="btn btn-xs btn-ghost" id="btnViewModeGrid" onclick="window.reportBuilder.setPhotoViewMode('grid')" title="Tampilan Kartu Grid" style="display:flex; align-items:center; gap:4px; padding:2px 7px; font-size:0.68rem; font-weight:600;">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                      <span>Kartu Grid</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <!-- Photo Gallery Grid (2-Column Responsive) -->
-              <div id="reportPhotosGrid" style="display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; max-height:480px; overflow-y:auto; padding-right:2px; margin-bottom:10px;"></div>
+              <!-- TAMPILAN 1: Simulasi Tabel Dokumen Word (2-Column Official Layout + Drag Rearrange) -->
+              <div id="reportPhotosTableView" class="doc-simulated-page" style="display:block; max-height:520px; overflow-y:auto; padding:14px; background:rgba(15,23,42,0.5); border:1px solid var(--border-color); border-radius:6px; margin-bottom:10px;">
+                <div class="simulated-table-header" style="text-align:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.08);">
+                  <div style="font-family:'Times New Roman', serif; font-size:0.95rem; font-weight:700; color:#f8fafc; text-transform:uppercase; letter-spacing:0.5px;" id="simulatedDocPhotoTitle">
+                    Monitoring Kegiatan Pamsimas TA 2026
+                  </div>
+                  <div style="font-size:0.68rem; color:#94a3b8; margin-top:3px; display:flex; align-items:center; justify-content:center; gap:6px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m10 15 5-3-5-3v6z"/></svg>
+                    <span>Simulasi Tabel 2 Kolom Dokumen Word • Tarik & geser (drag & drop) kartu untuk menyusun urutan foto di dokumen</span>
+                  </div>
+                </div>
+                <div id="reportPhotosTableContainer" style="display:flex; flex-direction:column; gap:8px;"></div>
+              </div>
+
+              <!-- TAMPILAN 2: Photo Gallery Grid (2-Column Responsive) -->
+              <div id="reportPhotosGrid" style="display:none; grid-template-columns:repeat(2, 1fr); gap:8px; max-height:480px; overflow-y:auto; padding-right:2px; margin-bottom:10px;"></div>
 
               <!-- Primary Workflow CTA: Generate & Download Word (.docx) -->
               <div class="photo-card-download-footer" style="margin-top:8px; padding-top:12px; border-top:1px solid var(--border-color);">

@@ -11,7 +11,8 @@ import tempfile
 import shutil
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, date, timedelta
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 try:
     import pypdf  # type: ignore
@@ -2216,10 +2217,24 @@ def generate_monev_docx(
 
             if img_bytes:
                 is_original = bool(photo_item.get("already_stamped") or photo_item.get("keep_original") or photo_item.get("is_original"))
+                sanitized_jpg_bytes = None
                 try:
                     pil_img = Image.open(io.BytesIO(img_bytes))
+                    pil_img.load()
                     # Normalisasi Aspect Ratio: sesuaikan foto portrait ke landscape 4:3 agar simetris
                     pil_img = normalize_image_aspect_ratio(pil_img)
+
+                    # Pastikan mode warna bebas transparansi (RGBA/P/LA) menjadi RGB murni untuk Word
+                    if pil_img.mode in ("RGBA", "LA", "P"):
+                        bg = Image.new("RGB", pil_img.size, (255, 255, 255))
+                        if pil_img.mode == "P":
+                            pil_img = pil_img.convert("RGBA")
+                        alpha_mask = pil_img.split()[-1] if pil_img.mode in ("RGBA", "LA") else None
+                        bg.paste(pil_img, mask=alpha_mask)
+                        pil_img = bg
+                    elif pil_img.mode != "RGB":
+                        pil_img = pil_img.convert("RGB")
+
                     if not is_original:
                         t_str = photo_item.get("time_str") or datetime.now().strftime("%A, %d %B %Y %H:%M:%S WIB")
                         lat_val = str(photo_item.get("lat") or "-7.500000")
@@ -2253,23 +2268,42 @@ def generate_monev_docx(
                         )
                         buf = io.BytesIO()
                         stamped_img.convert("RGB").save(buf, format="JPEG", quality=92)
-                        img_bytes = buf.getvalue()
+                        sanitized_jpg_bytes = buf.getvalue()
                     else:
                         buf = io.BytesIO()
                         pil_img.convert("RGB").save(buf, format="JPEG", quality=92)
-                        img_bytes = buf.getvalue()
+                        sanitized_jpg_bytes = buf.getvalue()
                 except Exception as e:
                     log_error("photo_table_stamping", e)
+                    # Robust fallback: paksa re-encode gambar ke JPEG RGB baku agar Word tidak pernah menerima WebP / data rusak
+                    try:
+                        pil_fb = Image.open(io.BytesIO(img_bytes))
+                        pil_fb.load()
+                        if pil_fb.mode in ("RGBA", "LA", "P"):
+                            bg = Image.new("RGB", pil_fb.size, (255, 255, 255))
+                            if pil_fb.mode == "P":
+                                pil_fb = pil_fb.convert("RGBA")
+                            bg.paste(pil_fb, mask=pil_fb.split()[-1] if pil_fb.mode in ("RGBA", "LA") else None)
+                            pil_fb = bg
+                        elif pil_fb.mode != "RGB":
+                            pil_fb = pil_fb.convert("RGB")
+                        buf_fb = io.BytesIO()
+                        pil_fb.save(buf_fb, format="JPEG", quality=92)
+                        sanitized_jpg_bytes = buf_fb.getvalue()
+                    except Exception as e_fb:
+                        log_error("photo_table_fallback_jpeg", e_fb)
+                        sanitized_jpg_bytes = None
 
-                try:
-                    para = cell.paragraphs[0]
-                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    para.paragraph_format.space_before = Pt(4)
-                    para.paragraph_format.space_after = Pt(4)
-                    run = para.add_run()
-                    run.add_picture(io.BytesIO(img_bytes), width=Inches(3.10))
-                except Exception as e:
-                    log_error("photo_table_add_picture", e)
+                if sanitized_jpg_bytes:
+                    try:
+                        para = cell.paragraphs[0]
+                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        para.paragraph_format.space_before = Pt(4)
+                        para.paragraph_format.space_after = Pt(4)
+                        run = para.add_run()
+                        run.add_picture(io.BytesIO(sanitized_jpg_bytes), width=Inches(3.10))
+                    except Exception as e:
+                        log_error("photo_table_add_picture", e)
 
         tbl_photo_elem = photo_table._tbl
         body_parent.remove(tbl_photo_elem)

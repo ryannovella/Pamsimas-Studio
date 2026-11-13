@@ -361,9 +361,10 @@ def api_report_generate_docx():
                                 break
                             except Exception:
                                 pass
-            elif url.startswith("data:image"):
+            elif url.startswith("data:"):
                 try:
-                    target_bytes = base64.b64decode(url.split(",", 1)[1])
+                    b64_part = url.split(",", 1)[1] if "," in url else url
+                    target_bytes = base64.b64decode(b64_part)
                 except Exception:
                     pass
             elif p.get("bytes"):

@@ -75,6 +75,10 @@ export class ReportBuilder {
       villages: false,
       photos: false
     };
+
+    // Mode Tampilan Foto (Simulasi Tabel Word vs Grid) & Drag Reordering State
+    this.photoViewMode = 'table';
+    this.draggedPhotoIndex = null;
   }
 
   findBestMatch(query, candidates, keyExtractor = null) {
@@ -1078,18 +1082,76 @@ export class ReportBuilder {
       dropZone.addEventListener('dragleave', () => {
         dropZone.classList.remove('drag-active');
       });
-      dropZone.addEventListener('drop', (e) => {
+      dropZone.addEventListener('drop', async (e) => {
         e.preventDefault();
         dropZone.classList.remove('drag-active');
         if (!this.areAllDatesFilled()) {
           this.promptDatesRequired();
           return;
         }
+
+        // 1. Ambil berkas dari dataTransfer.files
+        let files = [];
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-          this.handlePhotoFiles(Array.from(e.dataTransfer.files));
+          files = Array.from(e.dataTransfer.files);
+        }
+
+        // 2. Fallback WhatsApp Web: jika files kosong (drag dari chat), ekstrak dari items
+        if (files.length === 0 && e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+          for (const item of e.dataTransfer.items) {
+            if (item.kind === 'file') {
+              const f = item.getAsFile();
+              if (f) files.push(f);
+            }
+          }
+        }
+
+        // 3. Fallback WhatsApp Web: ekstrak tag <img> dari payload text/html jika ada
+        if (files.length === 0 && e.dataTransfer.types && e.dataTransfer.types.includes('text/html')) {
+          try {
+            const htmlData = e.dataTransfer.getData('text/html');
+            const doc = new DOMParser().parseFromString(htmlData, 'text/html');
+            const imgEl = doc.querySelector('img');
+            if (imgEl && imgEl.src) {
+              const res = await fetch(imgEl.src);
+              const blob = await res.blob();
+              files.push(new File([blob], 'whatsapp_photo.jpg', { type: blob.type || 'image/jpeg' }));
+            }
+          } catch (err) {
+            console.warn('Gagal membaca gambar dari HTML drag WhatsApp Web:', err);
+          }
+        }
+
+        if (files.length > 0) {
+          await this.handlePhotoFiles(files);
         }
       });
     }
+
+    // Dukungan Paste (Ctrl+V) langsung dari WhatsApp Web / Clipboard
+    window.addEventListener('paste', async (e) => {
+      const targetTag = e.target.tagName ? e.target.tagName.toLowerCase() : '';
+      if (targetTag === 'input' || targetTag === 'textarea' || e.target.isContentEditable) {
+        return;
+      }
+      if (!e.clipboardData || !e.clipboardData.items) return;
+      const pasteFiles = [];
+      for (const item of e.clipboardData.items) {
+        if (item.type && item.type.startsWith('image/')) {
+          const f = item.getAsFile();
+          if (f) pasteFiles.push(f);
+        }
+      }
+      if (pasteFiles.length > 0) {
+        e.preventDefault();
+        if (!this.areAllDatesFilled()) {
+          this.promptDatesRequired();
+          return;
+        }
+        await this.handlePhotoFiles(pasteFiles);
+        this.showToast(`${pasteFiles.length} foto berhasil ditempel dari clipboard / WhatsApp.`, 'success');
+      }
+    });
 
     // Modal Date & Time Picker listeners for real-time watermark sync
     if (this.modalDatePicker) {
@@ -2439,7 +2501,13 @@ export class ReportBuilder {
       return;
     }
 
-    const validFiles = fileList.filter(f => (f.type && f.type.startsWith('image/')) || /\.(jpe?g|png|webp|bmp|gif|tiff?|heic|jfif)$/i.test(f.name || ''));
+    const validFiles = fileList.filter(f => {
+      if (f.type && f.type.startsWith('image/')) return true;
+      if (/\.(jpe?g|png|webp|bmp|gif|tiff?|heic|jfif)$/i.test(f.name || '')) return true;
+      // Mendukung drag dari WhatsApp Web yang terkadang bertipe octet-stream atau tanpa ekstensi
+      if (!f.type || f.type === 'application/octet-stream') return true;
+      return false;
+    });
     if (validFiles.length === 0) {
       this.showToast('Berkas yang dipilih bukan berkas foto/gambar yang didukung (JPG, PNG, WEBP).', 'warning');
       return;
@@ -2451,22 +2519,63 @@ export class ReportBuilder {
       const dataUrl = await new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = () => resolve(null);
         reader.readAsDataURL(file);
       });
+      if (!dataUrl) continue;
 
       const imgInfo = await new Promise((resolve) => {
         const img = new Image();
-        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-        img.onerror = () => resolve({ width: 0, height: 0 });
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve({ img, width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = () => resolve({ img: null, width: 0, height: 0 });
         img.src = dataUrl;
       });
 
-      // Deteksi rasio foto: target rasio baku laporan Kementerian PU adalah landscape 4:3 (1.333)
-      const currentRatio = imgInfo.height > 0 ? (imgInfo.width / imgInfo.height) : (4 / 3);
-      const isMismatched = Math.abs(currentRatio - (4 / 3)) > 0.035;
-      const isPortrait = (imgInfo.height > imgInfo.width * 1.05);
-      const photoId = 'p_' + Math.random().toString(36).substr(2, 9);
+      if (!imgInfo.img || imgInfo.width <= 0 || imgInfo.height <= 0) {
+        continue;
+      }
 
+      // Deteksi rasio foto: target rasio baku laporan Kementerian PU adalah landscape 4:3 (1.333)
+      const targetRatio = 4 / 3;
+      const w = imgInfo.width;
+      const h = imgInfo.height;
+      const srcRatio = w / h;
+      const isMismatched = Math.abs(srcRatio - targetRatio) > 0.035;
+
+      let cropW = w;
+      let cropH = h;
+      let cropX = 0;
+      let cropY = 0;
+
+      if (isMismatched) {
+        if (srcRatio < targetRatio) {
+          // Portrait / Square: crop vertikal simetris
+          cropW = w;
+          cropH = Math.round(w / targetRatio);
+          cropY = Math.max(0, Math.round((h - cropH) / 2));
+        } else {
+          // Wide landscape: crop horizontal simetris
+          cropH = h;
+          cropW = Math.round(h * targetRatio);
+          cropX = Math.max(0, Math.round((w - cropW) / 2));
+        }
+      }
+
+      // Selalu konversi & normalisasi ke standard baseline RGB JPEG 4:3 via canvas
+      // Ini menyelesaikan masalah foto WhatsApp Web (WebP/RGBA/transparansi/corrupt EXIF)
+      // agar selalu menjadi JPEG murni yang 100% didukung Word tanpa 'cant be displayed'
+      const normCanvas = document.createElement('canvas');
+      normCanvas.width = cropW;
+      normCanvas.height = cropH;
+      const normCtx = normCanvas.getContext('2d');
+      normCtx.fillStyle = '#ffffff';
+      normCtx.fillRect(0, 0, cropW, cropH);
+      normCtx.drawImage(imgInfo.img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+      const cleanJpegUrl = normCanvas.toDataURL('image/jpeg', 0.95);
+
+      const photoId = 'p_' + Math.random().toString(36).substr(2, 9);
       const firstVillage = this.villages[0] || {};
       const initDesa = firstVillage.desa || '';
       const initKec = firstVillage.kecamatan || '';
@@ -2474,15 +2583,19 @@ export class ReportBuilder {
       const baseCoords = this.getVillageCoordinates(initDesa, initKab);
       const initJittered = applyGpsJitter(baseCoords.lat, baseCoords.lon, 5, 2000);
 
+      let cleanName = (file.name || 'foto_lapangan').replace(/\.[^.]+$/, '');
+      if (!cleanName) cleanName = 'foto_lapangan';
+      cleanName += '.jpg';
+
       const photoItem = {
         id: photoId,
-        filename: file.name,
-        dataUrl: dataUrl,
-        originalDataUrl: dataUrl,
-        naturalWidth: imgInfo.width,
-        naturalHeight: imgInfo.height,
-        is_portrait: isPortrait,
-        is_mismatched: isMismatched,
+        filename: cleanName,
+        dataUrl: cleanJpegUrl,
+        originalDataUrl: cleanJpegUrl,
+        naturalWidth: cropW,
+        naturalHeight: cropH,
+        is_portrait: false,
+        is_mismatched: false,
         timeStr: '',
         lat: initJittered.lat,
         lon: initJittered.lon,
@@ -2496,13 +2609,8 @@ export class ReportBuilder {
         font_scale: 1.0,
         alreadyStamped: false,
         is_original: false,
-        is_cropped: false
+        is_cropped: isMismatched
       };
-
-      // Flow: Upload -> Deteksi rasio tidak selaras -> Crop otomatis ringan -> Stamp
-      if (isMismatched) {
-        await this.normalizePhotoAspect(photoItem, 4 / 3);
-      }
 
       this.photos.push(photoItem);
       newlyLoadedPhotos.push(photoItem);
@@ -3108,109 +3216,344 @@ export class ReportBuilder {
     this.updateSummaryBadge();
   }
 
+  setPhotoViewMode(mode) {
+    this.photoViewMode = (mode === 'grid') ? 'grid' : 'table';
+    const btnTable = document.getElementById('btnViewModeTable');
+    const btnGrid = document.getElementById('btnViewModeGrid');
+    const tableWrap = document.getElementById('reportPhotosTableView');
+    const gridWrap = document.getElementById('reportPhotosGrid');
+
+    if (btnTable) {
+      btnTable.className = (this.photoViewMode === 'table') ? 'btn btn-xs btn-active' : 'btn btn-xs btn-ghost';
+    }
+    if (btnGrid) {
+      btnGrid.className = (this.photoViewMode === 'grid') ? 'btn btn-xs btn-active' : 'btn btn-xs btn-ghost';
+    }
+    if (tableWrap) {
+      tableWrap.style.display = (this.photoViewMode === 'table') ? 'block' : 'none';
+    }
+    if (gridWrap) {
+      gridWrap.style.display = (this.photoViewMode === 'grid') ? 'grid' : 'none';
+    }
+    this.renderPhotos();
+  }
+
+  handlePhotoDragStart(event, photoId, index) {
+    this.draggedPhotoIndex = index;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', String(index));
+    }
+    const target = event.currentTarget;
+    if (target) {
+      setTimeout(() => target.classList.add('dragging-photo'), 0);
+    }
+  }
+
+  handlePhotoDragOver(event, index) {
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  }
+
+  handlePhotoDragEnter(event, index) {
+    event.preventDefault();
+    const cell = event.currentTarget;
+    if (cell && this.draggedPhotoIndex !== null && this.draggedPhotoIndex !== index) {
+      cell.classList.add('drag-target-over');
+    }
+  }
+
+  handlePhotoDragLeave(event, index) {
+    const cell = event.currentTarget;
+    if (cell) {
+      cell.classList.remove('drag-target-over');
+    }
+  }
+
+  handlePhotoDrop(event, targetIndex) {
+    event.preventDefault();
+    const fromIndex = (this.draggedPhotoIndex !== null)
+      ? this.draggedPhotoIndex
+      : parseInt(event.dataTransfer.getData('text/plain'), 10);
+
+    this.cleanupDragClasses();
+
+    if (!isNaN(fromIndex) && fromIndex !== null && fromIndex !== targetIndex) {
+      this.reorderPhotos(fromIndex, targetIndex);
+    }
+    this.draggedPhotoIndex = null;
+  }
+
+  handlePhotoDragEnd(event) {
+    this.cleanupDragClasses();
+    this.draggedPhotoIndex = null;
+  }
+
+  cleanupDragClasses() {
+    document.querySelectorAll('.dragging-photo').forEach(el => el.classList.remove('dragging-photo'));
+    document.querySelectorAll('.drag-target-over').forEach(el => el.classList.remove('drag-target-over'));
+  }
+
+  reorderPhotos(fromIndex, toIndex) {
+    if (fromIndex < 0 || fromIndex >= this.photos.length || toIndex < 0 || toIndex >= this.photos.length) return;
+    const [movedItem] = this.photos.splice(fromIndex, 1);
+    this.photos.splice(toIndex, 0, movedItem);
+
+    // Jika seluruh tanggal dinas telah terisi dan segmen foto tidak dikunci,
+    // sinkronkan urutan jadwal dan geotag secara merata sesuai urutan baru di dokumen
+    const validVillages = this.villages.filter(v => v.desa && v.desa.trim());
+    if (this.areAllDatesFilled() && validVillages.length > 0 && !this.lockedSegments.photos) {
+      this.autoGenerateAllTimestamps(true);
+    } else {
+      this.renderPhotos();
+    }
+    this.showToast(`Foto #${fromIndex + 1} berhasil dipindahkan ke posisi #${toIndex + 1} tabel dokumen.`, 'info');
+  }
+
+  movePhotoStep(index, direction) {
+    const target = index + direction;
+    if (target >= 0 && target < this.photos.length) {
+      this.reorderPhotos(index, target);
+    }
+  }
+
+  renderTableCellHtml(p, idx, colLabel) {
+    const isSelected = this.selectedPhotoIds.has(p.id);
+    const isOriginal = !!(p.is_original || p.alreadyStamped);
+    const isCropped = !!p.is_cropped;
+    const latFormatted = String(p.lat || '').replace('.', ',');
+    const lonFormatted = String(p.lon || '').replace('.', ',');
+
+    return `
+      <div class="doc-table-cell photo-draggable ${isSelected ? 'selected' : ''}" 
+           id="reportTableCell_${p.id}" 
+           data-photo-id="${p.id}" 
+           data-photo-index="${idx}"
+           draggable="true"
+           ondragstart="window.reportBuilder.handlePhotoDragStart(event, '${p.id}', ${idx})"
+           ondragover="window.reportBuilder.handlePhotoDragOver(event, ${idx})"
+           ondragenter="window.reportBuilder.handlePhotoDragEnter(event, ${idx})"
+           ondragleave="window.reportBuilder.handlePhotoDragLeave(event, ${idx})"
+           ondrop="window.reportBuilder.handlePhotoDrop(event, ${idx})"
+           ondragend="window.reportBuilder.handlePhotoDragEnd(event)">
+        
+        <!-- Grip & Position Header -->
+        <div class="doc-cell-grip-bar" title="Tarik & seret untuk memindahkan urutan foto di dokumen">
+          <div class="doc-cell-grip-left">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="cursor:grab;"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+            <span>Foto #${idx + 1}</span>
+            <span class="badge" style="font-size:0.62rem; padding:1px 5px; background:rgba(255,255,255,0.06); color:var(--text-muted);">${colLabel}</span>
+          </div>
+          <div class="doc-cell-grip-right">
+            <button type="button" class="btn btn-ghost btn-xs btn-move-step" onclick="event.stopPropagation(); window.reportBuilder.movePhotoStep(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} title="Geser Maju (posisi #${idx})">
+              ▲
+            </button>
+            <button type="button" class="btn btn-ghost btn-xs btn-move-step" onclick="event.stopPropagation(); window.reportBuilder.movePhotoStep(${idx}, 1)" ${idx === this.photos.length - 1 ? 'disabled' : ''} title="Geser Mundur (posisi #${idx + 2})">
+              ▼
+            </button>
+            <label class="doc-card-checkbox" onclick="event.stopPropagation();" style="display:inline-flex; align-items:center; margin:0 0 0 4px; cursor:pointer;">
+              <input type="checkbox" id="tableChk_${p.id}" ${isSelected ? 'checked' : ''} onclick="window.reportBuilder.handleCheckboxClick(event, '${p.id}', ${idx})">
+            </label>
+          </div>
+        </div>
+
+        <!-- Canvas Media Preview (Word Aspect 4:3) -->
+        <div class="doc-cell-media" onclick="window.reportBuilder.handleCardMediaClick(event, '${p.id}', ${idx})">
+          <canvas id="reportTableCanvas_${p.id}"></canvas>
+          <span class="doc-live-badge ${isOriginal ? 'badge-raw' : ''}" style="display:inline-flex; align-items:center; gap:3px; position:absolute; top:6px; right:6px; font-size:0.62rem;">
+            ${isOriginal ? 'Foto Asli' : (isCropped ? 'Disesuaikan' : 'Watermark')}
+          </span>
+        </div>
+
+        <!-- Caption (mirip tabel dokumen Word) -->
+        <div class="doc-cell-caption">
+          <div class="doc-cell-caption-title" title="Desa ${this.escapeHtml(p.desa || '-')}, Kec. ${this.escapeHtml(p.kecamatan || '-')}, Kab. ${this.escapeHtml(p.kabupaten || '-')}">
+            <span>Desa ${this.escapeHtml(p.desa || 'Belum Diatur')}</span> 
+            ${p.kecamatan ? `<span style="color:var(--text-muted); font-size:0.68rem;">(Kec. ${this.escapeHtml(p.kecamatan)})</span>` : ''}
+            ${p.kabupaten ? `<span class="badge" style="font-size:0.6rem; padding:1px 4px; margin-left:4px;">Kab. ${this.escapeHtml(p.kabupaten)}</span>` : ''}
+          </div>
+          <div class="doc-cell-caption-sub" title="${this.escapeHtml(p.timeStr || '-')} • Lat: ${latFormatted}, Lon: ${lonFormatted}">
+            <span class="font-mono">${this.escapeHtml(p.timeStr || 'Belum di-generate')}</span>
+            ${p.lat ? ` • <span class="font-mono">${latFormatted}, ${lonFormatted}</span>` : ''}
+          </div>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px; padding-top:5px; border-top:1px solid rgba(255,255,255,0.06);">
+            <div style="display:flex; gap:3px;">
+              <button type="button" class="btn btn-secondary btn-xs" onclick="event.stopPropagation(); window.openPhotoLightbox('${p.id}', 'report')" title="Perbesar Layar Penuh (Lightbox)">
+                Preview
+              </button>
+              <button type="button" class="btn btn-secondary btn-xs" onclick="event.stopPropagation(); window.reportBuilder.openModal('${p.id}')" title="Edit Stempel & Waktu">
+                Edit
+              </button>
+              <button type="button" class="btn ${isOriginal ? 'btn-active' : 'btn-secondary'} btn-xs" onclick="event.stopPropagation(); window.reportBuilder.toggleSingleKeepOriginal('${p.id}')" title="Ganti Watermark / Asli">
+                ${isOriginal ? 'Asli' : 'Stempel'}
+              </button>
+            </div>
+            <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="event.stopPropagation(); window.reportBuilder.removePhoto('${p.id}')" title="Hapus foto ini">
+              &times;
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   renderPhotos() {
     const gridEl = document.getElementById('reportPhotosGrid');
+    const tableWrap = document.getElementById('reportPhotosTableView');
+    const tableContainer = document.getElementById('reportPhotosTableContainer');
     const badgeEl = document.getElementById('reportPhotosCountBadge');
     if (badgeEl) badgeEl.textContent = `${this.photos.length} Foto`;
 
-    if (!gridEl) return;
+    const docTitleEl = document.getElementById('simulatedDocPhotoTitle');
+    if (docTitleEl) {
+      docTitleEl.textContent = `Monitoring Kegiatan Pamsimas TA ${this.tahun || '2026'}`;
+    }
+
+    if (!gridEl && !tableWrap) return;
 
     if (this.photos.length === 0) {
-      gridEl.innerHTML = '';
-      gridEl.style.display = 'none';
+      if (gridEl) {
+        gridEl.innerHTML = '';
+        gridEl.style.display = 'none';
+      }
+      if (tableWrap) {
+        tableWrap.style.display = 'none';
+      }
+      if (tableContainer) {
+        tableContainer.innerHTML = '';
+      }
       const batchBar = document.getElementById('reportBatchBar');
       if (batchBar) batchBar.style.display = 'none';
       this.updateBatchBar();
       return;
     }
 
-    gridEl.style.display = 'grid';
     const batchBar = document.getElementById('reportBatchBar');
     if (batchBar) batchBar.style.display = 'flex';
 
-    gridEl.innerHTML = this.photos.map((p, idx) => {
-      const isSelected = this.selectedPhotoIds.has(p.id);
-      const isOriginal = !!(p.is_original || p.alreadyStamped);
-      const isCropped = !!p.is_cropped;
-      const latFormatted = String(p.lat || '').replace('.', ',');
-      const lonFormatted = String(p.lon || '').replace('.', ',');
+    const isTable = (this.photoViewMode === 'table');
+    if (tableWrap) tableWrap.style.display = isTable ? 'block' : 'none';
+    if (gridEl) gridEl.style.display = isTable ? 'none' : 'grid';
 
-      return `
-        <div class="report-photo-card ${isSelected ? 'selected' : ''} ${isOriginal ? 'keep-original' : ''}" id="reportPhotoCard_${p.id}" data-photo-id="${p.id}" data-photo-index="${idx}" onclick="window.reportBuilder.handleCardClick(event, '${p.id}', ${idx})" oncontextmenu="window.reportBuilder.handleCardContextMenu(event, '${p.id}', ${idx})">
-          <!-- Media Preview (Canvas Live Stamp) -->
-          <div class="report-card-media" onclick="window.reportBuilder.handleCardMediaClick(event, '${p.id}', ${idx})">
-            <!-- Selection Checkbox -->
-            <label class="doc-card-checkbox" onclick="window.reportBuilder.handleCheckboxLabelClick(event, '${p.id}', ${idx})" style="position:absolute; top:8px; left:8px; z-index:5; background:rgba(15,23,42,0.82); backdrop-filter:blur(4px); padding:2px 6px; border-radius:4px; display:flex; align-items:center; gap:5px; cursor:pointer;">
-              <input type="checkbox" id="reportChk_${p.id}" ${isSelected ? 'checked' : ''} onclick="window.reportBuilder.handleCheckboxClick(event, '${p.id}', ${idx})">
-              <span class="font-mono" style="font-size:0.68rem; color:#fff; font-weight:700;">#${idx + 1}</span>
-            </label>
+    // 1. Render Tampilan Simulasi Tabel Dokumen Word (2 Kolom Baris per Baris)
+    if (tableContainer) {
+      const numRows = Math.ceil(this.photos.length / 2);
+      let tableHtml = '';
 
-            <!-- Zoom Lightbox Button -->
-            <button type="button" class="report-card-zoom-btn" onclick="event.stopPropagation(); window.openPhotoLightbox('${p.id}', 'report')" title="Perbesar Layar Penuh (Lightbox)">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            </button>
+      for (let r = 0; r < numRows; r++) {
+        const p1 = this.photos[r * 2];
+        const p2 = this.photos[r * 2 + 1];
 
-            <!-- Canvas Live Preview -->
-            <canvas id="reportCardCanvas_${p.id}" style="width:100%; height:100%; object-fit:cover;"></canvas>
-
-            <!-- Status Badge -->
-            <span class="doc-live-badge ${isOriginal ? 'badge-raw' : ''}" style="display:inline-flex; align-items:center; gap:4px;">
-              ${isOriginal ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Foto Asli' : (isCropped ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> Disesuaikan' : 'Watermark')}
-            </span>
+        tableHtml += `
+          <div class="doc-table-row">
+            ${this.renderTableCellHtml(p1, r * 2, 'Kolom Kiri')}
+            ${p2 ? this.renderTableCellHtml(p2, r * 2 + 1, 'Kolom Kanan') : `
+              <div class="doc-table-cell-empty">
+                <span>(Akhir Baris Tabel Dokumen)</span>
+              </div>
+            `}
           </div>
+        `;
+      }
+      tableContainer.innerHTML = tableHtml;
+    }
 
-          <!-- Metadata & Actions -->
-          <div class="report-card-body">
-            <div class="report-card-meta">
-              <div class="text-truncate report-card-filename" title="${this.escapeHtml(p.filename)}">
-                ${this.escapeHtml(p.filename)}
-              </div>
-              <div class="text-truncate report-card-location" title="${p.desa || 'Desa'}, ${p.kecamatan || 'Kecamatan'}">
-                <span>${p.desa ? 'Desa ' + this.escapeHtml(p.desa) : 'Desa Belum Diatur'} ${p.kecamatan ? '(' + this.escapeHtml(p.kecamatan) + ')' : ''}</span>
-              </div>
-              <div class="font-mono text-truncate report-card-time" title="${this.escapeHtml(p.timeStr || '-')}">
-                <span>${this.escapeHtml(p.timeStr || 'Belum di-generate')}</span>
-              </div>
-              <div class="font-mono text-truncate report-card-coords" title="Lat: ${latFormatted}, Lon: ${lonFormatted}">
-                <span>${p.lat ? latFormatted + ', ' + lonFormatted : 'Koordinat menyusul'}</span>
-              </div>
+    // 2. Render Tampilan Kartu Grid
+    if (gridEl) {
+      gridEl.innerHTML = this.photos.map((p, idx) => {
+        const isSelected = this.selectedPhotoIds.has(p.id);
+        const isOriginal = !!(p.is_original || p.alreadyStamped);
+        const isCropped = !!p.is_cropped;
+        const latFormatted = String(p.lat || '').replace('.', ',');
+        const lonFormatted = String(p.lon || '').replace('.', ',');
+
+        return `
+          <div class="report-photo-card photo-draggable ${isSelected ? 'selected' : ''} ${isOriginal ? 'keep-original' : ''}" 
+               id="reportPhotoCard_${p.id}" 
+               data-photo-id="${p.id}" 
+               data-photo-index="${idx}" 
+               draggable="true"
+               ondragstart="window.reportBuilder.handlePhotoDragStart(event, '${p.id}', ${idx})"
+               ondragover="window.reportBuilder.handlePhotoDragOver(event, ${idx})"
+               ondragenter="window.reportBuilder.handlePhotoDragEnter(event, ${idx})"
+               ondragleave="window.reportBuilder.handlePhotoDragLeave(event, ${idx})"
+               ondrop="window.reportBuilder.handlePhotoDrop(event, ${idx})"
+               ondragend="window.reportBuilder.handlePhotoDragEnd(event)"
+               onclick="window.reportBuilder.handleCardClick(event, '${p.id}', ${idx})" 
+               oncontextmenu="window.reportBuilder.handleCardContextMenu(event, '${p.id}', ${idx})">
+            <!-- Media Preview (Canvas Live Stamp) -->
+            <div class="report-card-media" onclick="window.reportBuilder.handleCardMediaClick(event, '${p.id}', ${idx})">
+              <!-- Selection Checkbox & Grip Badge -->
+              <label class="doc-card-checkbox" onclick="window.reportBuilder.handleCheckboxLabelClick(event, '${p.id}', ${idx})" style="position:absolute; top:8px; left:8px; z-index:5; background:rgba(15,23,42,0.85); backdrop-filter:blur(4px); padding:2px 7px; border-radius:4px; display:flex; align-items:center; gap:5px; cursor:pointer;">
+                <input type="checkbox" id="reportChk_${p.id}" ${isSelected ? 'checked' : ''} onclick="window.reportBuilder.handleCheckboxClick(event, '${p.id}', ${idx})">
+                <span class="font-mono" style="font-size:0.68rem; color:#38bdf8; font-weight:700;">#${idx + 1}</span>
+              </label>
+
+              <!-- Zoom Lightbox Button -->
+              <button type="button" class="report-card-zoom-btn" onclick="event.stopPropagation(); window.openPhotoLightbox('${p.id}', 'report')" title="Perbesar Layar Penuh (Lightbox)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </button>
+
+              <!-- Canvas Live Preview -->
+              <canvas id="reportCardCanvas_${p.id}" style="width:100%; height:100%; object-fit:cover;"></canvas>
+
+              <!-- Status Badge -->
+              <span class="doc-live-badge ${isOriginal ? 'badge-raw' : ''}" style="display:inline-flex; align-items:center; gap:4px;">
+                ${isOriginal ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Foto Asli' : (isCropped ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> Disesuaikan' : 'Watermark')}
+              </span>
             </div>
 
-            <!-- Footer Buttons -->
-            <div class="report-card-footer">
-              <div style="display:flex; gap:3px;">
-                <button type="button" class="btn btn-secondary btn-xs" onclick="window.openPhotoLightbox('${p.id}', 'report')" title="Pratinjau Foto Layar Penuh">
-                  Preview
-                </button>
-                <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.openModal('${p.id}')" title="Edit Stempel & Potong Manual">
-                  Edit
-                </button>
-                ${p.is_portrait ? `
-                  <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.normalizeSinglePhotoAspect('${p.id}')" title="Sesuaikan foto portrait ke rasio 4:3 rapi">
-                    4:3
-                  </button>
-                ` : ''}
-                ${p.is_cropped ? `
-                  <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.resetSinglePhotoAspect('${p.id}')" title="Kembalikan foto asli sebelum dicrop">
-                    Reset
-                  </button>
-                ` : ''}
+            <!-- Metadata & Actions -->
+            <div class="report-card-body">
+              <div class="report-card-meta">
+                <div class="text-truncate report-card-filename" title="${this.escapeHtml(p.filename)}">
+                  ${this.escapeHtml(p.filename)}
+                </div>
+                <div class="text-truncate report-card-location" title="${p.desa || 'Desa'}, ${p.kecamatan || 'Kecamatan'}">
+                  <span>${p.desa ? 'Desa ' + this.escapeHtml(p.desa) : 'Desa Belum Diatur'} ${p.kecamatan ? '(' + this.escapeHtml(p.kecamatan) + ')' : ''}</span>
+                </div>
+                <div class="font-mono text-truncate report-card-time" title="${this.escapeHtml(p.timeStr || '-')}">
+                  <span>${this.escapeHtml(p.timeStr || 'Belum di-generate')}</span>
+                </div>
+                <div class="font-mono text-truncate report-card-coords" title="Lat: ${latFormatted}, Lon: ${lonFormatted}">
+                  <span>${p.lat ? latFormatted + ', ' + lonFormatted : 'Koordinat menyusul'}</span>
+                </div>
               </div>
-              <div style="display:flex; gap:3px;">
-                <button type="button" class="btn ${isOriginal ? 'btn-active' : 'btn-secondary'} btn-xs" onclick="window.reportBuilder.toggleSingleKeepOriginal('${p.id}')" title="${isOriginal ? 'Klik untuk memasang stempel' : 'Gunakan foto asli unedited'}">
-                  ${isOriginal ? 'Asli' : 'Stempel'}
-                </button>
-                <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.removePhoto('${p.id}')" title="Hapus foto ini" style="padding:2px 6px;">
-                  &times;
-                </button>
+
+              <!-- Footer Buttons -->
+              <div class="report-card-footer">
+                <div style="display:flex; gap:3px;">
+                  <button type="button" class="btn btn-secondary btn-xs" onclick="window.openPhotoLightbox('${p.id}', 'report')" title="Pratinjau Foto Layar Penuh">
+                    Preview
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.openModal('${p.id}')" title="Edit Stempel & Potong Manual">
+                    Edit
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs btn-move-step" onclick="window.reportBuilder.movePhotoStep(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} title="Geser Maju">
+                    ◀
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs btn-move-step" onclick="window.reportBuilder.movePhotoStep(${idx}, 1)" ${idx === this.photos.length - 1 ? 'disabled' : ''} title="Geser Mundur">
+                    ▶
+                  </button>
+                </div>
+                <div style="display:flex; gap:3px;">
+                  <button type="button" class="btn ${isOriginal ? 'btn-active' : 'btn-secondary'} btn-xs" onclick="window.reportBuilder.toggleSingleKeepOriginal('${p.id}')" title="${isOriginal ? 'Klik untuk memasang stempel' : 'Gunakan foto asli unedited'}">
+                    ${isOriginal ? 'Asli' : 'Stempel'}
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.removePhoto('${p.id}')" title="Hapus foto ini" style="padding:2px 6px;">
+                    &times;
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      `;
-    }).join('');
+        `;
+      }).join('');
+    }
 
-    // Render live stamp on card canvases asynchronously
+    // Render live stamp on both card canvases and table canvases asynchronously
     this.photos.forEach(p => {
       this.renderCardStamp(p.id);
     });
@@ -3222,7 +3565,8 @@ export class ReportBuilder {
     const p = this.photos.find(item => item.id === photoId);
     if (!p) return;
     const canvas = document.getElementById(`reportCardCanvas_${photoId}`);
-    if (!canvas) return;
+    const tableCanvas = document.getElementById(`reportTableCanvas_${photoId}`);
+    if (!canvas && !tableCanvas) return;
 
     try {
       const imgObj = await this.getImage(p);
@@ -3240,7 +3584,8 @@ export class ReportBuilder {
         address_mode: p.address_mode || 'natural',
         font_scale: p.font_scale || 1.0
       };
-      renderStampedPhoto(canvas, imgObj, meta, this.showRawGrid || isOriginal);
+      if (canvas) renderStampedPhoto(canvas, imgObj, meta, this.showRawGrid || isOriginal);
+      if (tableCanvas) renderStampedPhoto(tableCanvas, imgObj, meta, this.showRawGrid || isOriginal);
     } catch (e) {
       console.warn('Gagal merender stempel card laporan:', photoId, e);
     }
