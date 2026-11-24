@@ -42,7 +42,8 @@ _CACHE_TTL_SECONDS = 20.0
 def _get_github_token() -> str:
     reload_env_vars()
     return (
-        os.environ.get("GITHUB_TOKEN")
+        os.environ.get("GITHUB_TOKEN_STUDIO_LAPORAN")
+        or os.environ.get("GITHUB_TOKEN")
         or os.environ.get("GH_TOKEN")
         or os.environ.get("PERSONEL_GITHUB_TOKEN")
         or ""
