@@ -1398,8 +1398,8 @@
        MODAL: Master Data Personel (KBBI/EYD)
        ========================================================= -->
   <div class="modal-backdrop" id="personelMasterModal">
-    <div class="modal-card modal-lg" style="max-width:680px; width:95%;">
-      <div class="modal-header">
+    <div class="modal-card modal-lg" style="max-width:680px; width:95%; max-height:90vh;">
+      <div class="modal-header" style="flex-shrink:0;">
         <div style="display:flex; align-items:center; gap:10px;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <div>
@@ -1410,9 +1410,9 @@
         <button class="modal-close" onclick="window.reportBuilder.closePersonelMasterModal()" title="Tutup (Esc)">&times;</button>
       </div>
 
-      <div class="modal-body" style="flex-direction:column; padding:18px; gap:14px; max-height:520px; overflow-y:auto;">
+      <div class="modal-body" style="flex-direction:column; padding:18px; gap:14px; flex:1; min-height:0; max-height:none; overflow:hidden;">
         <!-- Input Tambah Baru Permanen -->
-        <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:12px; display:flex; flex-direction:column; gap:8px;">
+        <div style="flex-shrink:0; background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:var(--radius-md); padding:12px; display:flex; flex-direction:column; gap:8px;">
           <div style="font-size:0.78rem; font-weight:600; color:var(--text-main); display:flex; align-items:center; justify-content:space-between;">
             <span>Tambah Nama Baru ke Master</span>
             <span class="badge" style="font-size:0.65rem; background:rgba(6,182,212,0.15); color:var(--accent-cyan);">Auto-Format KBBI</span>
@@ -1430,7 +1430,7 @@
         </div>
 
         <!-- Filter & Search Master -->
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div style="flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
           <input type="text" id="masterPersonelSearchInput" class="form-input form-input-sm" placeholder="Cari nama personel di master..." style="max-width:260px;" oninput="window.reportBuilder.renderPersonelMasterList(this.value)">
           <div style="display:flex; align-items:center; gap:6px;">
             <span id="masterPersonelSyncBadge" class="badge" style="font-size:0.68rem;">Mode Lokal</span>
@@ -1438,11 +1438,11 @@
           </div>
         </div>
 
-        <!-- Tabel Daftar Master -->
-        <div style="border:1px solid var(--border-color); border-radius:var(--radius-md); overflow:hidden; background:rgba(0,0,0,0.2);">
+        <!-- Tabel Daftar Master (Scrollable) -->
+        <div style="flex:1; min-height:220px; max-height:360px; overflow-y:auto; overflow-x:auto; border:1px solid var(--border-color); border-radius:var(--radius-md); background:rgba(0,0,0,0.2);">
           <table style="width:100%; border-collapse:collapse; text-align:left;">
             <thead>
-              <tr style="background:rgba(255,255,255,0.04); border-bottom:1px solid var(--border-color); font-size:0.72rem; color:var(--text-dim); text-transform:uppercase;">
+              <tr style="position:sticky; top:0; z-index:2; background:var(--bg-surface); border-bottom:1px solid var(--border-color); font-size:0.72rem; color:var(--text-dim); text-transform:uppercase;">
                 <th style="padding:8px 12px; width:40px; text-align:center;">No</th>
                 <th style="padding:8px 12px;">Nama & Gelar Akademik</th>
                 <th style="padding:8px 12px; text-align:right;">Aksi</th>
@@ -1455,7 +1455,7 @@
         </div>
       </div>
 
-      <div class="modal-footer" style="justify-content:space-between; align-items:center;">
+      <div class="modal-footer" style="flex-shrink:0; justify-content:space-between; align-items:center;">
         <span style="font-size:0.72rem; color:var(--text-dim);">Setiap nama yang ditambahkan dapat langsung digunakan di seluruh laporan.</span>
         <button type="button" class="btn btn-secondary btn-sm" onclick="window.reportBuilder.closePersonelMasterModal()">Tutup</button>
       </div>
