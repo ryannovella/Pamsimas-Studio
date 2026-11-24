@@ -31,6 +31,7 @@ export class ReportBuilder {
     this.includePelaksana = true;
     this.pelaksanaList = [];
     this.personelMaster = [];
+    this.personelStorageMeta = {};
     this.villageAutocompletes = new Map();
     this.kabupatenAutocomplete = null;
     this.personelAutocomplete = null;
@@ -734,13 +735,17 @@ export class ReportBuilder {
     return null;
   }
 
-  async fetchPersonel() {
+  async fetchPersonel(forceRefresh = false) {
     try {
-      const res = await fetch('/api/personel');
+      const url = forceRefresh ? '/api/personel?refresh=1' : '/api/personel';
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.personel)) {
           this.personelMaster = data.personel;
+          if (data.storage) {
+            this.personelStorageMeta = data.storage;
+          }
           this.renderPersonelOptions();
         }
       }
@@ -855,6 +860,42 @@ export class ReportBuilder {
     }
   }
 
+  async _savePersonelToMaster(rawName, force = false) {
+    const res = await fetch('/api/personel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: rawName, force })
+    });
+    const data = await res.json();
+
+    if (res.status === 409 && data.duplicate_candidate && !force) {
+      const candidate = data.duplicate_candidate;
+      const normalized = data.normalized_name || rawName;
+      const keepNew = confirm(
+        `Nama mirip sudah terdaftar di master:\n"${candidate}"\n\n` +
+        `Klik OK untuk tetap menyimpan "${normalized}" sebagai personel baru, ` +
+        `atau Cancel untuk memakai "${candidate}".`
+      );
+      if (keepNew) {
+        return this._savePersonelToMaster(rawName, true);
+      }
+      return { success: true, name: candidate, is_new: false, used_existing: true };
+    }
+
+    if (data.success) {
+      if (Array.isArray(data.all_names)) {
+        this.personelMaster = data.all_names;
+        this.renderPersonelOptions();
+      } else if (data.name && !this.personelMaster.includes(data.name)) {
+        this.personelMaster.push(data.name);
+      }
+      if (data.storage) {
+        this.personelStorageMeta = data.storage;
+      }
+    }
+    return data;
+  }
+
   async addPelaksanaFromInput() {
     if (this.lockedSegments.pelaksana) {
       this.showToast('Segmen Tim Pelaksana sedang terkunci. Buka kunci segmen terlebih dahulu.', 'warning');
@@ -867,8 +908,12 @@ export class ReportBuilder {
       return;
     }
 
-    // 1. Cek apakah ada exact match di master personel
-    const exactMatch = (this.personelMaster || []).find(n => n.toLowerCase() === val.toLowerCase());
+    const normLocal = this.normalizePersonelTitle(val);
+
+    // 1. Cek apakah ada exact match di master personel (mentah maupun hasil normalisasi lokal)
+    const exactMatch = (this.personelMaster || []).find(
+      n => n.toLowerCase() === val.toLowerCase() || (normLocal && n.toLowerCase() === normLocal.toLowerCase())
+    );
     if (exactMatch) {
       this.addPelaksana(exactMatch);
       inp.value = '';
@@ -893,26 +938,18 @@ export class ReportBuilder {
       return;
     }
 
-    // 3. Nama baru: simpan permanen ke backend dengan kaidah KBBI/EYD
+    // 3. Nama baru: simpan permanen ke backend dengan hybrid KBBI/EYD V + sync GitHub
     try {
-      const res = await fetch('/api/personel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: val })
-      });
-      const data = await res.json();
+      const data = await this._savePersonelToMaster(val, false);
       if (data.success && data.name) {
         const finalName = data.name;
-        if (!this.personelMaster.includes(finalName)) {
-          this.personelMaster.push(finalName);
-        }
         this.addPelaksana(finalName);
         inp.value = '';
         if (this.personelAutocomplete) {
           this.personelAutocomplete.close();
         }
         if (data.is_new) {
-          this.showToast(`Personel baru diselaraskan (KBBI/EYD) & tersimpan permanen: "${finalName}"`, 'success');
+          this.showToast(data.message || `Personel baru diselaraskan (KBBI/EYD V) & tersimpan permanen: "${finalName}"`, 'success');
         } else {
           this.showToast(`Personel "${finalName}" sudah terdaftar di master data.`, 'info');
         }
@@ -922,7 +959,7 @@ export class ReportBuilder {
       }
     } catch (e) {
       console.warn('Gagal menyimpan personel via backend API, menggunakan normalisasi lokal:', e);
-      const fallbackName = this.normalizePersonelTitle(val);
+      const fallbackName = normLocal || val;
       this.addPelaksana(fallbackName);
       inp.value = '';
       if (this.personelAutocomplete) {
@@ -936,37 +973,62 @@ export class ReportBuilder {
     if (!name) return '';
     let raw = String(name).trim();
     raw = raw.replace(/^\d+[\.\)]\s*/, '').trim();
+    raw = raw.replace(/\.{2,}/g, '.').replace(/[ \t]{2,}/g, ' ');
     if (!raw) return '';
 
     // Inisial FX -> F.X.
     raw = raw.replace(/\bFX\b\.?/gi, 'F.X.');
 
+    // Bedakan dr. (dokter, huruf kecil) vs Dr. (Doktor, huruf kapital)
+    raw = raw.replace(/\bdr\b\.?(?!\w)/g, 'dr.');
+    raw = raw.replace(/\b(?:Dr|DR)\b\.?(?!\w)/g, 'Dr.');
+
     const rules = [
       // Gelar Depan
       [/\bProf(?:esor|\.)?\b/gi, 'Prof.'],
-      [/\bDr\b\.?(?!\w)/gi, 'Dr.'],
-      [/\bdr\b\.?(?!\w)/gi, 'dr.'],
       [/\bdrg\b\.?(?!\w)/gi, 'drg.'],
       [/\bIr\b\.?(?!\w)/gi, 'Ir.'],
       [/\bDrs\b\.?(?!\w)/gi, 'Drs.'],
       [/\bDra\b\.?(?!\w)/gi, 'Dra.'],
+      [/\bK\.?H\b\.?(?=\s+[A-Za-z])/gi, 'K.H.'],
+      [/\bHj\b\.?(?=\s+[A-Za-z])/gi, 'Hj.'],
+      [/^\s*h\.?(?=\s+[A-Za-z])/gi, 'H.'],
+      [/\bH\.(?=\s+[A-Za-z])/g, 'H.'],
+      [/\bUst\b\.?(?=\s+[A-Za-z])/gi, 'Ust.'],
+      [/\bRm\b\.?(?=\s+[A-Za-z])/gi, 'Rm.'],
+      [/\bPdt\b\.?(?=\s+[A-Za-z])/gi, 'Pdt.'],
 
-      // Vokasi (D3/D4)
+      // Vokasi (D1-D4)
       [/\bA\.?Md\.?Kom\b\.?/gi, 'A.Md.Kom.'],
-      [/\bA\.?Md\.?T\b\.?/gi, 'A.Md.T.'],
-      [/\bA\.?Md\.?Ak\b\.?/gi, 'A.Md.Ak.'],
       [/\bA\.?Md\.?Keb\b\.?/gi, 'A.Md.Keb.'],
       [/\bA\.?Md\.?Kep\b\.?/gi, 'A.Md.Kep.'],
+      [/\bA\.?Md\.?Kes\b\.?/gi, 'A.Md.Kes.'],
+      [/\bA\.?Md\.?Par\b\.?/gi, 'A.Md.Par.'],
+      [/\bA\.?Md\.?Log\b\.?/gi, 'A.Md.Log.'],
+      [/\bA\.?Md\.?Ak\b\.?/gi, 'A.Md.Ak.'],
+      [/\bA\.?Md\.?T\b\.?/gi, 'A.Md.T.'],
       [/\bA\.?Md\.?P\b\.?/gi, 'A.Md.P.'],
       [/\bA\.?Md\b\.?/gi, 'A.Md.'],
+      [/\bA\.?Ma\b\.?(?!\w)/gi, 'A.Ma.'],
+      [/\bA\.?P\b\.?(?!\w)/gi, 'A.P.'],
 
       // Sarjana Terapan
-      [/\bS\.?Tr\.?T\b\.?/gi, 'S.Tr.T.'],
       [/\bS\.?Tr\.?Kom\b\.?/gi, 'S.Tr.Kom.'],
       [/\bS\.?Tr\.?Sos\b\.?/gi, 'S.Tr.Sos.'],
+      [/\bS\.?Tr\.?Kes\b\.?/gi, 'S.Tr.Kes.'],
+      [/\bS\.?Tr\.?Keb\b\.?/gi, 'S.Tr.Keb.'],
+      [/\bS\.?Tr\.?Kep\b\.?/gi, 'S.Tr.Kep.'],
+      [/\bS\.?Tr\.?Par\b\.?/gi, 'S.Tr.Par.'],
       [/\bS\.?Tr\.?Ak\b\.?/gi, 'S.Tr.Ak.'],
+      [/\bS\.?Tr\.?T\b\.?/gi, 'S.Tr.T.'],
+      [/\bS\.?Tr\.?P\b\.?/gi, 'S.Tr.P.'],
 
       // Sarjana (S1)
+      [/\bS\.?Pd\.?I\b\.?/gi, 'S.Pd.I.'],
+      [/\bS\.?H\.?I\b\.?/gi, 'S.H.I.'],
+      [/\bS\.?E\.?I\b\.?/gi, 'S.E.I.'],
+      [/\bS\.?Sos\.?I\b\.?/gi, 'S.Sos.I.'],
+      [/\bS\.?Kom\.?I\b\.?/gi, 'S.Kom.I.'],
       [/\bS\.?I\.?Kom\b\.?/gi, 'S.I.Kom.'],
       [/\bS\.?K\.?M\b\.?/gi, 'S.K.M.'],
       [/\bS\.?A\.?P\b\.?/gi, 'S.A.P.'],
@@ -974,88 +1036,180 @@ export class ReportBuilder {
       [/\bS\.?Ars\b\.?/gi, 'S.Ars.'],
       [/\bS\.?Ked\b\.?/gi, 'S.Ked.'],
       [/\bS\.?Farm\b\.?/gi, 'S.Farm.'],
-      [/\bS\.?Gz\b\.?/gi, 'S.Gz.'],
       [/\bS\.?Stat\b\.?/gi, 'S.Stat.'],
       [/\bS\.?Kom\b\.?/gi, 'S.Kom.'],
+      [/\bS\.?Sos\b\.?/gi, 'S.Sos.'],
+      [/\bS\.?Psi\b\.?/gi, 'S.Psi.'],
+      [/\bS\.?Mat\b\.?/gi, 'S.Mat.'],
+      [/\bS\.?Hum\b\.?/gi, 'S.Hum.'],
+      [/\bS\.?Fil\b\.?/gi, 'S.Fil.'],
+      [/\bS\.?Keb\b\.?/gi, 'S.Keb.'],
+      [/\bS\.?Kep\b\.?/gi, 'S.Kep.'],
+      [/\bS\.?Kel\b\.?/gi, 'S.Kel.'],
+      [/\bS\.?Hut\b\.?/gi, 'S.Hut.'],
+      [/\bS\.?Pwk\b\.?/gi, 'S.Pwk.'],
+      [/\bS\.?Geo\b\.?/gi, 'S.Geo.'],
+      [/\bS\.?Bio\b\.?/gi, 'S.Bio.'],
+      [/\bS\.?Ant\b\.?/gi, 'S.Ant.'],
+      [/\bS\.?Par\b\.?/gi, 'S.Par.'],
+      [/\bS\.?Gz\b\.?/gi, 'S.Gz.'],
       [/\bS\.?Pt\b\.?/gi, 'S.Pt.'],
       [/\bS\.?Pd\b\.?/gi, 'S.Pd.'],
       [/\bS\.?Si\b\.?/gi, 'S.Si.'],
-      [/\bS\.?Sos\b\.?/gi, 'S.Sos.'],
-      [/\bS\.?Psi\b\.?/gi, 'S.Psi.'],
       [/\bS\.?Sn\b\.?/gi, 'S.Sn.'],
-      [/\bS\.?Mat\b\.?/gi, 'S.Mat.'],
-      [/\bS\.?Hum\b\.?/gi, 'S.Hum.'],
-      [/\bS\.?T\b\.?/gi, 'S.T.'],
-      [/\bS\.?E\b\.?/gi, 'S.E.'],
-      [/\bS\.?H\b\.?/gi, 'S.H.'],
+      [/\bS\.?Ag\b\.?/gi, 'S.Ag.'],
+      [/\bS\.?Th\b\.?/gi, 'S.Th.'],
+      [/\bS\.?Pi\b\.?/gi, 'S.Pi.'],
+      [/\bS\.?Or\b\.?/gi, 'S.Or.'],
+      [/\bS\.?Ab\b\.?/gi, 'S.Ab.'],
+      [/\bS\.?Mn\b\.?/gi, 'S.Mn.'],
+      [/\bS\.?Ds\b\.?/gi, 'S.Ds.'],
+      [/\bS\.?T\b\.?(?!\w)/gi, 'S.T.'],
+      [/\bS\.?E\b\.?(?!\w)/gi, 'S.E.'],
+      [/\bS\.?H\b\.?(?!\w)/gi, 'S.H.'],
       [/\bS\.?P\b\.?(?!\w)/gi, 'S.P.'],
+      [/\bS\.?S\b\.?(?!\w)/gi, 'S.S.'],
 
       // Magister (S2)
+      [/\bM\.?Pd\.?I\b\.?/gi, 'M.Pd.I.'],
+      [/\bM\.?H\.?I\b\.?/gi, 'M.H.I.'],
+      [/\bM\.?E\.?I\b\.?/gi, 'M.E.I.'],
       [/\bM\.?I\.?Kom\b\.?/gi, 'M.I.Kom.'],
       [/\bM\.?K\.?M\b\.?/gi, 'M.K.M.'],
       [/\bM\.?A\.?P\b\.?/gi, 'M.A.P.'],
       [/\bM\.?I\.?P\b\.?/gi, 'M.I.P.'],
+      [/\bM\.?P\.?H\b\.?/gi, 'M.P.H.'],
+      [/\bM\.?M\.?R\b\.?/gi, 'M.M.R.'],
       [/\bM\.?Ars\b\.?/gi, 'M.Ars.'],
       [/\bM\.?Ked\b\.?/gi, 'M.Ked.'],
       [/\bM\.?Kes\b\.?/gi, 'M.Kes.'],
       [/\bM\.?Kom\b\.?/gi, 'M.Kom.'],
+      [/\bM\.?Sos\b\.?/gi, 'M.Sos.'],
+      [/\bM\.?Psi\b\.?/gi, 'M.Psi.'],
+      [/\bM\.?Eng\b\.?/gi, 'M.Eng.'],
+      [/\bM\.?Fil\b\.?/gi, 'M.Fil.'],
+      [/\bM\.?Hum\b\.?/gi, 'M.Hum.'],
+      [/\bM\.?Stat\b\.?/gi, 'M.Stat.'],
+      [/\bM\.?Farm\b\.?/gi, 'M.Farm.'],
+      [/\bM\.?Kep\b\.?/gi, 'M.Kep.'],
+      [/\bM\.?Keb\b\.?/gi, 'M.Keb.'],
+      [/\bM\.?Pwk\b\.?/gi, 'M.Pwk.'],
+      [/\bM\.?Par\b\.?/gi, 'M.Par.'],
+      [/\bM\.?Han\b\.?/gi, 'M.Han.'],
       [/\bM\.?Pt\b\.?/gi, 'M.Pt.'],
       [/\bM\.?Pd\b\.?/gi, 'M.Pd.'],
       [/\bM\.?Si\b\.?/gi, 'M.Si.'],
-      [/\bM\.?Sos\b\.?/gi, 'M.Sos.'],
-      [/\bM\.?Psi\b\.?/gi, 'M.Psi.'],
       [/\bM\.?Ak\b\.?/gi, 'M.Ak.'],
-      [/\bM\.?M\b\.?/gi, 'M.M.'],
-      [/\bM\.?T\b\.?/gi, 'M.T.'],
-      [/\bM\.?E\b\.?/gi, 'M.E.'],
-      [/\bM\.?H\b\.?/gi, 'M.H.'],
       [/\bM\.?Sc\b\.?/gi, 'M.Sc.'],
-      [/\bM\.?Eng\b\.?/gi, 'M.Eng.'],
+      [/\bM\.?Ag\b\.?/gi, 'M.Ag.'],
+      [/\bM\.?Th\b\.?/gi, 'M.Th.'],
+      [/\bM\.?Sn\b\.?/gi, 'M.Sn.'],
+      [/\bM\.?Ds\b\.?/gi, 'M.Ds.'],
+      [/\bM\.?Kn\b\.?/gi, 'M.Kn.'],
       [/\bMBA\b\.?/gi, 'M.B.A.'],
-      [/\bM\.?P\b\.?(?!\w)/gi, 'M.P.']
+      [/\bM\.?B\.?A\b\.?/gi, 'M.B.A.'],
+      [/\bM\.?M\b\.?(?!\w)/gi, 'M.M.'],
+      [/\bM\.?T\b\.?(?!\w)/gi, 'M.T.'],
+      [/\bM\.?E\b\.?(?!\w)/gi, 'M.E.'],
+      [/\bM\.?H\b\.?(?!\w)/gi, 'M.H.'],
+      [/\bM\.?P\b\.?(?!\w)/gi, 'M.P.'],
+
+      // Doktor (S3) & Profesi
+      [/\bPh\.?D\b\.?/gi, 'Ph.D.'],
+      [/\bEd\.?D\b\.?/gi, 'Ed.D.'],
+      [/\bD\.?Sc\b\.?/gi, 'D.Sc.'],
+      [/\bI\.?A\.?I\b\.?/gi, 'I.A.I.'],
+      [/\bSp\.?PD\b\.?/gi, 'Sp.PD.'],
+      [/\bSp\.?OG\b\.?/gi, 'Sp.OG.'],
+      [/\bSp\.?A\b\.?(?!\w)/gi, 'Sp.A.'],
+      [/\bApt\b\.?(?!\w)/gi, 'Apt.'],
+      [/\bBdn\b\.?(?!\w)/gi, 'Bdn.'],
+      [/\bCPA\b\.?/gi, 'CPA.'],
+      [/\bIPM\b\.?/gi, 'IPM.'],
+      [/\bIPU\b\.?/gi, 'IPU.'],
+      [/\bIPP\b\.?/gi, 'IPP.'],
+      [/\bNs\b\.?(?!\w)/gi, 'Ns.'],
+      [/\bAk\b\.?(?!\w)/gi, 'Ak.'],
+      [/\bCA\b\.?(?!\w)/gi, 'CA.'],
+      [/\bAr\b\.?(?!\w)/gi, 'Ar.']
     ];
 
     for (const [pat, rep] of rules) {
       raw = raw.replace(pat, rep);
     }
+    raw = raw.replace(/\bProf\.\s+dr\./g, 'Prof. Dr.');
+    raw = raw.replace(/\b(Prof\.|Dr\.|Ir\.|Drs\.|Dra\.)\s+h\.?(?=\s+[A-Za-z])/gi, '$1 H.');
 
     const backTitles = [
+      'S\\.Pd\\.I\\.', 'S\\.H\\.I\\.', 'S\\.E\\.I\\.', 'S\\.Sos\\.I\\.', 'S\\.Kom\\.I\\.',
+      'M\\.Pd\\.I\\.', 'M\\.H\\.I\\.', 'M\\.E\\.I\\.',
+      'S\\.I\\.Kom\\.', 'M\\.I\\.Kom\\.', 'S\\.K\\.M\\.', 'M\\.K\\.M\\.',
+      'S\\.A\\.P\\.', 'M\\.A\\.P\\.', 'S\\.I\\.P\\.', 'M\\.I\\.P\\.',
+      'S\\.Ars\\.', 'M\\.Ars\\.', 'S\\.Kom\\.', 'M\\.Kom\\.',
+      'S\\.Ked\\.', 'M\\.Ked\\.', 'S\\.Farm\\.', 'M\\.Farm\\.',
+      'S\\.Gz\\.', 'S\\.Stat\\.', 'M\\.Stat\\.', 'S\\.Pt\\.', 'M\\.Pt\\.',
+      'S\\.Pd\\.', 'M\\.Pd\\.', 'S\\.Si\\.', 'M\\.Si\\.',
+      'S\\.Sos\\.', 'M\\.Sos\\.', 'S\\.Psi\\.', 'M\\.Psi\\.',
+      'S\\.Sn\\.', 'M\\.Sn\\.', 'S\\.Mat\\.', 'S\\.Hum\\.', 'M\\.Hum\\.',
+      'S\\.Ag\\.', 'M\\.Ag\\.', 'S\\.Th\\.', 'M\\.Th\\.', 'S\\.Fil\\.', 'M\\.Fil\\.',
+      'S\\.Keb\\.', 'M\\.Keb\\.', 'S\\.Kep\\.', 'M\\.Kep\\.',
+      'S\\.Kel\\.', 'S\\.Pi\\.', 'S\\.Hut\\.', 'S\\.Pwk\\.', 'M\\.Pwk\\.',
+      'S\\.Geo\\.', 'S\\.Bio\\.', 'S\\.Ant\\.', 'S\\.Or\\.',
+      'S\\.Par\\.', 'M\\.Par\\.', 'S\\.Ab\\.', 'S\\.Mn\\.', 'S\\.Ds\\.', 'M\\.Ds\\.',
       'S\\.T\\.', 'M\\.T\\.', 'S\\.E\\.', 'M\\.E\\.', 'S\\.H\\.', 'M\\.H\\.',
-      'S\\.Kom\\.', 'M\\.Kom\\.', 'S\\.Ars\\.', 'M\\.Ars\\.', 'S\\.A\\.P\\.', 'M\\.A\\.P\\.',
-      'S\\.I\\.P\\.', 'M\\.I\\.P\\.', 'S\\.I\\.Kom\\.', 'M\\.I\\.Kom\\.', 'S\\.K\\.M\\.', 'M\\.K\\.M\\.',
-      'S\\.Sos\\.', 'M\\.Sos\\.', 'S\\.Pt\\.', 'M\\.Pt\\.', 'S\\.Pd\\.', 'M\\.Pd\\.',
-      'S\\.Si\\.', 'M\\.Si\\.', 'S\\.Ked\\.', 'S\\.Farm\\.', 'S\\.Gz\\.', 'S\\.Stat\\.',
-      'S\\.Psi\\.', 'M\\.Psi\\.', 'S\\.P\\.', 'M\\.P\\.', 'M\\.Ak\\.', 'M\\.M\\.', 'M\\.Kes\\.',
-      'M\\.Sc\\.', 'M\\.Eng\\.', 'M\\.B\\.A\\.',
+      'S\\.P\\.', 'M\\.P\\.', 'S\\.S\\.', 'M\\.Ak\\.', 'M\\.M\\.', 'M\\.Kes\\.',
+      'M\\.Sc\\.', 'M\\.Eng\\.', 'M\\.B\\.A\\.', 'M\\.P\\.H\\.', 'M\\.M\\.R\\.', 'M\\.Kn\\.', 'M\\.Han\\.',
       'A\\.Md\\.Kom\\.', 'A\\.Md\\.T\\.', 'A\\.Md\\.Ak\\.', 'A\\.Md\\.Keb\\.', 'A\\.Md\\.Kep\\.',
-      'A\\.Md\\.P\\.', 'A\\.Md\\.',
-      'S\\.Tr\\.T\\.', 'S\\.Tr\\.Kom\\.', 'S\\.Tr\\.Sos\\.', 'S\\.Tr\\.Ak\\.'
+      'A\\.Md\\.Kes\\.', 'A\\.Md\\.Par\\.', 'A\\.Md\\.Log\\.', 'A\\.Md\\.P\\.', 'A\\.Md\\.',
+      'A\\.P\\.', 'A\\.Ma\\.',
+      'S\\.Tr\\.T\\.', 'S\\.Tr\\.Kom\\.', 'S\\.Tr\\.Sos\\.', 'S\\.Tr\\.Ak\\.',
+      'S\\.Tr\\.Kes\\.', 'S\\.Tr\\.Keb\\.', 'S\\.Tr\\.Kep\\.', 'S\\.Tr\\.Par\\.', 'S\\.Tr\\.P\\.',
+      'Ph\\.D\\.', 'Ed\\.D\\.', 'D\\.Sc\\.',
+      'Apt\\.', 'Ns\\.', 'Bdn\\.', 'Ak\\.', 'CA\\.', 'CPA\\.',
+      'IPM\\.', 'IPU\\.', 'IPP\\.', 'Ar\\.', 'I\\.A\\.I\\.',
+      'Sp\\.A\\.', 'Sp\\.PD\\.', 'Sp\\.OG\\.'
     ];
     const backPattern = new RegExp('([^,])\\s+(' + backTitles.join('|') + ')', 'g');
 
     raw = raw.replace(/\s*,\s*/g, ', ');
-    raw = raw.replace(backPattern, '$1, $2');
+    for (let i = 0; i < 4; i++) {
+      const nextRaw = raw.replace(backPattern, '$1, $2');
+      if (nextRaw === raw) break;
+      raw = nextRaw;
+    }
     raw = raw.replace(/(?:,\s*)+/g, ', ');
 
     const parts = raw.split(', ');
     const namePart = parts[0].trim();
-    const titleParts = parts.slice(1);
+    const titleParts = parts.slice(1).map(p => p.trim()).filter(Boolean);
 
-    const cleanWord = (w) => {
-      if (['Ir.', 'Dr.', 'dr.', 'drg.', 'Drs.', 'Dra.', 'Prof.', 'F.X.'].includes(w)) {
+    const frontTitles = new Set([
+      'Ir.', 'Dr.', 'dr.', 'drg.', 'Drs.', 'Dra.', 'Prof.',
+      'H.', 'Hj.', 'K.H.', 'Ust.', 'Rm.', 'Pdt.', 'F.X.'
+    ]);
+    const lowercaseParticles = new Set(['bin', 'binti', 'ibn', 'van', 'von', 'de', 'da', 'di', 'la']);
+
+    const cleanWord = (w, idx) => {
+      if (frontTitles.has(w)) {
         return w;
       }
-      if (/^[A-Za-z]\.$/.test(w)) {
-        return w.toUpperCase();
+      if (/^[A-Za-z](?:\.[A-Za-z])*\.?$/.test(w) && w.includes('.')) {
+        return w.endsWith('.') ? w.toUpperCase() : w.toUpperCase() + '.';
       }
       if (w.toUpperCase() === 'FX') {
         return 'F.X.';
+      }
+      if (idx > 0 && lowercaseParticles.has(w.toLowerCase())) {
+        return w.toLowerCase();
+      }
+      if (w.includes('-')) {
+        return w.split('-').map(seg => seg ? seg.charAt(0).toUpperCase() + seg.slice(1).toLowerCase() : '').join('-');
       }
       return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
     };
 
     const words = namePart.split(/\s+/).filter(Boolean);
-    const capitalizedName = words.map(cleanWord).join(' ');
+    const capitalizedName = words.map((w, idx) => cleanWord(w, idx)).join(' ');
 
     let res = capitalizedName;
     if (titleParts.length > 0) {
@@ -1067,7 +1221,7 @@ export class ReportBuilder {
   // =========================================================
   // MASTER PERSONEL MODAL MANAGEMENT
   // =========================================================
-  openPersonelMasterModal() {
+  async openPersonelMasterModal() {
     let modal = document.getElementById('personelMasterModal');
     if (!modal) return;
     modal.classList.add('active');
@@ -1081,6 +1235,8 @@ export class ReportBuilder {
       this.previewPersonelKbbi('');
     }
     this.renderPersonelMasterList();
+    await this.fetchPersonel(true);
+    this.renderPersonelMasterList(searchInp ? searchInp.value : '');
     setTimeout(() => {
       if (searchInp) searchInp.focus();
     }, 100);
@@ -1117,20 +1273,13 @@ export class ReportBuilder {
     }
 
     try {
-      const res = await fetch('/api/personel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: val })
-      });
-      const data = await res.json();
+      const data = await this._savePersonelToMaster(val, false);
       if (data.success && data.name) {
-        if (!this.personelMaster.includes(data.name)) {
-          this.personelMaster.push(data.name);
-        }
         inp.value = '';
         this.previewPersonelKbbi('');
-        this.renderPersonelMasterList();
-        this.showToast(data.message || `Personel "${data.name}" tersimpan permanen.`, 'success');
+        const searchInp = document.getElementById('masterPersonelSearchInput');
+        this.renderPersonelMasterList(searchInp ? searchInp.value : '');
+        this.showToast(data.message || `Personel "${data.name}" tersimpan permanen.`, data.is_new ? 'success' : 'info');
       } else {
         this.showToast(data.error || 'Gagal menyimpan nama personel.', 'error');
       }
@@ -1141,7 +1290,22 @@ export class ReportBuilder {
 
   async deleteMasterPersonel(name) {
     if (!name) return;
-    if (!confirm(`Hapus personel "${name}" dari master data permanen?`)) {
+    const meta = this.personelStorageMeta || {};
+    if (meta.delete_disabled) {
+      this.showToast('Penghapusan permanen dinonaktifkan di mode publik.', 'warning');
+      return;
+    }
+
+    let pin = '';
+    if (meta.delete_requires_pin) {
+      const inputPin = prompt(`Masukkan PIN Admin untuk menghapus permanen "${name}":`);
+      if (inputPin === null) return;
+      pin = inputPin.trim();
+      if (!pin) {
+        this.showToast('PIN Admin wajib diisi.', 'warning');
+        return;
+      }
+    } else if (!confirm(`Hapus personel "${name}" dari master data permanen?`)) {
       return;
     }
 
@@ -1149,12 +1313,19 @@ export class ReportBuilder {
       const res = await fetch('/api/personel', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name })
+        body: JSON.stringify({ name: name, pin })
       });
       const data = await res.json();
       if (data.success) {
-        this.personelMaster = this.personelMaster.filter(n => n !== name);
-        this.renderPersonelMasterList();
+        this.personelMaster = Array.isArray(data.all_names)
+          ? data.all_names
+          : this.personelMaster.filter(n => n !== name);
+        if (data.storage) {
+          this.personelStorageMeta = data.storage;
+        }
+        this.renderPersonelOptions();
+        const searchInp = document.getElementById('masterPersonelSearchInput');
+        this.renderPersonelMasterList(searchInp ? searchInp.value : '');
         this.showToast(data.message || `Personel "${name}" berhasil dihapus.`, 'info');
       } else {
         this.showToast(data.error || 'Gagal menghapus personel.', 'error');
@@ -1167,7 +1338,29 @@ export class ReportBuilder {
   renderPersonelMasterList(searchQuery = '') {
     const container = document.getElementById('masterPersonelTableBody');
     const countEl = document.getElementById('masterPersonelCountBadge');
+    const syncBadgeEl = document.getElementById('masterPersonelSyncBadge');
     if (!container) return;
+
+    const meta = this.personelStorageMeta || {};
+    if (syncBadgeEl) {
+      if (meta.remote_sync_enabled && meta.source === 'github_data_store') {
+        syncBadgeEl.textContent = 'Sync: GitHub Permanen';
+        syncBadgeEl.style.background = 'rgba(34,197,94,0.15)';
+        syncBadgeEl.style.color = '#22c55e';
+      } else if (meta.remote_sync_enabled) {
+        syncBadgeEl.textContent = 'Sync: GitHub Siap';
+        syncBadgeEl.style.background = 'rgba(6,182,212,0.15)';
+        syncBadgeEl.style.color = 'var(--accent-cyan)';
+      } else if (meta.is_cloud) {
+        syncBadgeEl.textContent = 'Sync: Read-Only GitHub (Set GITHUB_TOKEN)';
+        syncBadgeEl.style.background = 'rgba(245,158,11,0.15)';
+        syncBadgeEl.style.color = '#f59e0b';
+      } else {
+        syncBadgeEl.textContent = 'Mode Lokal';
+        syncBadgeEl.style.background = 'rgba(148,163,184,0.15)';
+        syncBadgeEl.style.color = 'var(--text-dim)';
+      }
+    }
 
     const q = (searchQuery || '').trim().toLowerCase();
     const list = (this.personelMaster || []).filter(name => {
@@ -1190,6 +1383,11 @@ export class ReportBuilder {
       return;
     }
 
+    const deleteDisabled = Boolean(meta.delete_disabled);
+    const deleteTitle = deleteDisabled
+      ? 'Penghapusan permanen dikunci di mode publik'
+      : (meta.delete_requires_pin ? 'Hapus permanen (memerlukan PIN Admin)' : 'Hapus permanen dari master data');
+
     container.innerHTML = list.map((nama, idx) => {
       const isAlreadyInDoc = this.pelaksanaList.includes(nama);
       return `
@@ -1203,7 +1401,7 @@ export class ReportBuilder {
             <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.addPelaksana('${this.escapeHtml(nama)}'); window.reportBuilder.showToast('Ditambahkan ke dokumen: ${this.escapeHtml(nama)}', 'success'); window.reportBuilder.renderPersonelMasterList();" style="margin-right:6px;" title="Gunakan personel ini di dokumen">
               + Pakai
             </button>
-            <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.deleteMasterPersonel('${this.escapeHtml(nama)}')" title="Hapus permanen dari master data">
+            <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.deleteMasterPersonel('${this.escapeHtml(nama)}')" title="${deleteTitle}" ${deleteDisabled ? 'disabled style="opacity:0.35; cursor:not-allowed;"' : ''}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
           </td>

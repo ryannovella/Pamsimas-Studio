@@ -1192,52 +1192,116 @@ def get_village_kondisi_per_date(village: Dict[str, Any], report_data: Dict[str,
     return format_to_indonesian_date(tgl_lap) or f"21 September {thn}"
 
 
+KNOWN_FRONT_TITLES = {
+    'Ir.', 'Dr.', 'dr.', 'drg.', 'Drs.', 'Dra.', 'Prof.',
+    'H.', 'Hj.', 'K.H.', 'Ust.', 'Rm.', 'Pdt.', 'F.X.'
+}
+
+KNOWN_BACK_TITLES_LIST = [
+    r'S\.Pd\.I\.', r'S\.H\.I\.', r'S\.E\.I\.', r'S\.Sos\.I\.', r'S\.Kom\.I\.',
+    r'M\.Pd\.I\.', r'M\.H\.I\.', r'M\.E\.I\.',
+    r'S\.I\.Kom\.', r'M\.I\.Kom\.', r'S\.K\.M\.', r'M\.K\.M\.',
+    r'S\.A\.P\.', r'M\.A\.P\.', r'S\.I\.P\.', r'M\.I\.P\.',
+    r'S\.Ars\.', r'M\.Ars\.', r'S\.Kom\.', r'M\.Kom\.',
+    r'S\.Ked\.', r'M\.Ked\.', r'S\.Farm\.', r'M\.Farm\.',
+    r'S\.Gz\.', r'S\.Stat\.', r'M\.Stat\.', r'S\.Pt\.', r'M\.Pt\.',
+    r'S\.Pd\.', r'M\.Pd\.', r'S\.Si\.', r'M\.Si\.',
+    r'S\.Sos\.', r'M\.Sos\.', r'S\.Psi\.', r'M\.Psi\.',
+    r'S\.Sn\.', r'M\.Sn\.', r'S\.Mat\.', r'S\.Hum\.', r'M\.Hum\.',
+    r'S\.Ag\.', r'M\.Ag\.', r'S\.Th\.', r'M\.Th\.', r'S\.Fil\.', r'M\.Fil\.',
+    r'S\.Keb\.', r'M\.Keb\.', r'S\.Kep\.', r'M\.Kep\.',
+    r'S\.Kel\.', r'S\.Pi\.', r'S\.Hut\.', r'S\.Pwk\.', r'M\.Pwk\.',
+    r'S\.Geo\.', r'S\.Bio\.', r'S\.Ant\.', r'S\.Or\.',
+    r'S\.Par\.', r'M\.Par\.', r'S\.Ab\.', r'S\.Mn\.', r'S\.Ds\.', r'M\.Ds\.',
+    r'S\.T\.', r'M\.T\.', r'S\.E\.', r'M\.E\.', r'S\.H\.', r'M\.H\.',
+    r'S\.P\.', r'M\.P\.', r'S\.S\.', r'M\.Ak\.', r'M\.M\.', r'M\.Kes\.',
+    r'M\.Sc\.', r'M\.Eng\.', r'M\.B\.A\.', r'M\.P\.H\.', r'M\.M\.R\.', r'M\.Kn\.', r'M\.Han\.',
+    r'A\.Md\.Kom\.', r'A\.Md\.T\.', r'A\.Md\.Ak\.', r'A\.Md\.Keb\.', r'A\.Md\.Kep\.',
+    r'A\.Md\.Kes\.', r'A\.Md\.Par\.', r'A\.Md\.Log\.', r'A\.Md\.P\.', r'A\.Md\.',
+    r'A\.P\.', r'A\.Ma\.',
+    r'S\.Tr\.T\.', r'S\.Tr\.Kom\.', r'S\.Tr\.Sos\.', r'S\.Tr\.Ak\.',
+    r'S\.Tr\.Kes\.', r'S\.Tr\.Keb\.', r'S\.Tr\.Kep\.', r'S\.Tr\.Par\.', r'S\.Tr\.P\.',
+    r'Ph\.D\.', r'Ed\.D\.', r'D\.Sc\.',
+    r'Apt\.', r'Ns\.', r'Bdn\.', r'Ak\.', r'CA\.', r'CPA\.',
+    r'IPM\.', r'IPU\.', r'IPP\.', r'Ar\.', r'I\.A\.I\.',
+    r'Sp\.A\.', r'Sp\.PD\.', r'Sp\.OG\.'
+]
+
+KNOWN_BACK_TITLES_SET = {t.replace('\\.', '.') for t in KNOWN_BACK_TITLES_LIST}
+
+
 def normalize_personel_title(name: str) -> str:
     """
     Merapikan penulisan nama dan gelar akademik/profesi personel sesuai kaidah KBBI/EYD (Edisi V):
-    - Penulisan nama diri menggunakan Title Case (huruf awal kapital untuk setiap unsur nama).
+    - Penulisan nama diri menggunakan Title Case (huruf awal kapital, partikel nama seperti bin/binti tetap nonkapital).
     - Singkatan inisial nama menggunakan titik (e.g. FX -> F.X., M. -> M.).
-    - Standarisasi gelar depan (e.g. Ir., Dr., dr., drg., Drs., Dra., Prof.).
-    - Setiap unsur singkatan gelar akademik/vokasi/magister diakhiri tanda titik (e.g. S.T., M.T., S.E., S.Ars., S.A.P., M.Ak., A.Md., dll.)
+    - Standarisasi gelar depan (e.g. Ir., Dr., dr., drg., Drs., Dra., Prof., H., Hj., K.H.).
+    - Setiap unsur singkatan gelar akademik/vokasi/magister/profesi diakhiri tanda titik (e.g. S.T., M.T., S.E., M.Ak., A.Md., Ph.D.).
     - Penulisan tanda koma dan spasi sebelum gelar belakang dan antargelar dirapikan (e.g. 'Nama, S.T., M.T.').
     """
     if not name:
         return ""
     raw = str(name).strip()
     raw = re.sub(r'^\d+[\.\)]\s*', '', raw).strip()
+    raw = re.sub(r'\.{2,}', '.', raw)
+    raw = re.sub(r'[ \t]{2,}', ' ', raw)
     if not raw:
         return ""
 
     # Singkatan inisial nama depan: FX -> F.X.
     raw = re.sub(r'\bFX\b\.?', 'F.X.', raw, flags=re.IGNORECASE)
 
+    # Bedakan dr. (dokter, huruf kecil) vs Dr. (Doktor, huruf kapital) sebelum rules case-insensitive
+    raw = re.sub(r'\bdr\b\.?(?!\w)', 'dr.', raw)
+    raw = re.sub(r'\b(?:Dr|DR)\b\.?(?!\w)', 'Dr.', raw)
+
     # Kamus standardisasi gelar (case-insensitive)
     title_rules = [
         # Gelar Depan
         (r'\bProf(?:esor|\.)?\b', 'Prof.'),
-        (r'\bDr\b\.?(?!\w)', 'Dr.'),
-        (r'\bdr\b\.?(?!\w)', 'dr.'),
         (r'\bdrg\b\.?(?!\w)', 'drg.'),
         (r'\bIr\b\.?(?!\w)', 'Ir.'),
         (r'\bDrs\b\.?(?!\w)', 'Drs.'),
         (r'\bDra\b\.?(?!\w)', 'Dra.'),
+        (r'\bK\.?H\b\.?(?=\s+[A-Za-z])', 'K.H.'),
+        (r'\bHj\b\.?(?=\s+[A-Za-z])', 'Hj.'),
+        (r'^\s*h\.?(?=\s+[A-Za-z])', 'H.'),
+        (r'\bH\.(?=\s+[A-Za-z])', 'H.'),
+        (r'\bUst\b\.?(?=\s+[A-Za-z])', 'Ust.'),
+        (r'\bRm\b\.?(?=\s+[A-Za-z])', 'Rm.'),
+        (r'\bPdt\b\.?(?=\s+[A-Za-z])', 'Pdt.'),
 
-        # Gelar Vokasi D3/D4
+        # Gelar Vokasi D1-D4
         (r'\bA\.?Md\.?Kom\b\.?', 'A.Md.Kom.'),
-        (r'\bA\.?Md\.?T\b\.?', 'A.Md.T.'),
-        (r'\bA\.?Md\.?Ak\b\.?', 'A.Md.Ak.'),
         (r'\bA\.?Md\.?Keb\b\.?', 'A.Md.Keb.'),
         (r'\bA\.?Md\.?Kep\b\.?', 'A.Md.Kep.'),
+        (r'\bA\.?Md\.?Kes\b\.?', 'A.Md.Kes.'),
+        (r'\bA\.?Md\.?Par\b\.?', 'A.Md.Par.'),
+        (r'\bA\.?Md\.?Log\b\.?', 'A.Md.Log.'),
+        (r'\bA\.?Md\.?Ak\b\.?', 'A.Md.Ak.'),
+        (r'\bA\.?Md\.?T\b\.?', 'A.Md.T.'),
         (r'\bA\.?Md\.?P\b\.?', 'A.Md.P.'),
         (r'\bA\.?Md\b\.?', 'A.Md.'),
+        (r'\bA\.?Ma\b\.?(?!\w)', 'A.Ma.'),
+        (r'\bA\.?P\b\.?(?!\w)', 'A.P.'),
 
         # Sarjana Terapan
-        (r'\bS\.?Tr\.?T\b\.?', 'S.Tr.T.'),
         (r'\bS\.?Tr\.?Kom\b\.?', 'S.Tr.Kom.'),
         (r'\bS\.?Tr\.?Sos\b\.?', 'S.Tr.Sos.'),
+        (r'\bS\.?Tr\.?Kes\b\.?', 'S.Tr.Kes.'),
+        (r'\bS\.?Tr\.?Keb\b\.?', 'S.Tr.Keb.'),
+        (r'\bS\.?Tr\.?Kep\b\.?', 'S.Tr.Kep.'),
+        (r'\bS\.?Tr\.?Par\b\.?', 'S.Tr.Par.'),
         (r'\bS\.?Tr\.?Ak\b\.?', 'S.Tr.Ak.'),
+        (r'\bS\.?Tr\.?T\b\.?', 'S.Tr.T.'),
+        (r'\bS\.?Tr\.?P\b\.?', 'S.Tr.P.'),
 
-        # Sarjana (S1)
+        # Sarjana (S1) - pola lebih panjang lebih dulu
+        (r'\bS\.?Pd\.?I\b\.?', 'S.Pd.I.'),
+        (r'\bS\.?H\.?I\b\.?', 'S.H.I.'),
+        (r'\bS\.?E\.?I\b\.?', 'S.E.I.'),
+        (r'\bS\.?Sos\.?I\b\.?', 'S.Sos.I.'),
+        (r'\bS\.?Kom\.?I\b\.?', 'S.Kom.I.'),
         (r'\bS\.?I\.?Kom\b\.?', 'S.I.Kom.'),
         (r'\bS\.?K\.?M\b\.?', 'S.K.M.'),
         (r'\bS\.?A\.?P\b\.?', 'S.A.P.'),
@@ -1245,83 +1309,143 @@ def normalize_personel_title(name: str) -> str:
         (r'\bS\.?Ars\b\.?', 'S.Ars.'),
         (r'\bS\.?Ked\b\.?', 'S.Ked.'),
         (r'\bS\.?Farm\b\.?', 'S.Farm.'),
-        (r'\bS\.?Gz\b\.?', 'S.Gz.'),
         (r'\bS\.?Stat\b\.?', 'S.Stat.'),
         (r'\bS\.?Kom\b\.?', 'S.Kom.'),
+        (r'\bS\.?Sos\b\.?', 'S.Sos.'),
+        (r'\bS\.?Psi\b\.?', 'S.Psi.'),
+        (r'\bS\.?Mat\b\.?', 'S.Mat.'),
+        (r'\bS\.?Hum\b\.?', 'S.Hum.'),
+        (r'\bS\.?Fil\b\.?', 'S.Fil.'),
+        (r'\bS\.?Keb\b\.?', 'S.Keb.'),
+        (r'\bS\.?Kep\b\.?', 'S.Kep.'),
+        (r'\bS\.?Kel\b\.?', 'S.Kel.'),
+        (r'\bS\.?Hut\b\.?', 'S.Hut.'),
+        (r'\bS\.?Pwk\b\.?', 'S.Pwk.'),
+        (r'\bS\.?Geo\b\.?', 'S.Geo.'),
+        (r'\bS\.?Bio\b\.?', 'S.Bio.'),
+        (r'\bS\.?Ant\b\.?', 'S.Ant.'),
+        (r'\bS\.?Par\b\.?', 'S.Par.'),
+        (r'\bS\.?Gz\b\.?', 'S.Gz.'),
         (r'\bS\.?Pt\b\.?', 'S.Pt.'),
         (r'\bS\.?Pd\b\.?', 'S.Pd.'),
         (r'\bS\.?Si\b\.?', 'S.Si.'),
-        (r'\bS\.?Sos\b\.?', 'S.Sos.'),
-        (r'\bS\.?Psi\b\.?', 'S.Psi.'),
         (r'\bS\.?Sn\b\.?', 'S.Sn.'),
-        (r'\bS\.?Mat\b\.?', 'S.Mat.'),
-        (r'\bS\.?Hum\b\.?', 'S.Hum.'),
-        (r'\bS\.?T\b\.?', 'S.T.'),
-        (r'\bS\.?E\b\.?', 'S.E.'),
-        (r'\bS\.?H\b\.?', 'S.H.'),
+        (r'\bS\.?Ag\b\.?', 'S.Ag.'),
+        (r'\bS\.?Th\b\.?', 'S.Th.'),
+        (r'\bS\.?Pi\b\.?', 'S.Pi.'),
+        (r'\bS\.?Or\b\.?', 'S.Or.'),
+        (r'\bS\.?Ab\b\.?', 'S.Ab.'),
+        (r'\bS\.?Mn\b\.?', 'S.Mn.'),
+        (r'\bS\.?Ds\b\.?', 'S.Ds.'),
+        (r'\bS\.?T\b\.?(?!\w)', 'S.T.'),
+        (r'\bS\.?E\b\.?(?!\w)', 'S.E.'),
+        (r'\bS\.?H\b\.?(?!\w)', 'S.H.'),
         (r'\bS\.?P\b\.?(?!\w)', 'S.P.'),
+        (r'\bS\.?S\b\.?(?!\w)', 'S.S.'),
 
-        # Magister (S2)
+        # Magister (S2) - pola lebih panjang lebih dulu
+        (r'\bM\.?Pd\.?I\b\.?', 'M.Pd.I.'),
+        (r'\bM\.?H\.?I\b\.?', 'M.H.I.'),
+        (r'\bM\.?E\.?I\b\.?', 'M.E.I.'),
         (r'\bM\.?I\.?Kom\b\.?', 'M.I.Kom.'),
         (r'\bM\.?K\.?M\b\.?', 'M.K.M.'),
         (r'\bM\.?A\.?P\b\.?', 'M.A.P.'),
         (r'\bM\.?I\.?P\b\.?', 'M.I.P.'),
+        (r'\bM\.?P\.?H\b\.?', 'M.P.H.'),
+        (r'\bM\.?M\.?R\b\.?', 'M.M.R.'),
         (r'\bM\.?Ars\b\.?', 'M.Ars.'),
         (r'\bM\.?Ked\b\.?', 'M.Ked.'),
         (r'\bM\.?Kes\b\.?', 'M.Kes.'),
         (r'\bM\.?Kom\b\.?', 'M.Kom.'),
+        (r'\bM\.?Sos\b\.?', 'M.Sos.'),
+        (r'\bM\.?Psi\b\.?', 'M.Psi.'),
+        (r'\bM\.?Eng\b\.?', 'M.Eng.'),
+        (r'\bM\.?Fil\b\.?', 'M.Fil.'),
+        (r'\bM\.?Hum\b\.?', 'M.Hum.'),
+        (r'\bM\.?Stat\b\.?', 'M.Stat.'),
+        (r'\bM\.?Farm\b\.?', 'M.Farm.'),
+        (r'\bM\.?Kep\b\.?', 'M.Kep.'),
+        (r'\bM\.?Keb\b\.?', 'M.Keb.'),
+        (r'\bM\.?Pwk\b\.?', 'M.Pwk.'),
+        (r'\bM\.?Par\b\.?', 'M.Par.'),
+        (r'\bM\.?Han\b\.?', 'M.Han.'),
         (r'\bM\.?Pt\b\.?', 'M.Pt.'),
         (r'\bM\.?Pd\b\.?', 'M.Pd.'),
         (r'\bM\.?Si\b\.?', 'M.Si.'),
-        (r'\bM\.?Sos\b\.?', 'M.Sos.'),
-        (r'\bM\.?Psi\b\.?', 'M.Psi.'),
         (r'\bM\.?Ak\b\.?', 'M.Ak.'),
-        (r'\bM\.?M\b\.?', 'M.M.'),
-        (r'\bM\.?T\b\.?', 'M.T.'),
-        (r'\bM\.?E\b\.?', 'M.E.'),
-        (r'\bM\.?H\b\.?', 'M.H.'),
         (r'\bM\.?Sc\b\.?', 'M.Sc.'),
-        (r'\bM\.?Eng\b\.?', 'M.Eng.'),
+        (r'\bM\.?Ag\b\.?', 'M.Ag.'),
+        (r'\bM\.?Th\b\.?', 'M.Th.'),
+        (r'\bM\.?Sn\b\.?', 'M.Sn.'),
+        (r'\bM\.?Ds\b\.?', 'M.Ds.'),
+        (r'\bM\.?Kn\b\.?', 'M.Kn.'),
         (r'\bMBA\b\.?', 'M.B.A.'),
+        (r'\bM\.?B\.?A\b\.?', 'M.B.A.'),
+        (r'\bM\.?M\b\.?(?!\w)', 'M.M.'),
+        (r'\bM\.?T\b\.?(?!\w)', 'M.T.'),
+        (r'\bM\.?E\b\.?(?!\w)', 'M.E.'),
+        (r'\bM\.?H\b\.?(?!\w)', 'M.H.'),
         (r'\bM\.?P\b\.?(?!\w)', 'M.P.'),
+
+        # Doktor (S3) & Profesi
+        (r'\bPh\.?D\b\.?', 'Ph.D.'),
+        (r'\bEd\.?D\b\.?', 'Ed.D.'),
+        (r'\bD\.?Sc\b\.?', 'D.Sc.'),
+        (r'\bI\.?A\.?I\b\.?', 'I.A.I.'),
+        (r'\bSp\.?PD\b\.?', 'Sp.PD.'),
+        (r'\bSp\.?OG\b\.?', 'Sp.OG.'),
+        (r'\bSp\.?A\b\.?(?!\w)', 'Sp.A.'),
+        (r'\bApt\b\.?(?!\w)', 'Apt.'),
+        (r'\bBdn\b\.?(?!\w)', 'Bdn.'),
+        (r'\bCPA\b\.?', 'CPA.'),
+        (r'\bIPM\b\.?', 'IPM.'),
+        (r'\bIPU\b\.?', 'IPU.'),
+        (r'\bIPP\b\.?', 'IPP.'),
+        (r'\bNs\b\.?(?!\w)', 'Ns.'),
+        (r'\bAk\b\.?(?!\w)', 'Ak.'),
+        (r'\bCA\b\.?(?!\w)', 'CA.'),
+        (r'\bAr\b\.?(?!\w)', 'Ar.'),
     ]
 
     for pat, rep in title_rules:
         raw = re.sub(pat, rep, raw, flags=re.IGNORECASE)
 
-    back_titles = [
-        r'S\.T\.', r'M\.T\.', r'S\.E\.', r'M\.E\.', r'S\.H\.', r'M\.H\.',
-        r'S\.Kom\.', r'M\.Kom\.', r'S\.Ars\.', r'M\.Ars\.', r'S\.A\.P\.', r'M\.A\.P\.',
-        r'S\.I\.P\.', r'M\.I\.P\.', r'S\.I\.Kom\.', r'M\.I\.Kom\.', r'S\.K\.M\.', r'M\.K\.M\.',
-        r'S\.Sos\.', r'M\.Sos\.', r'S\.Pt\.', r'M\.Pt\.', r'S\.Pd\.', r'M\.Pd\.',
-        r'S\.Si\.', r'M\.Si\.', r'S\.Ked\.', r'S\.Farm\.', r'S\.Gz\.', r'S\.Stat\.',
-        r'S\.Psi\.', r'M\.Psi\.', r'S\.P\.', r'M\.P\.', r'M\.Ak\.', r'M\.M\.', r'M\.Kes\.',
-        r'M\.Sc\.', r'M\.Eng\.', r'M\.B\.A\.',
-        r'A\.Md\.Kom\.', r'A\.Md\.T\.', r'A\.Md\.Ak\.', r'A\.Md\.Keb\.', r'A\.Md\.Kep\.',
-        r'A\.Md\.P\.', r'A\.Md\.',
-        r'S\.Tr\.T\.', r'S\.Tr\.Kom\.', r'S\.Tr\.Sos\.', r'S\.Tr\.Ak\.'
-    ]
-    back_pattern = '|'.join(back_titles)
+    # Jika Prof. diikuti dr. (sering diketik lowercase 'prof dr ...'), selalu normalkan ke Prof. Dr.
+    raw = re.sub(r'\bProf\.\s+dr\.', 'Prof. Dr.', raw)
+    # Ulangi pengecekan gelar depan H. setelah Prof. Dr. ternormalisasi
+    raw = re.sub(r'(\b(?:Prof\.|Dr\.|Ir\.|Drs\.|Dra\.)\s+)h\.?(?=\s+[A-Za-z])', r'\1H.', raw, flags=re.IGNORECASE)
+
+    back_pattern = '|'.join(KNOWN_BACK_TITLES_LIST)
 
     raw = re.sub(r'\s*,\s*', ', ', raw)
-    raw = re.sub(r'([^,])\s+(' + back_pattern + ')', r'\1, \2', raw)
+    for _ in range(4):
+        updated_raw = re.sub(r'([^,])\s+(' + back_pattern + ')', r'\1, \2', raw)
+        if updated_raw == raw:
+            break
+        raw = updated_raw
     raw = re.sub(r'(?:,\s*)+', ', ', raw)
 
     parts = raw.split(', ')
     name_part = parts[0].strip()
-    title_parts = parts[1:]
+    title_parts = [p.strip() for p in parts[1:] if p.strip()]
 
-    def clean_word(w: str) -> str:
-        if w in ['Ir.', 'Dr.', 'dr.', 'drg.', 'Drs.', 'Dra.', 'Prof.', 'F.X.']:
+    lowercase_particles = {'bin', 'binti', 'ibn', 'van', 'von', 'de', 'da', 'di', 'la'}
+
+    def clean_word(w: str, idx: int) -> str:
+        if w in KNOWN_FRONT_TITLES:
             return w
-        if re.match(r'^[A-Za-z]\.$', w):
-            return w.upper()
+        if re.match(r'^[A-Za-z](?:\.[A-Za-z])*\.?$', w) and '.' in w:
+            return w.upper() if w.endswith('.') else w.upper() + '.'
         if w.upper() == 'FX':
             return 'F.X.'
-        return w.capitalize()
+        if idx > 0 and w.lower() in lowercase_particles:
+            return w.lower()
+        if '-' in w:
+            return '-'.join(seg[:1].upper() + seg[1:].lower() if seg else '' for seg in w.split('-'))
+        return w[:1].upper() + w[1:].lower() if w else ''
 
     words = name_part.split()
-    capitalized_name = ' '.join(clean_word(w) for w in words)
+    capitalized_name = ' '.join(clean_word(w, i) for i, w in enumerate(words))
 
     if title_parts:
         res = f"{capitalized_name}, {', '.join(title_parts)}"
