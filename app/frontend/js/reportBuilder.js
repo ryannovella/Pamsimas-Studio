@@ -32,6 +32,8 @@ export class ReportBuilder {
     this.pelaksanaList = [];
     this.personelMaster = [];
     this.personelStorageMeta = {};
+    this.editingPersonelName = null;
+    this._masterViewList = [];
     this.villageAutocompletes = new Map();
     this.kabupatenAutocomplete = null;
     this.personelAutocomplete = null;
@@ -1225,6 +1227,7 @@ export class ReportBuilder {
     let modal = document.getElementById('personelMasterModal');
     if (!modal) return;
     modal.classList.add('active');
+    this.editingPersonelName = null;
     const searchInp = document.getElementById('masterPersonelSearchInput');
     if (searchInp) {
       searchInp.value = '';
@@ -1243,6 +1246,7 @@ export class ReportBuilder {
   }
 
   closePersonelMasterModal() {
+    this.editingPersonelName = null;
     const modal = document.getElementById('personelMasterModal');
     if (modal) {
       modal.classList.remove('active');
@@ -1288,13 +1292,129 @@ export class ReportBuilder {
     }
   }
 
+  useMasterPersonelByIdx(idx) {
+    const nama = (this._masterViewList || [])[idx];
+    if (!nama) return;
+    this.addPelaksana(nama);
+    this.showToast(`Ditambahkan ke dokumen: ${nama}`, 'success');
+    const searchInp = document.getElementById('masterPersonelSearchInput');
+    this.renderPersonelMasterList(searchInp ? searchInp.value : '');
+  }
+
+  startEditMasterPersonel(idx) {
+    const nama = (this._masterViewList || [])[idx];
+    if (!nama) return;
+    this.editingPersonelName = nama;
+    const searchInp = document.getElementById('masterPersonelSearchInput');
+    this.renderPersonelMasterList(searchInp ? searchInp.value : '');
+    setTimeout(() => {
+      const editInp = document.getElementById('masterPersonelEditInput');
+      if (editInp) {
+        editInp.focus();
+        editInp.setSelectionRange(editInp.value.length, editInp.value.length);
+      }
+    }, 30);
+  }
+
+  cancelEditMasterPersonel() {
+    this.editingPersonelName = null;
+    const searchInp = document.getElementById('masterPersonelSearchInput');
+    this.renderPersonelMasterList(searchInp ? searchInp.value : '');
+  }
+
+  previewEditPersonelKbbi(val) {
+    const previewEl = document.getElementById('masterPersonelEditKbbiPreview');
+    if (!previewEl) return;
+    const clean = (val || '').trim();
+    if (!clean) {
+      previewEl.textContent = '-';
+      return;
+    }
+    previewEl.textContent = this.normalizePersonelTitle(clean) || clean;
+  }
+
+  async saveEditMasterPersonel(idx, force = false) {
+    const oldName = (this._masterViewList || [])[idx] || this.editingPersonelName;
+    const editInp = document.getElementById('masterPersonelEditInput');
+    if (!oldName || !editInp) return;
+    const newVal = editInp.value.trim();
+    if (!newVal) {
+      this.showToast('Nama personel tidak boleh kosong.', 'warning');
+      return;
+    }
+
+    const meta = this.personelStorageMeta || {};
+    let pin = '';
+    if (meta.delete_requires_pin && !force) {
+      const inputPin = prompt(`Masukkan PIN Admin untuk mengubah "${oldName}":`);
+      if (inputPin === null) return;
+      pin = inputPin.trim();
+      if (!pin) {
+        this.showToast('PIN Admin wajib diisi.', 'warning');
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch('/api/personel', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ old_name: oldName, new_name: newVal, force, pin })
+      });
+      const data = await res.json();
+
+      if (res.status === 409 && data.duplicate_candidate && !force) {
+        const keepEdit = confirm(
+          `Nama baru mirip dengan entri lain:\n"${data.duplicate_candidate}"\n\n` +
+          `Klik OK untuk tetap menyimpan perubahan menjadi "${data.normalized_name || newVal}".`
+        );
+        if (keepEdit) {
+          return this.saveEditMasterPersonel(idx, true);
+        }
+        return;
+      }
+
+      if (data.success && data.name) {
+        if (Array.isArray(data.all_names)) {
+          this.personelMaster = data.all_names;
+        }
+        if (data.storage) {
+          this.personelStorageMeta = data.storage;
+        }
+        // Sinkronkan juga daftar pelaksana yang sedang aktif di dokumen
+        let pelaksanaUpdated = false;
+        this.pelaksanaList = this.pelaksanaList.map(p => {
+          if (p.toLowerCase() === oldName.toLowerCase()) {
+            pelaksanaUpdated = true;
+            return data.name;
+          }
+          return p;
+        });
+        if (pelaksanaUpdated) {
+          this.renderPelaksanaList();
+        }
+        this.editingPersonelName = null;
+        this.renderPersonelOptions();
+        const searchInp = document.getElementById('masterPersonelSearchInput');
+        this.renderPersonelMasterList(searchInp ? searchInp.value : '');
+        this.showToast(data.message || `Personel diperbarui ke "${data.name}".`, 'success');
+      } else {
+        this.showToast(data.error || 'Gagal memperbarui nama personel.', 'error');
+      }
+    } catch (e) {
+      this.showToast('Gagal menghubungi server untuk memperbarui personel.', 'error');
+    }
+  }
+
+  deleteMasterPersonelByIdx(idx) {
+    const nama = (this._masterViewList || [])[idx];
+    if (!nama) return;
+    this.deleteMasterPersonel(nama);
+  }
+
   async deleteMasterPersonel(name) {
     if (!name) return;
     const meta = this.personelStorageMeta || {};
-    if (meta.delete_disabled) {
-      this.showToast('Penghapusan permanen dinonaktifkan di mode publik.', 'warning');
-      return;
-    }
 
     let pin = '';
     if (meta.delete_requires_pin) {
@@ -1323,6 +1443,9 @@ export class ReportBuilder {
         if (data.storage) {
           this.personelStorageMeta = data.storage;
         }
+        if (this.editingPersonelName === name) {
+          this.editingPersonelName = null;
+        }
         this.renderPersonelOptions();
         const searchInp = document.getElementById('masterPersonelSearchInput');
         this.renderPersonelMasterList(searchInp ? searchInp.value : '');
@@ -1343,7 +1466,11 @@ export class ReportBuilder {
 
     const meta = this.personelStorageMeta || {};
     if (syncBadgeEl) {
-      if (meta.remote_sync_enabled && meta.source === 'github_data_store') {
+      if (meta.remote_sync_enabled && meta.sync_mode === 'git') {
+        syncBadgeEl.textContent = 'Sync: Git Lokal ↔ GitHub';
+        syncBadgeEl.style.background = 'rgba(34,197,94,0.15)';
+        syncBadgeEl.style.color = '#22c55e';
+      } else if (meta.remote_sync_enabled && meta.source === 'github_data_store') {
         syncBadgeEl.textContent = 'Sync: GitHub Permanen';
         syncBadgeEl.style.background = 'rgba(34,197,94,0.15)';
         syncBadgeEl.style.color = '#22c55e';
@@ -1352,7 +1479,7 @@ export class ReportBuilder {
         syncBadgeEl.style.background = 'rgba(6,182,212,0.15)';
         syncBadgeEl.style.color = 'var(--accent-cyan)';
       } else if (meta.is_cloud) {
-        syncBadgeEl.textContent = 'Sync: Read-Only GitHub (Set GITHUB_TOKEN)';
+        syncBadgeEl.textContent = 'Sync: Read-Only GitHub';
         syncBadgeEl.style.background = 'rgba(245,158,11,0.15)';
         syncBadgeEl.style.color = '#f59e0b';
       } else {
@@ -1367,6 +1494,7 @@ export class ReportBuilder {
       if (!q) return true;
       return name.toLowerCase().includes(q);
     });
+    this._masterViewList = list;
 
     if (countEl) {
       countEl.textContent = `${this.personelMaster.length} Personel`;
@@ -1383,13 +1511,37 @@ export class ReportBuilder {
       return;
     }
 
-    const deleteDisabled = Boolean(meta.delete_disabled);
-    const deleteTitle = deleteDisabled
-      ? 'Penghapusan permanen dikunci di mode publik'
-      : (meta.delete_requires_pin ? 'Hapus permanen (memerlukan PIN Admin)' : 'Hapus permanen dari master data');
+    const deleteTitle = meta.delete_requires_pin
+      ? 'Hapus permanen (memerlukan PIN Admin)'
+      : 'Hapus permanen dari master data';
 
     container.innerHTML = list.map((nama, idx) => {
       const isAlreadyInDoc = this.pelaksanaList.includes(nama);
+      const isEditing = this.editingPersonelName === nama;
+
+      if (isEditing) {
+        const previewText = this.normalizePersonelTitle(nama) || nama;
+        return `
+          <tr style="border-bottom:1px solid rgba(6,182,212,0.25); background:rgba(6,182,212,0.06);">
+            <td style="padding:8px 12px; font-size:0.75rem; color:var(--accent-cyan); width:40px; text-align:center; vertical-align:top; padding-top:12px;">${idx + 1}</td>
+            <td style="padding:8px 12px;">
+              <input type="text" id="masterPersonelEditInput" class="form-input form-input-sm" value="${this.escapeHtml(nama)}" style="width:100%;" oninput="window.reportBuilder.previewEditPersonelKbbi(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.reportBuilder.saveEditMasterPersonel(${idx});} else if(event.key==='Escape'){event.preventDefault(); window.reportBuilder.cancelEditMasterPersonel();}">
+              <div style="font-size:0.68rem; color:var(--text-dim); margin-top:4px;">
+                Pratinjau KBBI: <strong id="masterPersonelEditKbbiPreview" style="color:var(--accent-cyan); font-family:var(--font-mono, monospace);">${this.escapeHtml(previewText)}</strong>
+              </div>
+            </td>
+            <td style="padding:8px 12px; text-align:right; white-space:nowrap; vertical-align:top; padding-top:9px;">
+              <button type="button" class="btn btn-primary btn-xs" onclick="window.reportBuilder.saveEditMasterPersonel(${idx})" style="margin-right:4px;" title="Simpan perubahan (Enter)">
+                Simpan
+              </button>
+              <button type="button" class="btn btn-ghost btn-xs" onclick="window.reportBuilder.cancelEditMasterPersonel()" title="Batal (Esc)">
+                Batal
+              </button>
+            </td>
+          </tr>
+        `;
+      }
+
       return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
           <td style="padding:8px 12px; font-size:0.75rem; color:var(--text-dim); width:40px; text-align:center;">${idx + 1}</td>
@@ -1398,10 +1550,13 @@ export class ReportBuilder {
             ${isAlreadyInDoc ? '<span class="badge" style="font-size:0.65rem; margin-left:6px; background:rgba(34,197,94,0.15); color:#22c55e;">Di Dokumen</span>' : ''}
           </td>
           <td style="padding:8px 12px; text-align:right; white-space:nowrap;">
-            <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.addPelaksana('${this.escapeHtml(nama)}'); window.reportBuilder.showToast('Ditambahkan ke dokumen: ${this.escapeHtml(nama)}', 'success'); window.reportBuilder.renderPersonelMasterList();" style="margin-right:6px;" title="Gunakan personel ini di dokumen">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.useMasterPersonelByIdx(${idx})" style="margin-right:4px;" title="Gunakan personel ini di dokumen">
               + Pakai
             </button>
-            <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.deleteMasterPersonel('${this.escapeHtml(nama)}')" title="${deleteTitle}" ${deleteDisabled ? 'disabled style="opacity:0.35; cursor:not-allowed;"' : ''}>
+            <button type="button" class="btn btn-ghost btn-xs" onclick="window.reportBuilder.startEditMasterPersonel(${idx})" style="margin-right:2px; color:var(--accent-cyan);" title="Edit nama & gelar personel">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.deleteMasterPersonelByIdx(${idx})" title="${deleteTitle}">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
           </td>

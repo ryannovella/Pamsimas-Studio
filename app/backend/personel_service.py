@@ -2,10 +2,11 @@ import base64
 import json
 import os
 import re
+import subprocess
 import threading
 import time
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 import requests
@@ -20,7 +21,7 @@ from app.backend.report_generator import (
     _BUILTIN_FALLBACK_KEY,
     normalize_personel_title,
 )
-from app.backend.updater import _is_cloud_environment
+from app.backend.updater import _is_cloud_environment, _is_git_repository
 
 LOCAL_PERSONEL_FILE = os.path.join(BASE_DIR, "data", "Nama Personel.txt")
 GITHUB_OWNER = os.environ.get("PERSONEL_GITHUB_OWNER", "ryannovella").strip()
@@ -59,14 +60,17 @@ def get_personel_storage_meta() -> Dict[str, Any]:
     """Returns non-sensitive storage and access-control metadata for UI."""
     is_cloud = _is_cloud_environment()
     has_token = bool(_get_github_token())
+    local_git_sync = (not is_cloud) and _is_git_repository()
     admin_pin = _get_admin_pin()
+    sync_mode = "api" if has_token else ("git" if local_git_sync else "readonly")
     return {
         "is_cloud": is_cloud,
-        "remote_sync_enabled": has_token,
+        "remote_sync_enabled": bool(has_token or local_git_sync),
+        "sync_mode": sync_mode,
         "github_branch": GITHUB_BRANCH,
         "source": _CACHE.get("source", "local"),
         "delete_requires_pin": bool(admin_pin),
-        "delete_disabled": bool(is_cloud and not admin_pin),
+        "delete_disabled": False,
     }
 
 
@@ -174,6 +178,100 @@ def _commit_to_github_data_store(
         return False, None, str(e)
 
 
+def _run_git_bytes(args: List[str], stdin_bytes: Optional[bytes] = None, timeout: int = 12) -> Tuple[bytes, bytes, int]:
+    """Runs git command inside BASE_DIR without touching the working tree."""
+    res = subprocess.run(
+        ["git"] + args,
+        cwd=BASE_DIR,
+        input=stdin_bytes,
+        capture_output=True,
+        timeout=timeout,
+    )
+    return res.stdout, res.stderr, res.returncode
+
+
+def _fetch_from_local_git_data_store() -> Tuple[Optional[List[str]], Optional[str], str]:
+    """Fallback read from origin/data-store via local git when GitHub API is unavailable."""
+    if _is_cloud_environment() or not _is_git_repository():
+        return None, None, "Git lokal tidak tersedia"
+    try:
+        _, err_f, rc_f = _run_git_bytes(["fetch", "origin", GITHUB_BRANCH], timeout=12)
+        if rc_f != 0:
+            return None, None, err_f.decode("utf-8", errors="replace").strip()
+        out_s, err_s, rc_s = _run_git_bytes(
+            ["show", f"origin/{GITHUB_BRANCH}:{GITHUB_FILE_PATH}"],
+            timeout=8,
+        )
+        if rc_s != 0:
+            return None, None, err_s.decode("utf-8", errors="replace").strip()
+        decoded = out_s.decode("utf-8", errors="replace")
+        return _parse_personel_text(decoded), None, ""
+    except Exception as e:
+        return None, None, str(e)
+
+
+def _commit_via_local_git_data_store(names: List[str], commit_message: str) -> Tuple[bool, str]:
+    """Pushes updated Nama Personel.txt to origin/data-store via git plumbing without altering HEAD."""
+    if _is_cloud_environment() or not _is_git_repository():
+        return False, "Git lokal tidak tersedia"
+    try:
+        _run_git_bytes(["fetch", "origin", GITHUB_BRANCH], timeout=12)
+        parent_out, _, parent_rc = _run_git_bytes(
+            ["rev-parse", f"origin/{GITHUB_BRANCH}"],
+            timeout=5,
+        )
+        parent_sha = parent_out.decode("utf-8").strip() if parent_rc == 0 else ""
+
+        content_bytes = _format_personel_text(names).encode("utf-8")
+        blob_out, blob_err, blob_rc = _run_git_bytes(
+            ["hash-object", "-w", "--stdin"],
+            stdin_bytes=content_bytes,
+            timeout=5,
+        )
+        if blob_rc != 0:
+            return False, blob_err.decode("utf-8", errors="replace").strip()
+        blob_sha = blob_out.decode("utf-8").strip()
+
+        data_tree_out, dt_err, dt_rc = _run_git_bytes(
+            ["mktree"],
+            stdin_bytes=f"100644 blob {blob_sha}\tNama Personel.txt\n".encode("utf-8"),
+            timeout=5,
+        )
+        if dt_rc != 0:
+            return False, dt_err.decode("utf-8", errors="replace").strip()
+        data_tree_sha = data_tree_out.decode("utf-8").strip()
+
+        root_tree_out, rt_err, rt_rc = _run_git_bytes(
+            ["mktree"],
+            stdin_bytes=f"040000 tree {data_tree_sha}\tdata\n".encode("utf-8"),
+            timeout=5,
+        )
+        if rt_rc != 0:
+            return False, rt_err.decode("utf-8", errors="replace").strip()
+        root_tree_sha = root_tree_out.decode("utf-8").strip()
+
+        ct_args = ["commit-tree", root_tree_sha]
+        if parent_sha:
+            ct_args.extend(["-p", parent_sha])
+        ct_args.extend(["-m", commit_message])
+        commit_out, ct_err, ct_rc = _run_git_bytes(ct_args, timeout=5)
+        if ct_rc != 0:
+            return False, ct_err.decode("utf-8", errors="replace").strip()
+        commit_sha = commit_out.decode("utf-8").strip()
+
+        _, push_err, push_rc = _run_git_bytes(
+            ["push", "origin", f"{commit_sha}:refs/heads/{GITHUB_BRANCH}"],
+            timeout=15,
+        )
+        if push_rc != 0:
+            return False, push_err.decode("utf-8", errors="replace").strip()
+
+        _run_git_bytes(["update-ref", f"refs/heads/{GITHUB_BRANCH}", commit_sha], timeout=5)
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
 def load_personel_list(force_refresh: bool = False) -> Tuple[List[str], Dict[str, Any]]:
     """Loads master personnel list, syncing with GitHub data-store branch when available."""
     with _PERSONEL_LOCK:
@@ -186,6 +284,9 @@ def load_personel_list(force_refresh: bool = False) -> Tuple[List[str], Dict[str
             return list(_CACHE["names"]), get_personel_storage_meta()
 
         remote_names, remote_sha, err = _fetch_from_github_data_store()
+        if remote_names is None and (not _is_cloud_environment()) and _is_git_repository():
+            remote_names, remote_sha, err = _fetch_from_local_git_data_store()
+
         if remote_names is not None:
             _CACHE["names"] = remote_names
             _CACHE["sha"] = remote_sha
@@ -391,6 +492,73 @@ def validate_personel_input(raw_name: str) -> Optional[str]:
 
 def add_personel_entry(raw_name: str, force: bool = False, use_ai: bool = True) -> Tuple[int, Dict[str, Any]]:
     """Normalizes, checks duplicates, saves locally, and syncs permanently to GitHub data-store."""
+def _load_latest_names_locked() -> Tuple[List[str], Optional[str]]:
+    """Loads latest personnel list from remote data-store, local git, or local disk (caller holds lock)."""
+    remote_names, remote_sha, _ = _fetch_from_github_data_store()
+    if remote_names is None and (not _is_cloud_environment()) and _is_git_repository():
+        remote_names, remote_sha, _ = _fetch_from_local_git_data_store()
+    if remote_names is not None:
+        return remote_names, remote_sha
+    return _read_local_personel_file(), None
+
+
+def _persist_and_sync_names(
+    mutate_fn: Callable[[List[str]], List[str]],
+    initial_names: List[str],
+    initial_sha: Optional[str],
+    commit_message: str,
+    log_context: str,
+) -> Tuple[List[str], bool]:
+    """Atomically writes local file and syncs to GitHub data-store (via API or local git)."""
+    synced_remote = False
+    sync_error = ""
+    current_sha = initial_sha
+    updated_names = mutate_fn(list(initial_names))
+    has_token = bool(_get_github_token())
+
+    if has_token:
+        for _ in range(3):
+            _write_local_personel_file(updated_names)
+            ok, new_sha, gh_err = _commit_to_github_data_store(
+                updated_names,
+                current_sha,
+                commit_message,
+            )
+            if ok:
+                synced_remote = True
+                current_sha = new_sha
+                break
+            sync_error = gh_err
+            if "HTTP 409" in gh_err or "HTTP 422" in gh_err:
+                latest_names, latest_sha, _ = _fetch_from_github_data_store()
+                if latest_names is not None:
+                    current_sha = latest_sha
+                    updated_names = mutate_fn(list(latest_names))
+                    continue
+            break
+    else:
+        _write_local_personel_file(updated_names)
+        if (not _is_cloud_environment()) and _is_git_repository():
+            ok_git, git_err = _commit_via_local_git_data_store(updated_names, commit_message)
+            if ok_git:
+                synced_remote = True
+            else:
+                sync_error = git_err
+
+    _CACHE["names"] = updated_names
+    _CACHE["sha"] = current_sha
+    _CACHE["fetched_at"] = time.time()
+    _CACHE["source"] = "github_data_store" if synced_remote else "local"
+    _CACHE["last_error"] = sync_error
+
+    if not synced_remote and sync_error and (has_token or not _is_cloud_environment()):
+        log_error(log_context, details=sync_error)
+
+    return updated_names, synced_remote
+
+
+def add_personel_entry(raw_name: str, force: bool = False, use_ai: bool = True) -> Tuple[int, Dict[str, Any]]:
+    """Normalizes, checks duplicates, saves locally, and syncs permanently to GitHub data-store."""
     err_msg = validate_personel_input(raw_name)
     if err_msg:
         return 400, {"success": False, "error": err_msg}
@@ -401,9 +569,7 @@ def add_personel_entry(raw_name: str, force: bool = False, use_ai: bool = True) 
         return 400, {"success": False, "error": "Format nama tidak valid sesuai kaidah ejaan."}
 
     with _PERSONEL_LOCK:
-        # Refresh latest state from GitHub data-store if reachable
-        remote_names, remote_sha, _ = _fetch_from_github_data_store()
-        names = remote_names if remote_names is not None else _read_local_personel_file()
+        names, remote_sha = _load_latest_names_locked()
 
         norm_lower = final_name.lower()
         existing_match = next((n for n in names if n.lower() == norm_lower), None)
@@ -432,44 +598,18 @@ def add_personel_entry(raw_name: str, force: bool = False, use_ai: bool = True) 
                     "kbbi": kbbi_info,
                 }
 
-        # Commit with SHA conflict retry (up to 3 attempts)
-        synced_remote = False
-        sync_error = ""
-        current_sha = remote_sha
-        updated_names = list(names) + [final_name]
+        def _append_unique(cur: List[str]) -> List[str]:
+            if any(n.lower() == norm_lower for n in cur):
+                return cur
+            return cur + [final_name]
 
-        for attempt in range(3):
-            _write_local_personel_file(updated_names)
-            ok, new_sha, gh_err = _commit_to_github_data_store(
-                updated_names,
-                current_sha,
-                f"data(personel): add {final_name}",
-            )
-            if ok:
-                synced_remote = True
-                current_sha = new_sha
-                break
-            sync_error = gh_err
-            if "HTTP 409" in gh_err or "HTTP 422" in gh_err:
-                latest_names, latest_sha, _ = _fetch_from_github_data_store()
-                if latest_names is not None:
-                    current_sha = latest_sha
-                    if any(n.lower() == norm_lower for n in latest_names):
-                        updated_names = latest_names
-                        synced_remote = True
-                        break
-                    updated_names = list(latest_names) + [final_name]
-                    continue
-            break
-
-        _CACHE["names"] = updated_names
-        _CACHE["sha"] = current_sha
-        _CACHE["fetched_at"] = time.time()
-        _CACHE["source"] = "github_data_store" if synced_remote else "local"
-        _CACHE["last_error"] = sync_error
-
-        if not synced_remote and sync_error and _get_github_token():
-            log_error("personel_github_sync_add", details=sync_error)
+        updated_names, synced_remote = _persist_and_sync_names(
+            _append_unique,
+            names,
+            remote_sha,
+            f"data(personel): add {final_name}",
+            "personel_github_sync_add",
+        )
 
         storage_meta = get_personel_storage_meta()
         sync_label = (
@@ -489,19 +629,104 @@ def add_personel_entry(raw_name: str, force: bool = False, use_ai: bool = True) 
         }
 
 
+def edit_personel_entry(
+    old_name: str,
+    new_raw_name: str,
+    force: bool = False,
+    use_ai: bool = True,
+    pin: str = "",
+) -> Tuple[int, Dict[str, Any]]:
+    """Updates an existing personnel name in-place with KBBI/EYD V normalization and GitHub sync."""
+    clean_old = (old_name or "").strip()
+    if not clean_old:
+        return 400, {"success": False, "error": "Nama personel asal tidak boleh kosong."}
+
+    err_msg = validate_personel_input(new_raw_name)
+    if err_msg:
+        return 400, {"success": False, "error": err_msg}
+
+    admin_pin = _get_admin_pin()
+    if admin_pin and (pin or "").strip() != admin_pin:
+        return 403, {"success": False, "error": "PIN Admin tidak valid untuk mengubah master data."}
+
+    kbbi_info = refine_personel_name_kbbi(new_raw_name, use_ai=use_ai)
+    final_name = kbbi_info["name"]
+    if not final_name or len(final_name) < 2:
+        return 400, {"success": False, "error": "Format nama baru tidak valid sesuai kaidah ejaan."}
+
+    with _PERSONEL_LOCK:
+        names, remote_sha = _load_latest_names_locked()
+        old_lower = clean_old.lower()
+        old_idx = next((i for i, n in enumerate(names) if n.lower() == old_lower), None)
+        if old_idx is None:
+            return 404, {"success": False, "error": f"Personel '{clean_old}' tidak ditemukan di master data."}
+
+        actual_old = names[old_idx]
+        if final_name == actual_old:
+            return 200, {
+                "success": True,
+                "old_name": actual_old,
+                "name": actual_old,
+                "synced_remote": False,
+                "all_names": names,
+                "kbbi": kbbi_info,
+                "storage": get_personel_storage_meta(),
+                "message": f"Tidak ada perubahan pada '{actual_old}'.",
+            }
+
+        other_names = [n for i, n in enumerate(names) if i != old_idx]
+        exact_other = next((n for n in other_names if n.lower() == final_name.lower()), None)
+        if exact_other:
+            return 409, {
+                "success": False,
+                "error": f"Personel '{exact_other}' sudah terdaftar pada baris lain.",
+            }
+
+        if not force:
+            dup = find_fuzzy_duplicate(final_name, other_names)
+            if dup:
+                return 409, {
+                    "success": False,
+                    "error": f"Terindikasi duplikat dengan entri lain: {dup['reason']}.",
+                    "duplicate_candidate": dup["existing"],
+                    "normalized_name": final_name,
+                    "kbbi": kbbi_info,
+                }
+
+        def _replace_entry(cur: List[str]) -> List[str]:
+            res = list(cur)
+            idx = next((i for i, n in enumerate(res) if n.lower() == old_lower), None)
+            if idx is not None:
+                res[idx] = final_name
+            return res
+
+        updated_names, synced_remote = _persist_and_sync_names(
+            _replace_entry,
+            names,
+            remote_sha,
+            f"data(personel): edit {actual_old} -> {final_name}",
+            "personel_github_sync_edit",
+        )
+
+        return 200, {
+            "success": True,
+            "old_name": actual_old,
+            "name": final_name,
+            "synced_remote": synced_remote,
+            "all_names": updated_names,
+            "kbbi": kbbi_info,
+            "storage": get_personel_storage_meta(),
+            "message": f"Personel diperbarui ke '{final_name}' (KBBI/EYD V){' & tersinkron permanen ke GitHub' if synced_remote else ''}.",
+        }
+
+
 def delete_personel_entry(target_name: str, pin: str = "") -> Tuple[int, Dict[str, Any]]:
-    """Deletes a personnel name permanently with public-cloud PIN protection."""
+    """Deletes a personnel name permanently (requires PIN only when PERSONEL_ADMIN_PIN is configured)."""
     clean_target = (target_name or "").strip()
     if not clean_target:
         return 400, {"success": False, "error": "Nama personel target tidak boleh kosong."}
 
     admin_pin = _get_admin_pin()
-    is_cloud = _is_cloud_environment()
-    if is_cloud and not admin_pin:
-        return 403, {
-            "success": False,
-            "error": "Penghapusan permanen dinonaktifkan di mode publik. Set PERSONEL_ADMIN_PIN di Secrets untuk mengaktifkan.",
-        }
     if admin_pin and (pin or "").strip() != admin_pin:
         return 403, {
             "success": False,
@@ -509,47 +734,18 @@ def delete_personel_entry(target_name: str, pin: str = "") -> Tuple[int, Dict[st
         }
 
     with _PERSONEL_LOCK:
-        remote_names, remote_sha, _ = _fetch_from_github_data_store()
-        names = remote_names if remote_names is not None else _read_local_personel_file()
-
+        names, remote_sha = _load_latest_names_locked()
         target_lower = clean_target.lower()
-        new_names = [n for n in names if n.lower() != target_lower]
-        if len(new_names) == len(names):
+        if not any(n.lower() == target_lower for n in names):
             return 404, {"success": False, "error": f"Personel '{clean_target}' tidak ditemukan di master data."}
 
-        synced_remote = False
-        sync_error = ""
-        current_sha = remote_sha
-        updated_names = new_names
-
-        for _ in range(3):
-            _write_local_personel_file(updated_names)
-            ok, new_sha, gh_err = _commit_to_github_data_store(
-                updated_names,
-                current_sha,
-                f"data(personel): remove {clean_target}",
-            )
-            if ok:
-                synced_remote = True
-                current_sha = new_sha
-                break
-            sync_error = gh_err
-            if "HTTP 409" in gh_err or "HTTP 422" in gh_err:
-                latest_names, latest_sha, _ = _fetch_from_github_data_store()
-                if latest_names is not None:
-                    current_sha = latest_sha
-                    updated_names = [n for n in latest_names if n.lower() != target_lower]
-                    continue
-            break
-
-        _CACHE["names"] = updated_names
-        _CACHE["sha"] = current_sha
-        _CACHE["fetched_at"] = time.time()
-        _CACHE["source"] = "github_data_store" if synced_remote else "local"
-        _CACHE["last_error"] = sync_error
-
-        if not synced_remote and sync_error and _get_github_token():
-            log_error("personel_github_sync_delete", details=sync_error)
+        updated_names, synced_remote = _persist_and_sync_names(
+            lambda cur: [n for n in cur if n.lower() != target_lower],
+            names,
+            remote_sha,
+            f"data(personel): remove {clean_target}",
+            "personel_github_sync_delete",
+        )
 
         return 200, {
             "success": True,

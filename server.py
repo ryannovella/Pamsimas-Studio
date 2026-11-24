@@ -35,7 +35,7 @@ from app.backend.report_generator import (
 from app.backend.docx_inspector import inspect_and_import_monev_docx, merge_inspected_monev_reports
 from app.backend.updater import get_version_info, check_for_updates, apply_update
 from app.backend.personel_service import (
-    load_personel_list, add_personel_entry, delete_personel_entry,
+    load_personel_list, add_personel_entry, edit_personel_entry, delete_personel_entry,
     refine_personel_name_kbbi, validate_personel_input
 )
 
@@ -285,9 +285,31 @@ def api_add_personel():
         response.content_type = "application/json"
         return json.dumps({"success": False, "error": str(e)})
 
+@app.route("/api/personel", method="PUT")
+def api_edit_personel():
+    """Updates an existing personnel name via hybrid KBBI/EYD V and syncs locally + GitHub data-store."""
+    try:
+        req = request.json or {}
+        old_name = (req.get("old_name") or "").strip()
+        new_name = (req.get("new_name") or "").strip()
+        force = bool(req.get("force", False))
+        use_ai = bool(req.get("use_ai", True))
+        pin = (req.get("pin") or "").strip()
+        status_code, payload = edit_personel_entry(
+            old_name, new_name, force=force, use_ai=use_ai, pin=pin
+        )
+        response.status = status_code
+        response.content_type = "application/json"
+        return json.dumps(payload)
+    except Exception as e:
+        log_error("api_edit_personel", e)
+        response.status = 500
+        response.content_type = "application/json"
+        return json.dumps({"success": False, "error": str(e)})
+
 @app.route("/api/personel", method="DELETE")
 def api_delete_personel():
-    """Removes a personnel name permanently from local cache & GitHub data-store (PIN-protected in cloud)."""
+    """Removes a personnel name permanently from local cache & GitHub data-store."""
     try:
         req = request.json or {}
         target_name = (req.get("name") or "").strip()
