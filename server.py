@@ -236,7 +236,7 @@ def api_get_personel():
                     line = line.strip()
                     if not line:
                         continue
-                    cleaned = re.sub(r"^\d+\.\s*", "", line).strip()
+                    cleaned = re.sub(r"^\d+[\.\)]\s*", "", line).strip()
                     cleaned = normalize_personel_title(cleaned)
                     if cleaned and cleaned not in names:
                         names.append(cleaned)
@@ -244,6 +244,133 @@ def api_get_personel():
         return json.dumps({"success": True, "personel": names})
     except Exception as e:
         log_error("api_get_personel", e)
+        response.status = 500
+        return json.dumps({"success": False, "error": str(e)})
+
+@app.route("/api/personel", method="POST")
+def api_add_personel():
+    """Validates name according to KBBI/EYD and permanently saves to data/Nama Personel.txt."""
+    try:
+        req = request.json or {}
+        raw_name = (req.get("name") or "").strip()
+        if not raw_name:
+            response.status = 400
+            response.content_type = "application/json"
+            return json.dumps({"success": False, "error": "Nama personel tidak boleh kosong."})
+
+        # Validasi karakter: wajib memuat karakter huruf
+        if not re.search(r"[a-zA-Z]", raw_name):
+            response.status = 400
+            response.content_type = "application/json"
+            return json.dumps({"success": False, "error": "Nama personel harus memuat huruf alfabet yang valid."})
+
+        # Normalisasi sesuai kaidah KBBI/EYD Edisi V
+        normalized_name = normalize_personel_title(raw_name)
+        if not normalized_name or len(normalized_name) < 2:
+            response.status = 400
+            response.content_type = "application/json"
+            return json.dumps({"success": False, "error": "Format nama tidak valid sesuai kaidah ejaan."})
+
+        personel_file = os.path.join(os.path.dirname(__file__), "data", "Nama Personel.txt")
+        names = []
+        if os.path.exists(personel_file):
+            with open(personel_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    cl = re.sub(r"^\d+[\.\)]\s*", "", line).strip()
+                    cl = normalize_personel_title(cl)
+                    if cl and cl not in names:
+                        names.append(cl)
+
+        # Cek deduplikasi (case-insensitive)
+        norm_lower = normalized_name.lower()
+        existing_match = next((n for n in names if n.lower() == norm_lower), None)
+
+        is_new = False
+        if not existing_match:
+            names.append(normalized_name)
+            is_new = True
+
+            # Tulis permanen dengan nomor urut rapi (atomic write)
+            os.makedirs(os.path.dirname(personel_file), exist_ok=True)
+            tmp_file = personel_file + ".tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                for idx, n in enumerate(names, 1):
+                    f.write(f"{idx}. {n}\n")
+            if os.path.exists(personel_file):
+                os.replace(tmp_file, personel_file)
+            else:
+                os.rename(tmp_file, personel_file)
+            saved_name = normalized_name
+        else:
+            saved_name = existing_match
+
+        response.content_type = "application/json"
+        return json.dumps({
+            "success": True,
+            "name": saved_name,
+            "is_new": is_new,
+            "all_names": names,
+            "message": f"Personel '{saved_name}' {'berhasil disimpan permanen sesuai kaidah KBBI/EYD' if is_new else 'sudah terdaftar di master data'}."
+        })
+    except Exception as e:
+        log_error("api_add_personel", e)
+        response.status = 500
+        return json.dumps({"success": False, "error": str(e)})
+
+@app.route("/api/personel", method="DELETE")
+def api_delete_personel():
+    """Removes a personnel name permanently from data/Nama Personel.txt."""
+    try:
+        req = request.json or {}
+        target_name = (req.get("name") or "").strip()
+        if not target_name:
+            response.status = 400
+            response.content_type = "application/json"
+            return json.dumps({"success": False, "error": "Nama personel target tidak boleh kosong."})
+
+        personel_file = os.path.join(os.path.dirname(__file__), "data", "Nama Personel.txt")
+        names = []
+        if os.path.exists(personel_file):
+            with open(personel_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    cl = re.sub(r"^\d+[\.\)]\s*", "", line).strip()
+                    cl = normalize_personel_title(cl)
+                    if cl and cl not in names:
+                        names.append(cl)
+
+        target_lower = target_name.lower()
+        new_names = [n for n in names if n.lower() != target_lower]
+
+        if len(new_names) == len(names):
+            response.status = 404
+            response.content_type = "application/json"
+            return json.dumps({"success": False, "error": f"Personel '{target_name}' tidak ditemukan di master data."})
+
+        # Simpan pembaruan permanen
+        tmp_file = personel_file + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            for idx, n in enumerate(new_names, 1):
+                f.write(f"{idx}. {n}\n")
+        if os.path.exists(personel_file):
+            os.replace(tmp_file, personel_file)
+        else:
+            os.rename(tmp_file, personel_file)
+
+        response.content_type = "application/json"
+        return json.dumps({
+            "success": True,
+            "name": target_name,
+            "all_names": new_names,
+            "message": f"Personel '{target_name}' berhasil dihapus dari master data."
+        })
+    except Exception as e:
+        log_error("api_delete_personel", e)
         response.status = 500
         return json.dumps({"success": False, "error": str(e)})
 

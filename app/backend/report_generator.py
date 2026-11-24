@@ -1194,64 +1194,140 @@ def get_village_kondisi_per_date(village: Dict[str, Any], report_data: Dict[str,
 
 def normalize_personel_title(name: str) -> str:
     """
-    Merapikan penulisan nama dan gelar akademik/profesi personel sesuai kaidah KBBI/EYD:
-    - Setiap unsur singkatan gelar akademik diakhiri tanda titik (e.g. S.T., M.T., S.E., S.Ars., S.A.P., A.Md., dll.)
-    - Singkatan nama depan diakhiri titik (e.g. FX -> F.X.)
-    - Penulisan tanda koma dan spasi sebelum dan antargelar dirapikan (e.g. 'Nama, S.T., M.T.')
+    Merapikan penulisan nama dan gelar akademik/profesi personel sesuai kaidah KBBI/EYD (Edisi V):
+    - Penulisan nama diri menggunakan Title Case (huruf awal kapital untuk setiap unsur nama).
+    - Singkatan inisial nama menggunakan titik (e.g. FX -> F.X., M. -> M.).
+    - Standarisasi gelar depan (e.g. Ir., Dr., dr., drg., Drs., Dra., Prof.).
+    - Setiap unsur singkatan gelar akademik/vokasi/magister diakhiri tanda titik (e.g. S.T., M.T., S.E., S.Ars., S.A.P., M.Ak., A.Md., dll.)
+    - Penulisan tanda koma dan spasi sebelum gelar belakang dan antargelar dirapikan (e.g. 'Nama, S.T., M.T.').
     """
     if not name:
         return ""
     raw = str(name).strip()
-    raw = re.sub(r'^\d+\.\s*', '', raw).strip()
+    raw = re.sub(r'^\d+[\.\)]\s*', '', raw).strip()
+    if not raw:
+        return ""
 
-    # Singkatan nama depan: FX -> F.X.
-    raw = re.sub(r'\bFX\b\.?', 'F.X.', raw)
+    # Singkatan inisial nama depan: FX -> F.X.
+    raw = re.sub(r'\bFX\b\.?', 'F.X.', raw, flags=re.IGNORECASE)
 
+    # Kamus standardisasi gelar (case-insensitive)
     title_rules = [
-        (r'\bS\.?I\.?Kom\b\.?', 'S.I.Kom.'),
-        (r'\bM\.?I\.?Kom\b\.?', 'M.I.Kom.'),
-        (r'\bS\.?K\.?M\b\.?', 'S.K.M.'),
-        (r'\bM\.?K\.?M\b\.?', 'M.K.M.'),
-        (r'\bS\.?A\.?P\b\.?', 'S.A.P.'),
-        (r'\bM\.?A\.?P\b\.?', 'M.A.P.'),
-        (r'\bS\.?I\.?P\b\.?', 'S.I.P.'),
-        (r'\bM\.?I\.?P\b\.?', 'M.I.P.'),
+        # Gelar Depan
+        (r'\bProf(?:esor|\.)?\b', 'Prof.'),
+        (r'\bDr\b\.?(?!\w)', 'Dr.'),
+        (r'\bdr\b\.?(?!\w)', 'dr.'),
+        (r'\bdrg\b\.?(?!\w)', 'drg.'),
+        (r'\bIr\b\.?(?!\w)', 'Ir.'),
+        (r'\bDrs\b\.?(?!\w)', 'Drs.'),
+        (r'\bDra\b\.?(?!\w)', 'Dra.'),
+
+        # Gelar Vokasi D3/D4
         (r'\bA\.?Md\.?Kom\b\.?', 'A.Md.Kom.'),
         (r'\bA\.?Md\.?T\b\.?', 'A.Md.T.'),
+        (r'\bA\.?Md\.?Ak\b\.?', 'A.Md.Ak.'),
+        (r'\bA\.?Md\.?Keb\b\.?', 'A.Md.Keb.'),
+        (r'\bA\.?Md\.?Kep\b\.?', 'A.Md.Kep.'),
+        (r'\bA\.?Md\.?P\b\.?', 'A.Md.P.'),
         (r'\bA\.?Md\b\.?', 'A.Md.'),
+
+        # Sarjana Terapan
+        (r'\bS\.?Tr\.?T\b\.?', 'S.Tr.T.'),
+        (r'\bS\.?Tr\.?Kom\b\.?', 'S.Tr.Kom.'),
+        (r'\bS\.?Tr\.?Sos\b\.?', 'S.Tr.Sos.'),
+        (r'\bS\.?Tr\.?Ak\b\.?', 'S.Tr.Ak.'),
+
+        # Sarjana (S1)
+        (r'\bS\.?I\.?Kom\b\.?', 'S.I.Kom.'),
+        (r'\bS\.?K\.?M\b\.?', 'S.K.M.'),
+        (r'\bS\.?A\.?P\b\.?', 'S.A.P.'),
+        (r'\bS\.?I\.?P\b\.?', 'S.I.P.'),
         (r'\bS\.?Ars\b\.?', 'S.Ars.'),
-        (r'\bM\.?Ars\b\.?', 'M.Ars.'),
-        (r'\bS\.?Kom\b\.?', 'S.Kom.'),
-        (r'\bM\.?Kom\b\.?', 'M.Kom.'),
-        (r'\bS\.?Pt\b\.?', 'S.Pt.'),
-        (r'\bM\.?Pt\b\.?', 'M.Pt.'),
-        (r'\bS\.?Pd\b\.?', 'S.Pd.'),
-        (r'\bM\.?Pd\b\.?', 'M.Pd.'),
-        (r'\bS\.?Si\b\.?', 'S.Si.'),
-        (r'\bM\.?Si\b\.?', 'M.Si.'),
-        (r'\bS\.?Sos\b\.?', 'S.Sos.'),
-        (r'\bM\.?Sos\b\.?', 'M.Sos.'),
         (r'\bS\.?Ked\b\.?', 'S.Ked.'),
+        (r'\bS\.?Farm\b\.?', 'S.Farm.'),
+        (r'\bS\.?Gz\b\.?', 'S.Gz.'),
+        (r'\bS\.?Stat\b\.?', 'S.Stat.'),
+        (r'\bS\.?Kom\b\.?', 'S.Kom.'),
+        (r'\bS\.?Pt\b\.?', 'S.Pt.'),
+        (r'\bS\.?Pd\b\.?', 'S.Pd.'),
+        (r'\bS\.?Si\b\.?', 'S.Si.'),
+        (r'\bS\.?Sos\b\.?', 'S.Sos.'),
+        (r'\bS\.?Psi\b\.?', 'S.Psi.'),
+        (r'\bS\.?Sn\b\.?', 'S.Sn.'),
+        (r'\bS\.?Mat\b\.?', 'S.Mat.'),
+        (r'\bS\.?Hum\b\.?', 'S.Hum.'),
         (r'\bS\.?T\b\.?', 'S.T.'),
-        (r'\bM\.?T\b\.?', 'M.T.'),
         (r'\bS\.?E\b\.?', 'S.E.'),
-        (r'\bM\.?E\b\.?', 'M.E.'),
         (r'\bS\.?H\b\.?', 'S.H.'),
+        (r'\bS\.?P\b\.?(?!\w)', 'S.P.'),
+
+        # Magister (S2)
+        (r'\bM\.?I\.?Kom\b\.?', 'M.I.Kom.'),
+        (r'\bM\.?K\.?M\b\.?', 'M.K.M.'),
+        (r'\bM\.?A\.?P\b\.?', 'M.A.P.'),
+        (r'\bM\.?I\.?P\b\.?', 'M.I.P.'),
+        (r'\bM\.?Ars\b\.?', 'M.Ars.'),
+        (r'\bM\.?Ked\b\.?', 'M.Ked.'),
+        (r'\bM\.?Kes\b\.?', 'M.Kes.'),
+        (r'\bM\.?Kom\b\.?', 'M.Kom.'),
+        (r'\bM\.?Pt\b\.?', 'M.Pt.'),
+        (r'\bM\.?Pd\b\.?', 'M.Pd.'),
+        (r'\bM\.?Si\b\.?', 'M.Si.'),
+        (r'\bM\.?Sos\b\.?', 'M.Sos.'),
+        (r'\bM\.?Psi\b\.?', 'M.Psi.'),
+        (r'\bM\.?Ak\b\.?', 'M.Ak.'),
+        (r'\bM\.?M\b\.?', 'M.M.'),
+        (r'\bM\.?T\b\.?', 'M.T.'),
+        (r'\bM\.?E\b\.?', 'M.E.'),
         (r'\bM\.?H\b\.?', 'M.H.'),
-        (r'\bIr\b\.?', 'Ir.'),
-        (r'\bDrs\b\.?', 'Drs.'),
-        (r'\bDra\b\.?', 'Dra.'),
+        (r'\bM\.?Sc\b\.?', 'M.Sc.'),
+        (r'\bM\.?Eng\b\.?', 'M.Eng.'),
+        (r'\bMBA\b\.?', 'M.B.A.'),
+        (r'\bM\.?P\b\.?(?!\w)', 'M.P.'),
     ]
 
     for pat, rep in title_rules:
-        raw = re.sub(pat, rep, raw)
+        raw = re.sub(pat, rep, raw, flags=re.IGNORECASE)
+
+    back_titles = [
+        r'S\.T\.', r'M\.T\.', r'S\.E\.', r'M\.E\.', r'S\.H\.', r'M\.H\.',
+        r'S\.Kom\.', r'M\.Kom\.', r'S\.Ars\.', r'M\.Ars\.', r'S\.A\.P\.', r'M\.A\.P\.',
+        r'S\.I\.P\.', r'M\.I\.P\.', r'S\.I\.Kom\.', r'M\.I\.Kom\.', r'S\.K\.M\.', r'M\.K\.M\.',
+        r'S\.Sos\.', r'M\.Sos\.', r'S\.Pt\.', r'M\.Pt\.', r'S\.Pd\.', r'M\.Pd\.',
+        r'S\.Si\.', r'M\.Si\.', r'S\.Ked\.', r'S\.Farm\.', r'S\.Gz\.', r'S\.Stat\.',
+        r'S\.Psi\.', r'M\.Psi\.', r'S\.P\.', r'M\.P\.', r'M\.Ak\.', r'M\.M\.', r'M\.Kes\.',
+        r'M\.Sc\.', r'M\.Eng\.', r'M\.B\.A\.',
+        r'A\.Md\.Kom\.', r'A\.Md\.T\.', r'A\.Md\.Ak\.', r'A\.Md\.Keb\.', r'A\.Md\.Kep\.',
+        r'A\.Md\.P\.', r'A\.Md\.',
+        r'S\.Tr\.T\.', r'S\.Tr\.Kom\.', r'S\.Tr\.Sos\.', r'S\.Tr\.Ak\.'
+    ]
+    back_pattern = '|'.join(back_titles)
 
     raw = re.sub(r'\s*,\s*', ', ', raw)
-    raw = re.sub(r'([^,])\s+(S\.[A-Za-z\.]+|M\.[A-Za-z\.]+|A\.Md\.[A-Za-z\.]*|A\.Md\.)', r'\1, \2', raw)
-    raw = re.sub(r'(\b[A-Z][A-Za-z\.]*\.)\s+(S\.[A-Za-z\.]+|M\.[A-Za-z\.]+|A\.Md\.[A-Za-z\.]*|A\.Md\.)', r'\1, \2', raw)
+    raw = re.sub(r'([^,])\s+(' + back_pattern + ')', r'\1, \2', raw)
     raw = re.sub(r'(?:,\s*)+', ', ', raw)
-    raw = re.sub(r'[ \t]{2,}', ' ', raw).strip()
-    return raw
+
+    parts = raw.split(', ')
+    name_part = parts[0].strip()
+    title_parts = parts[1:]
+
+    def clean_word(w: str) -> str:
+        if w in ['Ir.', 'Dr.', 'dr.', 'drg.', 'Drs.', 'Dra.', 'Prof.', 'F.X.']:
+            return w
+        if re.match(r'^[A-Za-z]\.$', w):
+            return w.upper()
+        if w.upper() == 'FX':
+            return 'F.X.'
+        return w.capitalize()
+
+    words = name_part.split()
+    capitalized_name = ' '.join(clean_word(w) for w in words)
+
+    if title_parts:
+        res = f"{capitalized_name}, {', '.join(title_parts)}"
+    else:
+        res = capitalized_name
+    return re.sub(r'[ \t]{2,}', ' ', res).strip()
 
 
 def format_spt_full_date(report_data: Dict[str, Any]) -> str:

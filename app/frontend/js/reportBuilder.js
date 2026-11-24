@@ -855,7 +855,7 @@ export class ReportBuilder {
     }
   }
 
-  addPelaksanaFromInput() {
+  async addPelaksanaFromInput() {
     if (this.lockedSegments.pelaksana) {
       this.showToast('Segmen Tim Pelaksana sedang terkunci. Buka kunci segmen terlebih dahulu.', 'warning');
       return;
@@ -866,67 +866,350 @@ export class ReportBuilder {
     if (!val) {
       return;
     }
-    // Jika cocok dengan master personel (menggunakan pencarian cerdas prefix/nama), gunakan format master agar gelar rapi
+
+    // 1. Cek apakah ada exact match di master personel
+    const exactMatch = (this.personelMaster || []).find(n => n.toLowerCase() === val.toLowerCase());
+    if (exactMatch) {
+      this.addPelaksana(exactMatch);
+      inp.value = '';
+      if (this.personelAutocomplete) {
+        this.personelAutocomplete.close();
+      }
+      return;
+    }
+
+    // 2. Cek apakah cocok dengan awalan atau best match spesifik
     const matched = this.findBestMatch(val, this.personelMaster || []);
-    const finalName = matched || this.normalizePersonelTitle(val);
-    this.addPelaksana(finalName);
-    inp.value = '';
-    if (this.personelAutocomplete) {
-      this.personelAutocomplete.close();
+    const isVeryClose = matched && (
+      matched.toLowerCase() === val.toLowerCase() ||
+      matched.toLowerCase().startsWith(val.toLowerCase() + ',')
+    );
+    if (isVeryClose) {
+      this.addPelaksana(matched);
+      inp.value = '';
+      if (this.personelAutocomplete) {
+        this.personelAutocomplete.close();
+      }
+      return;
+    }
+
+    // 3. Nama baru: simpan permanen ke backend dengan kaidah KBBI/EYD
+    try {
+      const res = await fetch('/api/personel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: val })
+      });
+      const data = await res.json();
+      if (data.success && data.name) {
+        const finalName = data.name;
+        if (!this.personelMaster.includes(finalName)) {
+          this.personelMaster.push(finalName);
+        }
+        this.addPelaksana(finalName);
+        inp.value = '';
+        if (this.personelAutocomplete) {
+          this.personelAutocomplete.close();
+        }
+        if (data.is_new) {
+          this.showToast(`Personel baru diselaraskan (KBBI/EYD) & tersimpan permanen: "${finalName}"`, 'success');
+        } else {
+          this.showToast(`Personel "${finalName}" sudah terdaftar di master data.`, 'info');
+        }
+      } else {
+        const err = data.error || 'Gagal menyimpan nama personel baru.';
+        this.showToast(err, 'error');
+      }
+    } catch (e) {
+      console.warn('Gagal menyimpan personel via backend API, menggunakan normalisasi lokal:', e);
+      const fallbackName = this.normalizePersonelTitle(val);
+      this.addPelaksana(fallbackName);
+      inp.value = '';
+      if (this.personelAutocomplete) {
+        this.personelAutocomplete.close();
+      }
+      this.showToast(`Personel ditambahkan ke dokumen: "${fallbackName}"`, 'warning');
     }
   }
 
   normalizePersonelTitle(name) {
     if (!name) return '';
     let raw = String(name).trim();
-    raw = raw.replace(/^\d+\.\s*/, '').trim();
-    raw = raw.replace(/\bFX\b\.?/g, 'F.X.');
+    raw = raw.replace(/^\d+[\.\)]\s*/, '').trim();
+    if (!raw) return '';
+
+    // Inisial FX -> F.X.
+    raw = raw.replace(/\bFX\b\.?/gi, 'F.X.');
 
     const rules = [
-      [/\bS\.?I\.?Kom\b\.?/gi, 'S.I.Kom.'],
-      [/\bM\.?I\.?Kom\b\.?/gi, 'M.I.Kom.'],
-      [/\bS\.?K\.?M\b\.?/gi, 'S.K.M.'],
-      [/\bM\.?K\.?M\b\.?/gi, 'M.K.M.'],
-      [/\bS\.?A\.?P\b\.?/gi, 'S.A.P.'],
-      [/\bM\.?A\.?P\b\.?/gi, 'M.A.P.'],
-      [/\bS\.?I\.?P\b\.?/gi, 'S.I.P.'],
-      [/\bM\.?I\.?P\b\.?/gi, 'M.I.P.'],
+      // Gelar Depan
+      [/\bProf(?:esor|\.)?\b/gi, 'Prof.'],
+      [/\bDr\b\.?(?!\w)/gi, 'Dr.'],
+      [/\bdr\b\.?(?!\w)/gi, 'dr.'],
+      [/\bdrg\b\.?(?!\w)/gi, 'drg.'],
+      [/\bIr\b\.?(?!\w)/gi, 'Ir.'],
+      [/\bDrs\b\.?(?!\w)/gi, 'Drs.'],
+      [/\bDra\b\.?(?!\w)/gi, 'Dra.'],
+
+      // Vokasi (D3/D4)
       [/\bA\.?Md\.?Kom\b\.?/gi, 'A.Md.Kom.'],
       [/\bA\.?Md\.?T\b\.?/gi, 'A.Md.T.'],
+      [/\bA\.?Md\.?Ak\b\.?/gi, 'A.Md.Ak.'],
+      [/\bA\.?Md\.?Keb\b\.?/gi, 'A.Md.Keb.'],
+      [/\bA\.?Md\.?Kep\b\.?/gi, 'A.Md.Kep.'],
+      [/\bA\.?Md\.?P\b\.?/gi, 'A.Md.P.'],
       [/\bA\.?Md\b\.?/gi, 'A.Md.'],
+
+      // Sarjana Terapan
+      [/\bS\.?Tr\.?T\b\.?/gi, 'S.Tr.T.'],
+      [/\bS\.?Tr\.?Kom\b\.?/gi, 'S.Tr.Kom.'],
+      [/\bS\.?Tr\.?Sos\b\.?/gi, 'S.Tr.Sos.'],
+      [/\bS\.?Tr\.?Ak\b\.?/gi, 'S.Tr.Ak.'],
+
+      // Sarjana (S1)
+      [/\bS\.?I\.?Kom\b\.?/gi, 'S.I.Kom.'],
+      [/\bS\.?K\.?M\b\.?/gi, 'S.K.M.'],
+      [/\bS\.?A\.?P\b\.?/gi, 'S.A.P.'],
+      [/\bS\.?I\.?P\b\.?/gi, 'S.I.P.'],
       [/\bS\.?Ars\b\.?/gi, 'S.Ars.'],
-      [/\bM\.?Ars\b\.?/gi, 'M.Ars.'],
-      [/\bS\.?Kom\b\.?/gi, 'S.Kom.'],
-      [/\bM\.?Kom\b\.?/gi, 'M.Kom.'],
-      [/\bS\.?Pt\b\.?/gi, 'S.Pt.'],
-      [/\bM\.?Pt\b\.?/gi, 'M.Pt.'],
-      [/\bS\.?Pd\b\.?/gi, 'S.Pd.'],
-      [/\bM\.?Pd\b\.?/gi, 'M.Pd.'],
-      [/\bS\.?Si\b\.?/gi, 'S.Si.'],
-      [/\bM\.?Si\b\.?/gi, 'M.Si.'],
-      [/\bS\.?Sos\b\.?/gi, 'S.Sos.'],
-      [/\bM\.?Sos\b\.?/gi, 'M.Sos.'],
       [/\bS\.?Ked\b\.?/gi, 'S.Ked.'],
+      [/\bS\.?Farm\b\.?/gi, 'S.Farm.'],
+      [/\bS\.?Gz\b\.?/gi, 'S.Gz.'],
+      [/\bS\.?Stat\b\.?/gi, 'S.Stat.'],
+      [/\bS\.?Kom\b\.?/gi, 'S.Kom.'],
+      [/\bS\.?Pt\b\.?/gi, 'S.Pt.'],
+      [/\bS\.?Pd\b\.?/gi, 'S.Pd.'],
+      [/\bS\.?Si\b\.?/gi, 'S.Si.'],
+      [/\bS\.?Sos\b\.?/gi, 'S.Sos.'],
+      [/\bS\.?Psi\b\.?/gi, 'S.Psi.'],
+      [/\bS\.?Sn\b\.?/gi, 'S.Sn.'],
+      [/\bS\.?Mat\b\.?/gi, 'S.Mat.'],
+      [/\bS\.?Hum\b\.?/gi, 'S.Hum.'],
       [/\bS\.?T\b\.?/gi, 'S.T.'],
-      [/\bM\.?T\b\.?/gi, 'M.T.'],
       [/\bS\.?E\b\.?/gi, 'S.E.'],
-      [/\bM\.?E\b\.?/gi, 'M.E.'],
       [/\bS\.?H\b\.?/gi, 'S.H.'],
+      [/\bS\.?P\b\.?(?!\w)/gi, 'S.P.'],
+
+      // Magister (S2)
+      [/\bM\.?I\.?Kom\b\.?/gi, 'M.I.Kom.'],
+      [/\bM\.?K\.?M\b\.?/gi, 'M.K.M.'],
+      [/\bM\.?A\.?P\b\.?/gi, 'M.A.P.'],
+      [/\bM\.?I\.?P\b\.?/gi, 'M.I.P.'],
+      [/\bM\.?Ars\b\.?/gi, 'M.Ars.'],
+      [/\bM\.?Ked\b\.?/gi, 'M.Ked.'],
+      [/\bM\.?Kes\b\.?/gi, 'M.Kes.'],
+      [/\bM\.?Kom\b\.?/gi, 'M.Kom.'],
+      [/\bM\.?Pt\b\.?/gi, 'M.Pt.'],
+      [/\bM\.?Pd\b\.?/gi, 'M.Pd.'],
+      [/\bM\.?Si\b\.?/gi, 'M.Si.'],
+      [/\bM\.?Sos\b\.?/gi, 'M.Sos.'],
+      [/\bM\.?Psi\b\.?/gi, 'M.Psi.'],
+      [/\bM\.?Ak\b\.?/gi, 'M.Ak.'],
+      [/\bM\.?M\b\.?/gi, 'M.M.'],
+      [/\bM\.?T\b\.?/gi, 'M.T.'],
+      [/\bM\.?E\b\.?/gi, 'M.E.'],
       [/\bM\.?H\b\.?/gi, 'M.H.'],
-      [/\bIr\b\.?/gi, 'Ir.'],
-      [/\bDrs\b\.?/gi, 'Drs.'],
-      [/\bDra\b\.?/gi, 'Dra.']
+      [/\bM\.?Sc\b\.?/gi, 'M.Sc.'],
+      [/\bM\.?Eng\b\.?/gi, 'M.Eng.'],
+      [/\bMBA\b\.?/gi, 'M.B.A.'],
+      [/\bM\.?P\b\.?(?!\w)/gi, 'M.P.']
     ];
 
     for (const [pat, rep] of rules) {
       raw = raw.replace(pat, rep);
     }
 
+    const backTitles = [
+      'S\\.T\\.', 'M\\.T\\.', 'S\\.E\\.', 'M\\.E\\.', 'S\\.H\\.', 'M\\.H\\.',
+      'S\\.Kom\\.', 'M\\.Kom\\.', 'S\\.Ars\\.', 'M\\.Ars\\.', 'S\\.A\\.P\\.', 'M\\.A\\.P\\.',
+      'S\\.I\\.P\\.', 'M\\.I\\.P\\.', 'S\\.I\\.Kom\\.', 'M\\.I\\.Kom\\.', 'S\\.K\\.M\\.', 'M\\.K\\.M\\.',
+      'S\\.Sos\\.', 'M\\.Sos\\.', 'S\\.Pt\\.', 'M\\.Pt\\.', 'S\\.Pd\\.', 'M\\.Pd\\.',
+      'S\\.Si\\.', 'M\\.Si\\.', 'S\\.Ked\\.', 'S\\.Farm\\.', 'S\\.Gz\\.', 'S\\.Stat\\.',
+      'S\\.Psi\\.', 'M\\.Psi\\.', 'S\\.P\\.', 'M\\.P\\.', 'M\\.Ak\\.', 'M\\.M\\.', 'M\\.Kes\\.',
+      'M\\.Sc\\.', 'M\\.Eng\\.', 'M\\.B\\.A\\.',
+      'A\\.Md\\.Kom\\.', 'A\\.Md\\.T\\.', 'A\\.Md\\.Ak\\.', 'A\\.Md\\.Keb\\.', 'A\\.Md\\.Kep\\.',
+      'A\\.Md\\.P\\.', 'A\\.Md\\.',
+      'S\\.Tr\\.T\\.', 'S\\.Tr\\.Kom\\.', 'S\\.Tr\\.Sos\\.', 'S\\.Tr\\.Ak\\.'
+    ];
+    const backPattern = new RegExp('([^,])\\s+(' + backTitles.join('|') + ')', 'g');
+
     raw = raw.replace(/\s*,\s*/g, ', ');
-    raw = raw.replace(/([^,])\s+(S\.[A-Za-z\.]+|M\.[A-Za-z\.]+|A\.Md\.[A-Za-z\.]*|A\.Md\.)/g, '$1, $2');
-    raw = raw.replace(/(\b[A-Z][A-Za-z\.]*\.)\s+(S\.[A-Za-z\.]+|M\.[A-Za-z\.]+|A\.Md\.[A-Za-z\.]*|A\.Md\.)/g, '$1, $2');
+    raw = raw.replace(backPattern, '$1, $2');
     raw = raw.replace(/(?:,\s*)+/g, ', ');
-    return raw.replace(/[ \t]{2,}/g, ' ').trim();
+
+    const parts = raw.split(', ');
+    const namePart = parts[0].trim();
+    const titleParts = parts.slice(1);
+
+    const cleanWord = (w) => {
+      if (['Ir.', 'Dr.', 'dr.', 'drg.', 'Drs.', 'Dra.', 'Prof.', 'F.X.'].includes(w)) {
+        return w;
+      }
+      if (/^[A-Za-z]\.$/.test(w)) {
+        return w.toUpperCase();
+      }
+      if (w.toUpperCase() === 'FX') {
+        return 'F.X.';
+      }
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    };
+
+    const words = namePart.split(/\s+/).filter(Boolean);
+    const capitalizedName = words.map(cleanWord).join(' ');
+
+    let res = capitalizedName;
+    if (titleParts.length > 0) {
+      res = `${capitalizedName}, ${titleParts.join(', ')}`;
+    }
+    return res.replace(/[ \t]{2,}/g, ' ').trim();
+  }
+
+  // =========================================================
+  // MASTER PERSONEL MODAL MANAGEMENT
+  // =========================================================
+  openPersonelMasterModal() {
+    let modal = document.getElementById('personelMasterModal');
+    if (!modal) return;
+    modal.classList.add('active');
+    const searchInp = document.getElementById('masterPersonelSearchInput');
+    if (searchInp) {
+      searchInp.value = '';
+    }
+    const newInp = document.getElementById('masterPersonelNewInput');
+    if (newInp) {
+      newInp.value = '';
+      this.previewPersonelKbbi('');
+    }
+    this.renderPersonelMasterList();
+    setTimeout(() => {
+      if (searchInp) searchInp.focus();
+    }, 100);
+  }
+
+  closePersonelMasterModal() {
+    const modal = document.getElementById('personelMasterModal');
+    if (modal) {
+      modal.classList.remove('active');
+    }
+  }
+
+  previewPersonelKbbi(val) {
+    const previewEl = document.getElementById('masterPersonelKbbiPreview');
+    if (!previewEl) return;
+    const clean = (val || '').trim();
+    if (!clean) {
+      previewEl.textContent = 'Belum ada input';
+      previewEl.style.opacity = '0.5';
+      return;
+    }
+    const normalized = this.normalizePersonelTitle(clean);
+    previewEl.textContent = normalized || clean;
+    previewEl.style.opacity = '1';
+  }
+
+  async addNewMasterPersonel() {
+    const inp = document.getElementById('masterPersonelNewInput');
+    if (!inp) return;
+    const val = inp.value.trim();
+    if (!val) {
+      this.showToast('Ketik nama personel terlebih dahulu.', 'warning');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/personel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: val })
+      });
+      const data = await res.json();
+      if (data.success && data.name) {
+        if (!this.personelMaster.includes(data.name)) {
+          this.personelMaster.push(data.name);
+        }
+        inp.value = '';
+        this.previewPersonelKbbi('');
+        this.renderPersonelMasterList();
+        this.showToast(data.message || `Personel "${data.name}" tersimpan permanen.`, 'success');
+      } else {
+        this.showToast(data.error || 'Gagal menyimpan nama personel.', 'error');
+      }
+    } catch (e) {
+      this.showToast('Gagal menghubungi server.', 'error');
+    }
+  }
+
+  async deleteMasterPersonel(name) {
+    if (!name) return;
+    if (!confirm(`Hapus personel "${name}" dari master data permanen?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/personel', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name })
+      });
+      const data = await res.json();
+      if (data.success) {
+        this.personelMaster = this.personelMaster.filter(n => n !== name);
+        this.renderPersonelMasterList();
+        this.showToast(data.message || `Personel "${name}" berhasil dihapus.`, 'info');
+      } else {
+        this.showToast(data.error || 'Gagal menghapus personel.', 'error');
+      }
+    } catch (e) {
+      this.showToast('Gagal menghapus personel dari server.', 'error');
+    }
+  }
+
+  renderPersonelMasterList(searchQuery = '') {
+    const container = document.getElementById('masterPersonelTableBody');
+    const countEl = document.getElementById('masterPersonelCountBadge');
+    if (!container) return;
+
+    const q = (searchQuery || '').trim().toLowerCase();
+    const list = (this.personelMaster || []).filter(name => {
+      if (!q) return true;
+      return name.toLowerCase().includes(q);
+    });
+
+    if (countEl) {
+      countEl.textContent = `${this.personelMaster.length} Personel`;
+    }
+
+    if (list.length === 0) {
+      container.innerHTML = `
+        <tr>
+          <td colspan="3" style="text-align:center; padding:24px; color:var(--text-dim);">
+            ${q ? 'Tidak ada personel yang sesuai dengan kata kunci pencarian.' : 'Belum ada data personel.'}
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    container.innerHTML = list.map((nama, idx) => {
+      const isAlreadyInDoc = this.pelaksanaList.includes(nama);
+      return `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+          <td style="padding:8px 12px; font-size:0.75rem; color:var(--text-dim); width:40px; text-align:center;">${idx + 1}</td>
+          <td style="padding:8px 12px; font-size:0.82rem; font-weight:500;">
+            ${this.escapeHtml(nama)}
+            ${isAlreadyInDoc ? '<span class="badge" style="font-size:0.65rem; margin-left:6px; background:rgba(34,197,94,0.15); color:#22c55e;">Di Dokumen</span>' : ''}
+          </td>
+          <td style="padding:8px 12px; text-align:right; white-space:nowrap;">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder.addPelaksana('${this.escapeHtml(nama)}'); window.reportBuilder.showToast('Ditambahkan ke dokumen: ${this.escapeHtml(nama)}', 'success'); window.reportBuilder.renderPersonelMasterList();" style="margin-right:6px;" title="Gunakan personel ini di dokumen">
+              + Pakai
+            </button>
+            <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="window.reportBuilder.deleteMasterPersonel('${this.escapeHtml(nama)}')" title="Hapus permanen dari master data">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
   }
 
   bindStaticEvents() {

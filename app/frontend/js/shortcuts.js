@@ -162,6 +162,9 @@ export class KeyboardShortcutsManager {
           case 'updateModal':
             window.closeUpdateModal?.();
             break;
+          case 'personelMasterModal':
+            window.reportBuilder?.closePersonelMasterModal?.();
+            break;
           default:
             break;
         }
