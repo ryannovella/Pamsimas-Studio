@@ -1823,9 +1823,20 @@ export class ReportBuilder {
       }
     });
 
-    window.addEventListener('scroll', () => {
+    const dismissOverlaysOnScroll = () => {
       this.closeContextMenu();
-    }, { passive: true });
+      const batchDropdown = document.getElementById('reportBatchTimeDropdown');
+      if (batchDropdown && batchDropdown.style.display !== 'none') {
+        batchDropdown.style.display = 'none';
+      }
+    };
+    window.addEventListener('scroll', dismissOverlaysOnScroll, { passive: true });
+    ['reportPhotosTableView', 'reportPhotosGrid'].forEach(id => {
+      const container = document.getElementById(id);
+      if (container) {
+        container.addEventListener('scroll', dismissOverlaysOnScroll, { passive: true });
+      }
+    });
   }
 
   // =========================================================
@@ -2496,7 +2507,38 @@ export class ReportBuilder {
     const startTimeStr = tStart?.value || this.tripStartTime || '09:14:23';
     const endTimeStr = tEnd?.value || this.tripEndTime || '15:47:38';
 
-    // 1. Generate jadwal merata multi-hari/sehari dan merata antar-desa
+    // Pertahankan kategori desa tiap foto apabila foto sudah dipetakan ke desa valid (misal dari import DOCX eksisting)
+    const villageIndexByKey = new Map();
+    validVillages.forEach((v, vIdx) => {
+      const k = (v.desa || '').trim().toLowerCase();
+      if (k && !villageIndexByKey.has(k)) {
+        villageIndexByKey.set(k, vIdx);
+      }
+    });
+
+    let matchedCategorizedCount = 0;
+    const mappedIndices = this.photos.map(photo => {
+      const pKey = (photo.desa || '').trim().toLowerCase();
+      if (pKey && villageIndexByKey.has(pKey)) {
+        matchedCategorizedCount++;
+        return villageIndexByKey.get(pKey);
+      }
+      return -1;
+    });
+
+    let photoVillageIndices = null;
+    if (matchedCategorizedCount > 0 && matchedCategorizedCount >= Math.ceil(this.photos.length * 0.5)) {
+      let lastKnownIdx = 0;
+      photoVillageIndices = mappedIndices.map(idx => {
+        if (idx >= 0) {
+          lastKnownIdx = idx;
+          return idx;
+        }
+        return lastKnownIdx;
+      });
+    }
+
+    // 1. Generate jadwal merata multi-hari/sehari dan merata antar-desa (mempertahankan kategori foto per desa)
     const schedule = generateTripSchedule({
       startIso,
       endIso,
@@ -2505,7 +2547,8 @@ export class ReportBuilder {
       villages: validVillages,
       photoCount: this.photos.length,
       tz: 'WIB',
-      forceReschedule: true
+      forceReschedule: true,
+      photoVillageIndices
     });
 
     if (!schedule || schedule.length === 0) {
@@ -3431,6 +3474,13 @@ export class ReportBuilder {
     this.updateBatchBar();
   }
 
+  clearPhotoSelection() {
+    this.selectedPhotoIds.clear();
+    this.lastSelectedPhotoIndex = null;
+    this.renderPhotosSelectionState();
+    this.updateBatchBar();
+  }
+
   toggleSelectPhoto(photoId, idx) {
     if (this.selectedPhotoIds.has(photoId)) {
       this.selectedPhotoIds.delete(photoId);
@@ -3612,11 +3662,17 @@ export class ReportBuilder {
           <span>Pratinjau Layar Penuh</span>
         </div>
       </div>
+      <div class="ctx-item" onclick="window.reportBuilder.closeContextMenu(); window.reportBuilder.clearPhotoSelection()">
+        <div class="ctx-item-left">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <span>Hapus Seleksi (Lepas Centang)</span>
+        </div>
+      </div>
       <div class="ctx-divider"></div>
       <div class="ctx-item text-danger" onclick="window.reportBuilder.closeContextMenu(); window.reportBuilder.deleteSelectedPhotos()">
         <div class="ctx-item-left" style="color:#f87171;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          <span>Hapus Seleksi (${selCount} Foto)</span>
+          <span>Hapus Foto Terpilih (${selCount} Foto)</span>
         </div>
       </div>
     `;
@@ -3625,7 +3681,7 @@ export class ReportBuilder {
     menu.classList.add('active');
 
     const mWidth = menu.offsetWidth || 230;
-    const mHeight = menu.offsetHeight || 290;
+    const mHeight = menu.offsetHeight || 320;
     let posX = clientX;
     let posY = clientY;
 
@@ -3644,6 +3700,7 @@ export class ReportBuilder {
 
   toggleBatchTimeDropdown(e) {
     e.stopPropagation();
+    this.closeContextMenu();
     const dropdown = document.getElementById('reportBatchTimeDropdown');
     if (!dropdown) return;
     const isShowing = dropdown.style.display === 'flex';
@@ -3660,7 +3717,30 @@ export class ReportBuilder {
     const pagiRange = document.getElementById('batchRangePagi');
     if (pagiRange) pagiRange.textContent = `${tStartRaw} – 11:00`;
 
+    dropdown.style.position = 'fixed';
+    dropdown.style.zIndex = '9990';
     dropdown.style.display = 'flex';
+
+    const triggerBtn = document.getElementById('btnReportBatchTimeTrigger') || e.currentTarget;
+    if (triggerBtn && typeof triggerBtn.getBoundingClientRect === 'function') {
+      const rect = triggerBtn.getBoundingClientRect();
+      const dWidth = dropdown.offsetWidth || 230;
+      const dHeight = dropdown.offsetHeight || 195;
+
+      let left = rect.left;
+      if (left + dWidth > window.innerWidth - 10) {
+        left = window.innerWidth - dWidth - 10;
+      }
+      if (left < 10) left = 10;
+
+      let top = rect.bottom + 4;
+      if (top + dHeight > window.innerHeight - 10 && rect.top - dHeight - 4 >= 10) {
+        top = rect.top - dHeight - 4;
+      }
+
+      dropdown.style.left = `${left}px`;
+      dropdown.style.top = `${top}px`;
+    }
   }
 
   applyTimeCategoryToSelected(category) {
@@ -3801,9 +3881,13 @@ export class ReportBuilder {
     this.photos.forEach(p => {
       const card = document.getElementById(`reportPhotoCard_${p.id}`);
       const chk = document.getElementById(`reportChk_${p.id}`);
+      const tableCell = document.getElementById(`reportTableCell_${p.id}`);
+      const tableChk = document.getElementById(`tableChk_${p.id}`);
       const isSel = this.selectedPhotoIds.has(p.id);
       if (card) card.classList.toggle('selected', isSel);
       if (chk) chk.checked = isSel;
+      if (tableCell) tableCell.classList.toggle('selected', isSel);
+      if (tableChk) tableChk.checked = isSel;
     });
   }
 
@@ -3819,6 +3903,9 @@ export class ReportBuilder {
       allChk.checked = (totalCount > 0 && selCount === totalCount);
       allChk.indeterminate = (selCount > 0 && selCount < totalCount);
     }
+
+    const clearSelBtn = document.getElementById('btnReportClearSelection');
+    if (clearSelBtn) clearSelBtn.style.display = selCount > 0 ? 'inline-flex' : 'none';
 
     const delBtn = document.getElementById('btnReportDeleteSelected');
     const delCount = document.getElementById('reportDeleteSelectedCount');
@@ -4011,11 +4098,21 @@ export class ReportBuilder {
 
   reorderPhotos(fromIndex, toIndex) {
     if (fromIndex < 0 || fromIndex >= this.photos.length || toIndex < 0 || toIndex >= this.photos.length) return;
+    const targetPhoto = this.photos[toIndex];
     const [movedItem] = this.photos.splice(fromIndex, 1);
+    if (targetPhoto && targetPhoto.desa && targetPhoto.desa.trim()) {
+      const targetDesaLower = targetPhoto.desa.trim().toLowerCase();
+      const movedDesaLower = (movedItem.desa || '').trim().toLowerCase();
+      if (targetDesaLower !== movedDesaLower) {
+        movedItem.desa = targetPhoto.desa;
+        if (targetPhoto.kecamatan) movedItem.kecamatan = targetPhoto.kecamatan;
+        if (targetPhoto.kabupaten) movedItem.kabupaten = targetPhoto.kabupaten;
+      }
+    }
     this.photos.splice(toIndex, 0, movedItem);
 
     // Jika seluruh tanggal dinas telah terisi dan segmen foto tidak dikunci,
-    // sinkronkan urutan jadwal dan geotag secara merata sesuai urutan baru di dokumen
+    // sinkronkan urutan jadwal dan geotag sesuai urutan baru di dokumen
     const validVillages = this.villages.filter(v => v.desa && v.desa.trim());
     if (this.areAllDatesFilled() && validVillages.length > 0 && !this.lockedSegments.photos) {
       this.autoGenerateAllTimestamps(true);
@@ -4050,10 +4147,12 @@ export class ReportBuilder {
            ondragenter="window.reportBuilder.handlePhotoDragEnter(event, ${idx})"
            ondragleave="window.reportBuilder.handlePhotoDragLeave(event, ${idx})"
            ondrop="window.reportBuilder.handlePhotoDrop(event, ${idx})"
-           ondragend="window.reportBuilder.handlePhotoDragEnd(event)">
+           ondragend="window.reportBuilder.handlePhotoDragEnd(event)"
+           onclick="window.reportBuilder.handleCardClick(event, '${p.id}', ${idx})"
+           oncontextmenu="window.reportBuilder.handleCardContextMenu(event, '${p.id}', ${idx})">
         
         <!-- Grip & Position Header -->
-        <div class="doc-cell-grip-bar" title="Tarik & seret untuk memindahkan urutan foto di dokumen">
+        <div class="doc-cell-grip-bar" title="Tarik & seret untuk memindahkan urutan foto di dokumen • Klik kanan untuk opsi waktu">
           <div class="doc-cell-grip-left">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="cursor:grab;"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
             <span>Foto #${idx + 1}</span>
@@ -4066,7 +4165,7 @@ export class ReportBuilder {
             <button type="button" class="btn btn-ghost btn-xs btn-move-step" onclick="event.stopPropagation(); window.reportBuilder.movePhotoStep(${idx}, 1)" ${idx === this.photos.length - 1 ? 'disabled' : ''} title="Geser Mundur (posisi #${idx + 2})">
               ▼
             </button>
-            <label class="doc-card-checkbox" onclick="event.stopPropagation();" style="display:inline-flex; align-items:center; margin:0 0 0 4px; cursor:pointer;">
+            <label class="doc-card-checkbox" onclick="window.reportBuilder.handleCheckboxLabelClick(event, '${p.id}', ${idx})" style="display:inline-flex; align-items:center; margin:0 0 0 4px; cursor:pointer;">
               <input type="checkbox" id="tableChk_${p.id}" ${isSelected ? 'checked' : ''} onclick="window.reportBuilder.handleCheckboxClick(event, '${p.id}', ${idx})">
             </label>
           </div>
@@ -4114,6 +4213,58 @@ export class ReportBuilder {
     `;
   }
 
+  _getGroupedPhotosForTable() {
+    const villageMetaMap = new Map();
+    const orderedKeys = [];
+
+    (this.villages || []).forEach(v => {
+      const d = (v.desa || '').trim();
+      if (!d) return;
+      const key = d.toLowerCase();
+      if (!villageMetaMap.has(key)) {
+        villageMetaMap.set(key, {
+          desa: d,
+          kecamatan: (v.kecamatan || '').trim(),
+          kabupaten: (v.kabupaten || '').trim()
+        });
+        orderedKeys.push(key);
+      }
+    });
+
+    const fallbackSingleKey = orderedKeys.length === 1 ? orderedKeys[0] : '';
+    const groupsMap = new Map();
+
+    this.photos.forEach((p, idx) => {
+      let pDesa = (p.desa || '').trim();
+      if (!pDesa && fallbackSingleKey) {
+        pDesa = villageMetaMap.get(fallbackSingleKey).desa;
+      }
+      const key = pDesa ? pDesa.toLowerCase() : '__umum__';
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, []);
+        if (!orderedKeys.includes(key)) {
+          orderedKeys.push(key);
+        }
+        if (key !== '__umum__' && !villageMetaMap.has(key)) {
+          villageMetaMap.set(key, {
+            desa: pDesa,
+            kecamatan: (p.kecamatan || '').trim(),
+            kabupaten: (p.kabupaten || '').trim()
+          });
+        }
+      }
+      groupsMap.get(key).push({ p, idx });
+    });
+
+    return orderedKeys
+      .filter(k => groupsMap.has(k) && groupsMap.get(k).length > 0)
+      .map(k => ({
+        key: k,
+        meta: villageMetaMap.get(k) || { desa: '', kecamatan: '', kabupaten: '' },
+        items: groupsMap.get(k)
+      }));
+  }
+
   renderPhotos() {
     const gridEl = document.getElementById('reportPhotosGrid');
     const tableWrap = document.getElementById('reportPhotosTableView');
@@ -4152,25 +4303,66 @@ export class ReportBuilder {
     if (tableWrap) tableWrap.style.display = isTable ? 'block' : 'none';
     if (gridEl) gridEl.style.display = isTable ? 'none' : 'grid';
 
-    // 1. Render Tampilan Simulasi Tabel Dokumen Word (2 Kolom Baris per Baris)
+    // 1. Render Tampilan Simulasi Tabel Dokumen Word (Dikelompokkan per Desa + Caption Bawah Resmi)
     if (tableContainer) {
-      const numRows = Math.ceil(this.photos.length / 2);
+      const groups = this._getGroupedPhotosForTable();
+      const tahunLabel = this.tahun || '2026';
+      const defaultKab = (this.kabupatens && this.kabupatens.length > 0)
+        ? this.kabupatens[0]
+        : (this.kabupaten ? this.kabupaten.split(',')[0].trim() : 'Magelang');
+
       let tableHtml = '';
+      for (const group of groups) {
+        const items = group.items;
+        const numRows = Math.ceil(items.length / 2);
+        let rowsHtml = '';
 
-      for (let r = 0; r < numRows; r++) {
-        const p1 = this.photos[r * 2];
-        const p2 = this.photos[r * 2 + 1];
+        for (let r = 0; r < numRows; r++) {
+          const item1 = items[r * 2];
+          const item2 = items[r * 2 + 1];
+          rowsHtml += `
+            <div class="doc-table-row">
+              ${this.renderTableCellHtml(item1.p, item1.idx, 'Kolom Kiri')}
+              ${item2 ? this.renderTableCellHtml(item2.p, item2.idx, 'Kolom Kanan') : `
+                <div class="doc-table-cell-empty">
+                  <span>(Akhir Baris Tabel Desa)</span>
+                </div>
+              `}
+            </div>
+          `;
+        }
 
-        tableHtml += `
-          <div class="doc-table-row">
-            ${this.renderTableCellHtml(p1, r * 2, 'Kolom Kiri')}
-            ${p2 ? this.renderTableCellHtml(p2, r * 2 + 1, 'Kolom Kanan') : `
-              <div class="doc-table-cell-empty">
-                <span>(Akhir Baris Tabel Dokumen)</span>
+        if (group.key !== '__umum__') {
+          const capDesa = group.meta.desa || items[0].p.desa || '';
+          const capKec = group.meta.kecamatan || (items.find(it => it.p.kecamatan)?.p.kecamatan) || '';
+          const rawKab = group.meta.kabupaten || (items.find(it => it.p.kabupaten)?.p.kabupaten) || defaultKab || 'Magelang';
+          const cleanKab = rawKab.replace(/^(?:Kabupaten|Kota)\s*/i, '').trim();
+          const capKabFull = /^kota\s+/i.test(rawKab) ? `Kota ${cleanKab}` : `Kabupaten ${cleanKab}`;
+          const capProv = (items.find(it => it.p.provinsi)?.p.provinsi) || 'Jawa Tengah';
+
+          const locParts = [`Desa ${capDesa}`];
+          if (capKec) locParts.push(`Kecamatan ${capKec}`);
+          locParts.push(capKabFull);
+          locParts.push(`Provinsi ${capProv}`);
+
+          const capText = `Kegiatan Monitoring dan Evaluasi pada Lokasi Pembangunan Pelaksanaan Pamsimas TA ${tahunLabel} di ${locParts.join(', ')}`;
+
+          tableHtml += `
+            <div class="doc-village-table-block" data-village-key="${this.escapeHtml(group.key)}">
+              ${rowsHtml}
+              <div class="doc-village-table-caption">
+                <span>${this.escapeHtml(capText)}</span>
+                <span class="doc-village-table-caption-meta">${items.length} Foto • Tabel Lampiran Desa ${this.escapeHtml(capDesa)}</span>
               </div>
-            `}
-          </div>
-        `;
+            </div>
+          `;
+        } else {
+          tableHtml += `
+            <div class="doc-village-table-block">
+              ${rowsHtml}
+            </div>
+          `;
+        }
       }
       tableContainer.innerHTML = tableHtml;
     }

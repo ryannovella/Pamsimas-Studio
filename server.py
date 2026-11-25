@@ -33,7 +33,7 @@ from app.backend.report_generator import (
     normalize_personel_title, get_village_kondisi_per_date, get_next_working_day
 )
 from app.backend.docx_inspector import inspect_and_import_monev_docx, merge_inspected_monev_reports
-from app.backend.updater import get_version_info, check_for_updates, apply_update
+from app.backend.updater import get_version_info, check_for_updates, apply_update, _is_cloud_environment
 from app.backend.personel_service import (
     load_personel_list, add_personel_entry, edit_personel_entry, delete_personel_entry,
     refine_personel_name_kbbi, validate_personel_input
@@ -108,29 +108,48 @@ def api_search_location():
 # =========================================================
 @app.route("/api/photo/stamp", method="POST")
 def stamp_single():
-    upload = request.files.get("image")
-    if not upload:
-        response.status = 400
-        return json.dumps({"error": "No image uploaded"})
-        
-    img = Image.open(upload.file)
-    font_scale_val = float(request.forms.get("font_scale") or request.forms.get("fontScale") or 1.0)
-    result_bytes = stamp_to_bytes(
-        img,
-        request.forms.get("time_str", "Sabtu, 15 Agustus 2026 09:30:15 WIB"),
-        request.forms.get("lat", "-7.391520"),
-        request.forms.get("lon", "110.312050"),
-        request.forms.get("dusun", "Dusun Bedoyo"),
-        request.forms.get("desa", "Baleagung"),
-        request.forms.get("kecamatan", "Grabag"),
-        request.forms.get("kabupaten", "Kabupaten Magelang"),
-        request.forms.get("provinsi", "Jawa Tengah"),
-        font_scale=font_scale_val,
-        custom_address=request.forms.get("custom_address")
-    )
-    
-    response.content_type = "image/jpeg"
-    return result_bytes
+    try:
+        upload = request.files.get("image")
+        if not upload:
+            response.status = 400
+            response.content_type = "application/json"
+            return json.dumps({"success": False, "error": "No image uploaded"})
+
+        try:
+            raw_scale = float(request.forms.get("font_scale") or request.forms.get("fontScale") or 1.0)
+        except (TypeError, ValueError):
+            raw_scale = 1.0
+        font_scale_val = max(0.5, min(2.0, raw_scale))
+
+        try:
+            img = Image.open(upload.file)
+            img.load()
+        except Exception:
+            response.status = 400
+            response.content_type = "application/json"
+            return json.dumps({"success": False, "error": "Berkas gambar tidak valid atau rusak"})
+
+        result_bytes = stamp_to_bytes(
+            img,
+            request.forms.get("time_str", "Sabtu, 15 Agustus 2026 09:30:15 WIB"),
+            request.forms.get("lat", "-7.391520"),
+            request.forms.get("lon", "110.312050"),
+            request.forms.get("dusun", "Dusun Bedoyo"),
+            request.forms.get("desa", "Baleagung"),
+            request.forms.get("kecamatan", "Grabag"),
+            request.forms.get("kabupaten", "Kabupaten Magelang"),
+            request.forms.get("provinsi", "Jawa Tengah"),
+            font_scale=font_scale_val,
+            custom_address=request.forms.get("custom_address")
+        )
+
+        response.content_type = "image/jpeg"
+        return result_bytes
+    except Exception as e:
+        log_error("stamp_single", e)
+        response.status = 500
+        response.content_type = "application/json"
+        return json.dumps({"success": False, "error": str(e)})
 
 
 # =========================================================
@@ -141,19 +160,26 @@ def api_get_error_logs():
     try:
         logs = get_recent_logs(lines=100)
         response.content_type = "application/json"
-        return json.dumps({"success": True, "logs": logs, "path": ERROR_LOG_PATH})
+        log_path = "cloud-log" if _is_cloud_environment() else ERROR_LOG_PATH
+        return json.dumps({"success": True, "logs": logs, "path": log_path})
     except Exception as e:
         response.status = 500
+        response.content_type = "application/json"
         return json.dumps({"success": False, "error": str(e)})
 
 @app.route("/api/logs/errors", method="DELETE")
 def api_clear_error_logs():
     try:
+        if _is_cloud_environment():
+            response.status = 403
+            response.content_type = "application/json"
+            return json.dumps({"success": False, "error": "Penghapusan log dinonaktifkan pada mode publik."})
         clear_logs()
         response.content_type = "application/json"
         return json.dumps({"success": True})
     except Exception as e:
         response.status = 500
+        response.content_type = "application/json"
         return json.dumps({"success": False, "error": str(e)})
 
 @app.route("/api/logs/client_error", method="POST")
@@ -489,7 +515,22 @@ def api_report_generate_docx():
 @app.route("/api/report/download/<filename:path>", method="GET")
 def api_report_download(filename):
     """Serves generated Monev report docx for download."""
-    return static_file(filename, root=OUTPUT_DIR, download=filename)
+    safe_name = os.path.basename(filename or "")
+    if not safe_name or safe_name != filename or not safe_name.lower().endswith(".docx"):
+        response.status = 400
+        response.content_type = "application/json"
+        return json.dumps({"success": False, "error": "Nama berkas unduhan tidak valid."})
+    output_root = os.path.abspath(OUTPUT_DIR)
+    target_path = os.path.abspath(os.path.join(output_root, safe_name))
+    try:
+        is_inside = os.path.commonpath([output_root, target_path]) == output_root
+    except Exception:
+        is_inside = False
+    if not is_inside or not os.path.isfile(target_path):
+        response.status = 404
+        response.content_type = "application/json"
+        return json.dumps({"success": False, "error": "Berkas laporan tidak ditemukan."})
+    return static_file(safe_name, root=OUTPUT_DIR, download=safe_name)
 
 @app.route("/api/report/import_existing_docx", method="POST")
 def api_report_import_existing_docx():
@@ -519,24 +560,30 @@ def api_report_import_existing_docx():
             return json.dumps({"success": False, "error": "Maksimal 3 dokumen yang dapat digabungkan sekaligus"})
 
         os.makedirs(DOCX_UPLOADS_DIR, exist_ok=True)
+        uploads_root = os.path.abspath(DOCX_UPLOADS_DIR)
 
         inspected_reports = []
         for upload in uploads:
-            if not upload or not getattr(upload, "filename", "").lower().endswith(".docx"):
+            raw_filename = os.path.basename(getattr(upload, "filename", "") or "")
+            if not upload or not raw_filename.lower().endswith(".docx"):
                 response.status = 400
                 response.content_type = "application/json"
-                return json.dumps({"success": False, "error": f"Berkas '{getattr(upload, 'filename', 'unknown')}' bukan berkas Word (.docx) yang valid"})
+                return json.dumps({"success": False, "error": f"Berkas '{raw_filename or 'unknown'}' bukan berkas Word (.docx) yang valid"})
 
-            filename = upload.filename
-            save_path = os.path.join(DOCX_UPLOADS_DIR, f"inspect_{uuid.uuid4().hex[:8]}_{filename}")
+            safe_filename = re.sub(r"[^A-Za-z0-9._\-\s()]", "_", raw_filename).strip() or "dokumen.docx"
+            save_path = os.path.abspath(os.path.join(uploads_root, f"inspect_{uuid.uuid4().hex[:8]}_{safe_filename}"))
+            if os.path.commonpath([uploads_root, save_path]) != uploads_root:
+                response.status = 400
+                response.content_type = "application/json"
+                return json.dumps({"success": False, "error": "Nama berkas tidak valid."})
             upload.save(save_path)
 
             res = inspect_and_import_monev_docx(save_path)
             if not res.get("success"):
                 response.status = 400
                 response.content_type = "application/json"
-                return json.dumps({"success": False, "error": f"Gagal membaca '{filename}': {res.get('error')}"})
-            res["filename"] = filename
+                return json.dumps({"success": False, "error": f"Gagal membaca '{safe_filename}': {res.get('error')}"})
+            res["filename"] = safe_filename
             inspected_reports.append(res)
 
         if len(inspected_reports) == 1:

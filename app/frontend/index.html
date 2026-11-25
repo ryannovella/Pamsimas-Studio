@@ -499,21 +499,25 @@
               </div>
 
               <!-- BATCH ACTION BAR LENGKAP & RAPI -->
-              <div class="doc-batch-bar" id="reportBatchBar" style="padding:6px 10px; margin-bottom:8px; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:6px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
-                <div class="doc-batch-left" style="display:flex; align-items:center; gap:8px;">
+              <div class="doc-batch-bar" id="reportBatchBar" style="position:relative; z-index:40; overflow:visible; padding:6px 10px; margin-bottom:8px; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:6px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <div class="doc-batch-left" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                   <label class="doc-select-all-label" style="font-size:0.74rem; color:var(--text-main); display:flex; align-items:center; gap:6px; cursor:pointer; margin:0; font-weight:500;">
                     <input type="checkbox" id="reportSelectAllCheckbox" onchange="window.reportBuilder.toggleSelectAll(this.checked)">
                     <span>Pilih Semua</span>
                   </label>
+                  <button type="button" class="btn btn-ghost btn-xs" id="btnReportClearSelection" onclick="window.reportBuilder.clearPhotoSelection()" style="display:none; align-items:center; gap:4px; border:1px solid rgba(255,255,255,0.14); color:var(--text-muted);" title="Hapus semua centang seleksi foto (tidak menghapus foto)">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    <span>Hapus Seleksi</span>
+                  </button>
                   <span class="badge badge-accent" id="reportSelectedCountBadge" style="font-size:0.68rem; padding:2px 7px;">0 Dipilih</span>
                 </div>
                 <div class="doc-batch-actions" style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
                   <!-- Group 1: Pengaturan Waktu Foto -->
                   <div class="dropdown" style="position:relative; display:inline-block;" id="reportBatchTimeDropdownWrap">
-                    <button type="button" class="btn btn-secondary btn-xs" onclick="window.reportBuilder ? window.reportBuilder.toggleBatchTimeDropdown(event) : null" title="Terapkan kategori waktu (Pagi/Siang/Sore/Malam) ke foto terpilih">
+                    <button type="button" class="btn btn-secondary btn-xs" id="btnReportBatchTimeTrigger" onclick="window.reportBuilder ? window.reportBuilder.toggleBatchTimeDropdown(event) : null" title="Terapkan kategori waktu (Pagi/Siang/Sore/Malam) ke foto terpilih">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Waktu Kegiatan ▾
                     </button>
-                    <div class="photo-context-menu" id="reportBatchTimeDropdown" style="display:none; position:absolute; top:100%; left:0; margin-top:4px; z-index:1100;">
+                    <div class="photo-context-menu" id="reportBatchTimeDropdown" style="display:none; position:fixed; z-index:9990;">
                       <div class="ctx-header">
                         <span>Waktu Kegiatan</span>
                         <span class="badge badge-accent" id="batchDropdownCountBadge" style="font-size:0.65rem; padding:1px 5px;">0 Foto</span>
@@ -565,10 +569,10 @@
                     Beri Watermark
                   </button>
 
-                  <!-- Group 3: Hapus Seleksi (Hanya muncul saat ada seleksi foto) -->
-                  <button type="button" class="btn btn-outline-danger btn-xs" id="btnReportDeleteSelected" onclick="window.reportBuilder.deleteSelectedPhotos()" style="display:none; align-items:center; gap:4px; margin-left:4px;" title="Hapus foto yang sedang dipilih (Delete / Backspace)">
+                  <!-- Group 3: Hapus Foto yang Diseleksi (Hanya muncul saat ada seleksi foto) -->
+                  <button type="button" class="btn btn-outline-danger btn-xs" id="btnReportDeleteSelected" onclick="window.reportBuilder.deleteSelectedPhotos()" style="display:none; align-items:center; gap:4px; margin-left:4px;" title="Hapus foto yang sedang dipilih dari laporan (Delete)">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    <span>Hapus Seleksi (<span id="reportDeleteSelectedCount">0</span>)</span>
+                    <span>Hapus Foto (<span id="reportDeleteSelectedCount">0</span>)</span>
                   </button>
 
                   <div style="width:1px; height:14px; background:rgba(255,255,255,0.12); margin:0 2px;"></div>
@@ -1469,6 +1473,6 @@
   <div id="errorToastArea" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px; max-width:400px; pointer-events:none;"></div>
 
   <!-- Modular Application Entry Point -->
-  <script type="module" src="/js/app.js?v=4.6"></script>
+  <script type="module" src="/js/app.js?v=4.7"></script>
 </body>
 </html>

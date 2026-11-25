@@ -542,7 +542,8 @@ export function generateTripSchedule({
   villages = [],
   photoCount = 0,
   tz = "WIB",
-  forceReschedule = false
+  forceReschedule = false,
+  photoVillageIndices = null
 }) {
   if (photoCount <= 0) return [];
 
@@ -572,18 +573,30 @@ export function generateTripSchedule({
   const numDays = tripDates.length;
 
   const photoVillageAllocations = [];
-  const basePerVillage = Math.floor(photoCount / numVillages);
-  const remVillage = photoCount % numVillages;
-
-  let currentPhotoIdx = 0;
-  for (let vIdx = 0; vIdx < numVillages; vIdx++) {
-    const countThisVillage = basePerVillage + (vIdx < remVillage ? 1 : 0);
-    for (let c = 0; c < countThisVillage; c++) {
+  if (Array.isArray(photoVillageIndices) && photoVillageIndices.length === photoCount) {
+    for (let i = 0; i < photoCount; i++) {
+      const rawIdx = photoVillageIndices[i];
+      const vIdx = (typeof rawIdx === 'number' && rawIdx >= 0 && rawIdx < numVillages) ? rawIdx : 0;
       photoVillageAllocations.push({
-        photoIndex: currentPhotoIdx++,
+        photoIndex: i,
         villageIndex: vIdx,
         village: validVillages[vIdx]
       });
+    }
+  } else {
+    const basePerVillage = Math.floor(photoCount / numVillages);
+    const remVillage = photoCount % numVillages;
+
+    let currentPhotoIdx = 0;
+    for (let vIdx = 0; vIdx < numVillages; vIdx++) {
+      const countThisVillage = basePerVillage + (vIdx < remVillage ? 1 : 0);
+      for (let c = 0; c < countThisVillage; c++) {
+        photoVillageAllocations.push({
+          photoIndex: currentPhotoIdx++,
+          villageIndex: vIdx,
+          village: validVillages[vIdx]
+        });
+      }
     }
   }
 
