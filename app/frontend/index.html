@@ -180,7 +180,7 @@
                 </div>
                 <div class="form-group">
                   <label class="form-label">Tanggal SPT</label>
-                  <input type="date" id="reportTanggalSpt" class="form-input form-input-sm" value="" onchange="window.reportBuilder ? window.reportBuilder.onTanggalSptChange(this.value) : null">
+                  <input type="date" id="reportTanggalSpt" class="form-input form-input-sm" value="" title="Otomatis sinkron dua arah dengan Tanggal Dinas">
                   <span id="reportTanggalSptPreview" class="date-preview-label"></span>
                 </div>
               </div>
@@ -314,11 +314,11 @@
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
                       <label class="form-label" id="reportTripStartDateLabel" style="margin-bottom:0;">Tanggal Dinas</label>
                     </div>
-                    <input type="date" id="reportTripStartDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()">
+                    <input type="date" id="reportTripStartDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange('tripStart')" title="Otomatis menyinkronkan Tanggal SPT & Tanggal Laporan">
                   </div>
                   <div class="form-group" id="reportTripEndDateGroup" style="display:none;">
                     <label class="form-label">Tgl Selesai Dinas</label>
-                    <input type="date" id="reportTripEndDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange()">
+                    <input type="date" id="reportTripEndDate" class="form-input form-input-sm" onchange="window.reportBuilder.onTripDatesChange('tripEnd')" title="Otomatis menyinkronkan rentang Tanggal SPT & Tanggal Laporan">
                   </div>
                   <div class="form-group">
                     <label class="form-label">Jam Mulai (WIB)</label>
@@ -1469,6 +1469,6 @@
   <div id="errorToastArea" style="position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px; max-width:400px; pointer-events:none;"></div>
 
   <!-- Modular Application Entry Point -->
-  <script type="module" src="/js/app.js?v=4.5"></script>
+  <script type="module" src="/js/app.js?v=4.6"></script>
 </body>
 </html>

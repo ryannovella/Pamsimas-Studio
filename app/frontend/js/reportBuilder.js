@@ -61,6 +61,7 @@ export class ReportBuilder {
     this.tripMode = 'single'; // 'single' (hanya sehari) atau 'multiple' (multiple hari)
     this.tripStartDate = '';
     this.tripEndDate = '';
+    this._lastMultiSpanDays = null;
     this.tripStartTime = '09:14:23';
     this.tripEndTime = '15:47:38';
 
@@ -1979,6 +1980,62 @@ export class ReportBuilder {
     }
   }
 
+  _addCalendarDaysIso(isoDate, deltaDays) {
+    if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return '';
+    const [y, m, d] = isoDate.split('-').map(Number);
+    const dt = new Date(y, m - 1, d + (deltaDays || 0));
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  _diffCalendarDays(startIso, endIso) {
+    if (!startIso || !endIso || !/^\d{4}-\d{2}-\d{2}$/.test(startIso) || !/^\d{4}-\d{2}-\d{2}$/.test(endIso)) {
+      return 0;
+    }
+    const [y1, m1, d1] = startIso.split('-').map(Number);
+    const [y2, m2, d2] = endIso.split('-').map(Number);
+    const dt1 = new Date(y1, m1 - 1, d1);
+    const dt2 = new Date(y2, m2 - 1, d2);
+    return Math.round((dt2 - dt1) / (1000 * 60 * 60 * 24));
+  }
+
+  _getDefaultMultiSpanDays() {
+    const validVillages = (this.villages || []).filter(v => v.desa && v.desa.trim());
+    if (validVillages.length > 1) {
+      return validVillages.length - 1;
+    }
+    return 1;
+  }
+
+  formatTanggalSptDisplay() {
+    const sVal = (this.tripStartDate || this.tanggalSpt || '').trim();
+    const eVal = (this.tripEndDate || '').trim();
+    if (this.tripMode === 'multiple' && sVal && eVal && eVal > sVal) {
+      const sFull = formatIndonesianDateOnly(sVal);
+      const eFull = formatIndonesianDateOnly(eVal);
+      const sParts = sFull.split(' ');
+      const eParts = eFull.split(' ');
+      if (sParts.length === 3 && eParts.length === 3) {
+        if (sParts[2] === eParts[2] && sParts[1] === eParts[1]) {
+          return `${sParts[0]} - ${eParts[0]} ${eParts[1]} ${eParts[2]}`;
+        }
+        if (sParts[2] === eParts[2]) {
+          return `${sParts[0]} ${sParts[1]} - ${eParts[0]} ${eParts[1]} ${eParts[2]}`;
+        }
+      }
+      return `${sFull} - ${eFull}`;
+    }
+    if (this.tanggalSpt) {
+      return formatIndonesianDateOnly(this.tanggalSpt);
+    }
+    if (this.tripStartDate) {
+      return formatIndonesianDateOnly(this.tripStartDate);
+    }
+    return '';
+  }
+
   setReportTanggalSpt(isoDate) {
     this.tanggalSpt = isoDate || '';
     const el = document.getElementById('reportTanggalSpt');
@@ -1993,51 +2050,42 @@ export class ReportBuilder {
   updateTanggalSptPreview() {
     const previewEl = document.getElementById('reportTanggalSptPreview');
     if (previewEl) {
-      if (this.tripMode === 'multiple' && this.tripStartDate && this.tripEndDate && this.tripStartDate !== this.tripEndDate) {
-        const s = formatIndonesianDateOnly(this.tripStartDate);
-        const e = formatIndonesianDateOnly(this.tripEndDate);
-        previewEl.textContent = `${s} - ${e}`;
-      } else if (this.tanggalSpt) {
-        previewEl.textContent = formatIndonesianDateOnly(this.tanggalSpt);
-      } else if (this.tripStartDate) {
-        previewEl.textContent = formatIndonesianDateOnly(this.tripStartDate);
-      } else {
-        previewEl.textContent = '';
-      }
+      previewEl.textContent = this.formatTanggalSptDisplay();
     }
   }
 
   onTanggalSptChange(val) {
-    this.setReportTanggalSpt(val);
-    if (val) {
-      // 1. Tanggal Mulai Kegiatan otomatis disamakan dengan Tanggal SPT
-      const sInput = document.getElementById('reportTripStartDate');
-      if (sInput && (!this.lockedSegments.administrasi)) {
-        sInput.value = val;
-        this.tripStartDate = val;
-      }
+    const cleanVal = (val || '').trim();
+    this.setReportTanggalSpt(cleanVal);
 
-      // 2. Tanggal Laporan: Jika dinas multi-hari diset H+1 hari akhir, jika 1 hari diset H+1 Tanggal SPT
-      if (!this.lockedSegments.administrasi) {
-        if (this.tripEndDate && this.tripEndDate !== val) {
-          const hPlus1End = getNextDayIso(this.tripEndDate);
-          if (hPlus1End) this.setReportTanggalLaporan(hPlus1End, false);
-        } else {
-          const hPlus1Spt = getNextDayIso(val);
-          if (hPlus1Spt) this.setReportTanggalLaporan(hPlus1Spt, false);
-        }
-      }
-      this.onTripDatesChange();
-    } else {
-      this.setReportTanggalLaporan('', false);
+    if (!this.lockedSegments.administrasi) {
       const sInput = document.getElementById('reportTripStartDate');
-      if (sInput && (!this.lockedSegments.administrasi)) {
-        sInput.value = '';
+      const eInput = document.getElementById('reportTripEndDate');
+
+      if (cleanVal) {
+        const prevSpan = (this.tripMode === 'multiple' && this.tripStartDate && this.tripEndDate && this.tripEndDate >= this.tripStartDate)
+          ? Math.max(1, this._diffCalendarDays(this.tripStartDate, this.tripEndDate))
+          : Math.max(1, this._lastMultiSpanDays || this._getDefaultMultiSpanDays());
+
+        this.tripStartDate = cleanVal;
+        if (sInput) sInput.value = cleanVal;
+
+        if (this.tripMode === 'multiple') {
+          const newEnd = this._addCalendarDaysIso(cleanVal, prevSpan);
+          this.tripEndDate = newEnd;
+          this._lastMultiSpanDays = prevSpan;
+          if (eInput) eInput.value = newEnd;
+        }
+      } else {
         this.tripStartDate = '';
+        this.tripEndDate = '';
+        if (sInput) sInput.value = '';
+        if (eInput) eInput.value = '';
+        this.setReportTanggalLaporan('', false);
       }
-      this.onTripDatesChange();
     }
-    this.updatePhotoUploadState();
+
+    this.onTripDatesChange('spt');
   }
 
   updateDocumentTitlePreview() {
@@ -2062,6 +2110,7 @@ export class ReportBuilder {
   // PERJALANAN DINAS & RENTANG JAM MANAGEMENT
   // =========================================================
   setTripMode(mode, triggerChange = true) {
+    const prevMode = this.tripMode;
     this.tripMode = (mode === 'multiple') ? 'multiple' : 'single';
     const singleRadio = document.getElementById('tripModeSingle');
     const multiRadio = document.getElementById('tripModeMultiple');
@@ -2070,9 +2119,13 @@ export class ReportBuilder {
 
     const endGroup = document.getElementById('reportTripEndDateGroup');
     const startLabel = document.getElementById('reportTripStartDateLabel');
+    const sInput = document.getElementById('reportTripStartDate');
     const eInput = document.getElementById('reportTripEndDate');
 
     if (this.tripMode === 'single') {
+      if (prevMode === 'multiple' && this.tripStartDate && this.tripEndDate && this.tripEndDate > this.tripStartDate) {
+        this._lastMultiSpanDays = Math.max(1, this._diffCalendarDays(this.tripStartDate, this.tripEndDate));
+      }
       if (endGroup) endGroup.style.display = 'none';
       if (startLabel) startLabel.textContent = 'Tanggal Dinas';
       if (eInput) eInput.value = '';
@@ -2080,14 +2133,30 @@ export class ReportBuilder {
     } else {
       if (endGroup) endGroup.style.display = 'block';
       if (startLabel) startLabel.textContent = 'Tgl Mulai Dinas';
-      if (eInput && this.tripEndDate) {
-        eInput.value = this.tripEndDate;
+
+      if (triggerChange && !this.lockedSegments.administrasi) {
+        // Jika Tanggal Mulai masih kosong tapi Tanggal SPT sudah terisi, samakan dulu
+        if (!this.tripStartDate && this.tanggalSpt) {
+          this.tripStartDate = this.tanggalSpt;
+          if (sInput) sInput.value = this.tripStartDate;
+        }
+        // Jika berubah dari single -> multiple dan Tgl Selesai belum terisi/valid, auto-isi rentang hari yang valid
+        if (this.tripStartDate && (!this.tripEndDate || this.tripEndDate <= this.tripStartDate)) {
+          const spanDays = Math.max(1, this._lastMultiSpanDays || this._getDefaultMultiSpanDays());
+          this.tripEndDate = this._addCalendarDaysIso(this.tripStartDate, spanDays);
+        }
+      }
+
+      if (eInput) {
+        eInput.min = this.tripStartDate || '';
+        eInput.value = this.tripEndDate || '';
       }
     }
 
     if (triggerChange) {
-      this.onTripDatesChange();
+      this.onTripDatesChange('modeSwitch');
     } else {
+      this.updateTanggalSptPreview();
       this.updateTripDurationBadge();
       this.updatePhotoUploadState();
     }
@@ -2207,18 +2276,38 @@ export class ReportBuilder {
     }
   }
 
-  onTripDatesChange() {
+  onTripDatesChange(source = 'tripDates') {
     const sInput = document.getElementById('reportTripStartDate');
     const eInput = document.getElementById('reportTripEndDate');
 
-    const sVal = (sInput?.value || '').trim();
-    let eVal = (eInput?.value || '').trim();
+    let sVal = (sInput ? sInput.value : this.tripStartDate || '').trim();
+    let eVal = (eInput ? eInput.value : this.tripEndDate || '').trim();
 
     if (this.tripMode === 'single') {
-      eVal = sVal;
+      eVal = '';
       if (eInput) eInput.value = '';
       this.tripEndDate = '';
     } else {
+      if (source === 'tripStart' && sVal) {
+        if (!eVal || eVal < sVal) {
+          const spanDays = Math.max(1, this._lastMultiSpanDays || this._getDefaultMultiSpanDays());
+          eVal = this._addCalendarDaysIso(sVal, spanDays);
+          if (eInput) eInput.value = eVal;
+        }
+      } else if (source === 'tripEnd' && eVal && !sVal) {
+        sVal = this.tanggalSpt || this._addCalendarDaysIso(eVal, -Math.max(1, this._lastMultiSpanDays || this._getDefaultMultiSpanDays()));
+        if (sInput) sInput.value = sVal;
+      }
+
+      if (sVal && eVal && eVal >= sVal) {
+        const diff = this._diffCalendarDays(sVal, eVal);
+        if (diff >= 1) {
+          this._lastMultiSpanDays = diff;
+        }
+      }
+      if (eInput) {
+        eInput.min = sVal || '';
+      }
       this.tripEndDate = eVal;
     }
 
@@ -2226,18 +2315,25 @@ export class ReportBuilder {
     this.syncDateInputColor(sInput);
     if (eInput) this.syncDateInputColor(eInput);
 
+    // Sinkronisasi dua arah: Tanggal Dinas / Tgl Mulai Dinas -> Tanggal SPT
+    if (!this.lockedSegments.administrasi && source !== 'spt') {
+      if (this.tanggalSpt !== sVal) {
+        this.setReportTanggalSpt(sVal);
+      }
+    }
+
     // Otomatis sinkronkan Tanggal Laporan:
-    // Jika dinas lebih dari satu hari maka tanggal laporan diset ke H+1 hari akhir,
-    // jika 1 hari dinas maka diset ke H+1 Tanggal SPT (atau H+1 tanggal mulai)
+    // Jika dinas lebih dari satu hari maka H+1 hari kerja setelah hari akhir,
+    // jika 1 hari dinas maka H+1 hari kerja setelah Tanggal SPT / Tanggal Dinas.
     if (!this.lockedSegments.administrasi) {
-      if (this.tripMode === 'multiple' && eVal && sVal && eVal !== sVal) {
-        // Multi-hari dinas: H+1 hari akhir
+      if (!sVal && !this.tanggalSpt) {
+        this.setReportTanggalLaporan('', false);
+      } else if (this.tripMode === 'multiple' && eVal && sVal && eVal >= sVal) {
         const hPlus1End = getNextDayIso(eVal);
         if (hPlus1End) {
           this.setReportTanggalLaporan(hPlus1End, false);
         }
       } else if (sVal || this.tanggalSpt) {
-        // 1 hari dinas: H+1 Tanggal SPT
         const baseDate = this.tanggalSpt || sVal;
         const hPlus1Spt = getNextDayIso(baseDate);
         if (hPlus1Spt) {
@@ -4990,9 +5086,12 @@ export class ReportBuilder {
         this.setReportNomorSpt(rep.nomor_spt || '');
         this.setReportTanggalSpt(this.tanggalSpt);
 
-        // 2. Jadwal Dinas & Tanggal Laporan
-        this.tripStartDate = rep.trip_start_date || '';
+        // 2. Jadwal Dinas & Tanggal Laporan (sinkron dua arah SPT <-> Mulai Dinas)
+        this.tripStartDate = rep.trip_start_date || this.tanggalSpt || '';
         this.tripEndDate = rep.trip_end_date || '';
+        if (!this.tanggalSpt && this.tripStartDate) {
+          this.setReportTanggalSpt(this.tripStartDate);
+        }
         const sTrip = document.getElementById('reportTripStartDate');
         if (sTrip) sTrip.value = this.tripStartDate;
         const eTrip = document.getElementById('reportTripEndDate');
@@ -5000,6 +5099,7 @@ export class ReportBuilder {
 
         // Tentukan mode durasi dinas: multiple jika ada tgl selesai berbeda, single jika sama/1 hari
         if (this.tripEndDate && this.tripStartDate && this.tripEndDate !== this.tripStartDate) {
+          this._lastMultiSpanDays = Math.max(1, this._diffCalendarDays(this.tripStartDate, this.tripEndDate));
           this.setTripMode('multiple', false);
         } else {
           this.setTripMode('single', false);
@@ -5007,6 +5107,7 @@ export class ReportBuilder {
 
         if (this.tanggalLaporan) {
           this.setReportTanggalLaporan(this.tanggalLaporan, false);
+          this.updateTanggalSptPreview();
         } else {
           this.onTripDatesChange();
         }
@@ -5348,11 +5449,12 @@ export class ReportBuilder {
     // 3. Tanggal SPT
     const tglSpt = (this.tanggalSpt || '').trim();
     if (tglSpt) {
+      const sptDisplay = this.formatTanggalSptDisplay() || formatIndonesianDateOnly(tglSpt);
       items.push({
         field: 'tanggal_spt',
         status: 'complete',
         label: 'Tanggal SPT',
-        message: `Terisi: ${formatIndonesianDateOnly(tglSpt)}`
+        message: `Terisi: ${sptDisplay}`
       });
     } else {
       items.push({
