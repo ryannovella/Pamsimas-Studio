@@ -998,54 +998,193 @@ def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[
         if m_prov:
             detected_prov = m_prov.group(1).strip().title()
 
-        # 7. Map blip images to headings in document order
+        # 7. Map blip images to headings & table bottom-captions in document order
         img_section_map = {}
+        referenced_blips_order = []
         village_kec_map = {}
+        table_detected_villages = []
         current_desa = ""
         current_kec = ""
-        current_dusun = ""
+        current_kab = ""
+
+        def _track_blip_order(bn: str):
+            if bn and bn not in referenced_blips_order:
+                referenced_blips_order.append(bn)
+
+        _invalid_desa_words = {
+            'wonogiri', 'karanganyar', 'tersebut', 'ini', 'dan', 'pada',
+            'tingkat', 'penerima', 'sesuai', 'adalah', 'di', 'yang', 'atau'
+        }
+
+        def _extract_loc_from_text(txt_val: str):
+            t_clean = re.sub(r'\s+', ' ', (txt_val or '')).strip()
+            if not t_clean:
+                return "", "", ""
+            d_out, k_out, kb_out = "", "", ""
+            m_full = re.search(
+                r'\bDesa\s+([A-Za-z0-9\s\-]+?)(?:,\s*|\s+)(?:Kec(?:amatan|\.)?)\s+([A-Za-z0-9\s\-]+?)(?:(?:,\s*|\s+)(?:Kab(?:upaten|\.)?|Kota)\s+([A-Za-z0-9\s\-]+?))?(?:,|\.|Provinsi|\r|\n|$)',
+                t_clean,
+                re.IGNORECASE,
+            )
+            if m_full:
+                d_raw = re.sub(r'\s+(?:ta|tahun)\s*\d{4}$', '', m_full.group(1).strip(), flags=re.I).strip()
+                d_out = fuzzy_match_village(d_raw)
+                k_out = m_full.group(2).strip().title()
+                if m_full.group(3):
+                    kb_out = m_full.group(3).strip().title()
+            else:
+                m_heading = re.search(
+                    r'\bDesa\s+([A-Za-z0-9\s]+?)(?:,\s*|\s+)(Kec(?:amatan|\.)?|Kab(?:upaten|\.)?)\s+([A-Za-z0-9\s]+?)(?:\r|\n|,|\.|$)',
+                    t_clean,
+                    re.IGNORECASE,
+                )
+                if m_heading:
+                    d_out = fuzzy_match_village(m_heading.group(1).strip())
+                    w_type = m_heading.group(2).lower()
+                    w_name = m_heading.group(3).strip().title()
+                    if 'kec' in w_type:
+                        k_out = w_name
+                    else:
+                        kb_out = w_name
+                elif re.search(r'\bDesa\s+[A-Za-z0-9]+', t_clean, re.IGNORECASE):
+                    m_v = re.search(r'\bDesa\s+([A-Za-z0-9]+)', t_clean, re.IGNORECASE)
+                    if m_v:
+                        v_cand = fuzzy_match_village(m_v.group(1).strip())
+                        if v_cand and v_cand.lower() not in _invalid_desa_words:
+                            d_out = v_cand
+            if d_out and d_out.lower() in _invalid_desa_words:
+                d_out = ""
+            return d_out, k_out, kb_out
+
+        def _register_table_village(d_val: str, k_val: str):
+            if d_val:
+                if d_val not in table_detected_villages:
+                    table_detected_villages.append(d_val)
+                if k_val:
+                    village_kec_map[d_val] = k_val
 
         if root is not None:
-            # Enhanced context mapping: look for explicit sections "Desa X, Kab Y"
-            # and match BLIPs to the most recent context
-            for elem in root.iter():
-                tag = elem.tag.split('}')[-1]
-                if tag == 'p':
-                    p_text = ''.join([node.text for node in elem.iter() if node.text]).strip()
+            body_elem = None
+            for child in root:
+                if child.tag.split('}')[-1] == 'body':
+                    body_elem = child
+                    break
+
+            body_children = list(body_elem) if body_elem is not None else list(root)
+            for b_idx, child in enumerate(body_children):
+                c_tag = child.tag.split('}')[-1]
+                if c_tag == 'p':
+                    p_text = ''.join([node.text for node in child.iter() if node.text]).strip()
                     if p_text:
-                        # Match "Desa X, [Kab. Y / Kec. Z]" with optional comma and flexible spacing
-                        m_heading = re.search(r'\bDesa\s+([A-Za-z0-9\s]+?)(?:,\s*|\s+)(Kec(?:amatan|\.)?|Kab(?:upaten|\.)?)\s+([A-Za-z0-9\s]+?)(?:\r|\n|,|\.|$)', p_text, re.IGNORECASE)
-                        if m_heading:
-                            current_desa = fuzzy_match_village(m_heading.group(1).strip())
-                            w_type = m_heading.group(2).lower()
-                            w_name = m_heading.group(3).strip().title()
-                            if 'kec' in w_type:
-                                current_kec = w_name
-                                if current_desa:
-                                    village_kec_map[current_desa] = current_kec
-                        elif 'Desa' in p_text:
-                            # Fallback simple
-                            m_v = re.search(r'\bDesa\s+([A-Za-z0-9]+)', p_text, re.IGNORECASE)
-                            if m_v:
-                                v_cand = fuzzy_match_village(m_v.group(1).strip())
-                                if v_cand.lower() not in ('wonogiri', 'karanganyar', 'tersebut', 'ini', 'dan', 'pada', 'tingkat', 'penerima', 'sesuai', 'adalah', 'di', 'yang'):
-                                    current_desa = v_cand
-                
-                elif tag == 'blip':
-                    embed = elem.attrib.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed')
-                    target = rel_map.get(embed, '')
-                    bname = os.path.basename(target)
-                    if bname:
-                        img_section_map[bname] = {
-                            "desa": current_desa,
-                            "kec": current_kec
-                        }
+                        d_p, k_p, kb_p = _extract_loc_from_text(p_text)
+                        if d_p:
+                            current_desa = d_p
+                            if k_p:
+                                current_kec = k_p
+                                village_kec_map[current_desa] = current_kec
+                            if kb_p:
+                                current_kab = kb_p
+                    for blip in child.iter():
+                        if blip.tag.split('}')[-1] == 'blip':
+                            embed = blip.attrib.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed')
+                            bname = os.path.basename(rel_map.get(embed, ''))
+                            if bname:
+                                _track_blip_order(bname)
+                                img_section_map[bname] = {
+                                    "desa": current_desa,
+                                    "kec": current_kec,
+                                    "kab": current_kab,
+                                    "from_table_caption": False,
+                                }
+                elif c_tag == 'tbl':
+                    pending_blips = []
+                    for tr in child:
+                        if tr.tag.split('}')[-1] != 'tr':
+                            continue
+                        row_blips = []
+                        for blip in tr.iter():
+                            if blip.tag.split('}')[-1] == 'blip':
+                                embed = blip.attrib.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed')
+                                bname = os.path.basename(rel_map.get(embed, ''))
+                                if bname:
+                                    _track_blip_order(bname)
+                                    row_blips.append(bname)
+                        if row_blips:
+                            pending_blips.extend(row_blips)
+                            for bn in row_blips:
+                                img_section_map[bn] = {
+                                    "desa": current_desa,
+                                    "kec": current_kec,
+                                    "kab": current_kab,
+                                    "from_table_caption": False,
+                                }
+                        else:
+                            row_text = ' '.join(
+                                ''.join([t.text for t in tc.iter() if t.text]).strip()
+                                for tc in tr
+                                if tc.tag.split('}')[-1] == 'tc'
+                            ).strip()
+                            d_row, k_row, kb_row = _extract_loc_from_text(row_text)
+                            if d_row:
+                                _register_table_village(d_row, k_row)
+                                if pending_blips:
+                                    for bn in pending_blips:
+                                        img_section_map[bn] = {
+                                            "desa": d_row,
+                                            "kec": k_row,
+                                            "kab": kb_row or current_kab,
+                                            "from_table_caption": True,
+                                        }
+                                    pending_blips = []
+                                current_desa = d_row
+                                if k_row:
+                                    current_kec = k_row
+                                if kb_row:
+                                    current_kab = kb_row
 
+                    # Peek at the paragraph immediately after the table if blips had no in-table caption
+                    if pending_blips:
+                        for look_idx in range(b_idx + 1, min(len(body_children), b_idx + 3)):
+                            nxt = body_children[look_idx]
+                            if nxt.tag.split('}')[-1] != 'p':
+                                break
+                            nxt_txt = ''.join([n.text for n in nxt.iter() if n.text]).strip()
+                            if not nxt_txt:
+                                continue
+                            d_nxt, k_nxt, kb_nxt = _extract_loc_from_text(nxt_txt)
+                            if d_nxt:
+                                _register_table_village(d_nxt, k_nxt)
+                                for bn in pending_blips:
+                                    img_section_map[bn] = {
+                                        "desa": d_nxt,
+                                        "kec": k_nxt,
+                                        "kab": kb_nxt or current_kab,
+                                        "from_table_caption": True,
+                                    }
+                                current_desa = d_nxt
+                                if k_nxt:
+                                    current_kec = k_nxt
+                                if kb_nxt:
+                                    current_kab = kb_nxt
+                            break
 
+        if table_detected_villages:
+            merged_det_villages = list(table_detected_villages)
+            for dv in detected_villages:
+                if dv not in merged_det_villages:
+                    merged_det_villages.append(dv)
+            detected_villages = merged_det_villages
 
         # 8. Extract photos with precision cropping applied
+        # Skip orphaned unreferenced media files inside the zip archive when document.xml blips are known
+        if referenced_blips_order:
+            media_by_name = {os.path.basename(mf): mf for mf in media_files}
+            ordered_media_files = [media_by_name[bn] for bn in referenced_blips_order if bn in media_by_name]
+        else:
+            ordered_media_files = media_files
+
         survey_candidates = []
-        for mf in media_files:
+        for mf in ordered_media_files:
             bname = os.path.basename(mf)
             raw_data = zin.read(mf)
 
@@ -1082,7 +1221,7 @@ def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[
 
             survey_candidates.append((mf, bname, raw_data))
 
-        # Pre-assign authentic chronological times across the survey date(s)
+        # Pre-assign authentic chronological times across the survey date(s), aligned by village group
         total_candidates = len(survey_candidates)
         img_counter = 1
         pre_assigned_times = []
@@ -1093,9 +1232,26 @@ def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[
         dt_end = date(yr2, m2, d2_num)
         total_days = max(1, (dt_end - dt_start).days + 1)
 
+        candidate_desas = []
+        village_order = []
+        for mf_idx, (_, bname, _) in enumerate(survey_candidates):
+            meta_c = img_section_map.get(bname, {})
+            d_cand = meta_c.get("desa") or ""
+            if not d_cand and detected_villages and total_candidates > 0:
+                v_idx = min(len(detected_villages) - 1, (mf_idx * len(detected_villages)) // total_candidates)
+                d_cand = detected_villages[v_idx]
+            d_cand = re.sub(r'\s+(?:ta|tahun)\s*\d{4}', '', d_cand, flags=re.I).strip()
+            candidate_desas.append(d_cand)
+            if d_cand and d_cand not in village_order:
+                village_order.append(d_cand)
+
         day_accum_minutes = {}
         for idx in range(total_candidates):
-            day_step = min(total_days - 1, (idx * total_days) // total_candidates) if total_candidates > 0 else 0
+            if len(village_order) > 1 and candidate_desas[idx] in village_order:
+                v_pos = village_order.index(candidate_desas[idx])
+                day_step = min(total_days - 1, (v_pos * total_days) // len(village_order))
+            else:
+                day_step = min(total_days - 1, (idx * total_days) // total_candidates) if total_candidates > 0 else 0
             curr_day = dt_start + timedelta(days=day_step)
             day_key = curr_day.isoformat()
 
@@ -1140,60 +1296,29 @@ def parse_document(doc_path: str) -> Tuple[List[Dict[str, Any]], str, str, List[
             img_counter += 1
 
             meta = img_section_map.get(bname, {})
-            desa = meta.get("desa") or global_desa or ""
-            
-            # IMPROVED: distribute evenly across all detected villages
-            if not meta.get("desa") and detected_villages and total_candidates > 0:
-                v_idx = min(len(detected_villages) - 1, (mf_idx * len(detected_villages)) // total_candidates)
-                desa = detected_villages[v_idx]
-
-            kec = meta.get("kec") or global_kec or ""
-            dusun = meta.get("dusun") or global_dusun or ""
-
-            # Check known coordinate and subdistrict defaults
-            lat = "-7.391520"
-            lon = "110.312050"
-            desa_key = desa.lower().strip()
-            
-            # Use pre-assigned strictly continuous chronological times (only if valid date detected)
             if has_detected_date:
                 time_str = pre_assigned_times[mf_idx] if mf_idx < len(pre_assigned_times) else doc_date
             else:
                 time_str = ""
 
-
-            # Ensure detected_villages is populated from both filename/text AND potential matches
-            # from data_lokasi.csv (which is already in KNOWN_COORDS)
-            all_detected_villages = []
-            for v in detected_villages:
-                if v not in all_detected_villages:
-                    all_detected_villages.append(v)
-            
-            # If image section meta did not specify desa (common in single-table docs)
-            # or if multiple villages detected, distribute evenly across detected villages.
-            desa = meta.get("desa")
-            
-            # Use detected_villages list if it exists to ensure distribution
-            if (not desa or len(set(detected_villages)) > 1) and detected_villages and total_candidates > 0:
-                v_idx = (mf_idx * len(detected_villages)) // total_candidates
+            # Preserve explicit table-caption / section village mapping; only even-split if unmapped
+            desa = meta.get("desa") or ""
+            if not desa and detected_villages and total_candidates > 0:
+                v_idx = min(len(detected_villages) - 1, (mf_idx * len(detected_villages)) // total_candidates)
                 desa = detected_villages[v_idx]
-            elif not desa and detected_villages:
-                desa = detected_villages[0]
-            
-            # If still no desa, fallback to global or empty
             if not desa:
                 desa = global_desa or ""
 
-            
             # Clean up suffix like 'Ta 2026' or 'Tahun 2026' from village name
             desa_clean = re.sub(r'\s+(?:ta|tahun)\s*\d{4}', '', desa, flags=re.I).strip()
             
             # Lookup accurate coordinates, kecamatan, and kabupaten using disambiguation
-            mapped_kec = village_kec_map.get(desa_clean) or (meta.get("kec") if meta.get("desa") == desa else "")
+            mapped_kec = (meta.get("kec") if meta.get("from_table_caption") else "") or village_kec_map.get(desa_clean) or meta.get("kec") or ""
+            doc_kab_hint = meta.get("kab") or combined_text
             lat, lon, def_kec, def_kab = lookup_location(
                 desa_name=desa_clean, 
                 kec_hint=mapped_kec or global_kec or "", 
-                doc_text_hint=combined_text
+                doc_text_hint=doc_kab_hint
             )
             final_kec = mapped_kec or def_kec or global_kec or ""
             final_kab = def_kab

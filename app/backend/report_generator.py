@@ -1689,13 +1689,39 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
             except Exception:
                 pass
 
-    wc_cli = r"C:\Program Files\WordCraft\wordcraft-cli.exe"
-    if not os.path.exists(wc_cli):
-        wc_cli = shutil.which("wordcraft-cli") or ""
+    wc_cli = (os.environ.get("WORDCRAFT_CLI_PATH") or "").strip()
+    if not wc_cli or not os.path.exists(wc_cli):
+        for cand_wc in [
+            r"C:\Program Files\WordCraft\wordcraft-cli.exe",
+            shutil.which("wordcraft-cli") or "",
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\WordCraft\wordcraft-cli.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\WordCraft\wordcraft-cli.exe"),
+        ]:
+            if cand_wc and os.path.exists(cand_wc):
+                wc_cli = cand_wc
+                break
+        else:
+            wc_cli = ""
+
+    soffice_cli = ""
     if not wc_cli:
-        alt = os.path.expandvars(r"%LOCALAPPDATA%\Programs\WordCraft\wordcraft-cli.exe")
-        if os.path.exists(alt):
-            wc_cli = alt
+        soffice_cli = shutil.which("soffice") or shutil.which("libreoffice") or ""
+
+    def _insert_page_break_before(p_elem_obj):
+        pPr_el = p_elem_obj._element.get_or_add_pPr()
+        if pPr_el.xpath('./w:pageBreakBefore'):
+            return None
+        pb_el = OxmlElement("w:pageBreakBefore")
+        # Maintain valid OOXML CT_PPr schema order (after pStyle/keepNext/keepLines, before spacing/ind/jc)
+        insert_idx = 0
+        for child_el in list(pPr_el):
+            local = child_el.tag.split('}')[-1]
+            if local in ("pStyle", "keepNext", "keepLines"):
+                insert_idx += 1
+            else:
+                break
+        pPr_el.insert(insert_idx, pb_el)
+        return pb_el
 
     try:
         doc = docx.Document(docx_path)
@@ -1709,20 +1735,23 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
 
         if not clean_pelaksana:
             for t in doc.tables:
-                if len(t.columns) == 4 and len(t.rows) >= 2:
-                    for r in t.rows:
-                        txt = r.cells[1].text.strip()
-                        if txt and txt not in clean_pelaksana:
-                            clean_pelaksana.append(txt)
-                    break
+                if len(t.columns) == 4 and len(t.rows) >= 1:
+                    first_cell = t.rows[0].cells[0].text.strip()
+                    if re.match(r"^\d+\.", first_cell):
+                        for r in t.rows:
+                            txt = r.cells[1].text.strip()
+                            if txt and txt not in clean_pelaksana:
+                                clean_pelaksana.append(txt)
+                        break
 
-        if not clean_pelaksana or len(clean_pelaksana) < 2:
+        if not clean_pelaksana:
             return False
 
         # Cari kandidat paragraf untuk penyisipan page break
         # Prioritas 1: Poin 'Tindak lanjut dan rekomendasi' desa terakhir
         # Prioritas 2: Poin 'Kendala / permasalahan' desa terakhir
         # Prioritas 3: Poin catatan lapangan terakhir sebelum penutup
+        # Prioritas 4 (fallback terakhir): Paragraf 'Dibuat di ...' agar blok penutup tidak pernah orphan
         dibuat_idx = -1
         for idx, p in enumerate(doc.paragraphs):
             t_low = p.text.lower()
@@ -1759,14 +1788,18 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
                 break
 
         ordered_candidates = candidates_tindak + candidates_kendala + candidates_other
+        if dibuat_idx != -1:
+            p_dibuat = doc.paragraphs[dibuat_idx]
+            ordered_candidates.append((dibuat_idx, p_dibuat, p_dibuat.text.strip()))
         if not ordered_candidates:
             return False
 
-        # Fallback estimasi kapasitas halaman jika WordCraft CLI atau pypdf tidak tersedia
+        # Fallback estimasi kapasitas halaman jika WordCraft CLI / LibreOffice / pypdf tidak tersedia
         def estimate_space_sufficient(doc_obj):
-            needed_lines = 4.0 + (len(clean_pelaksana) * 2.5)
-            lines_per_page = 36.0
-            total_lines = 0.0
+            needed_lines = 5.0 + (len(clean_pelaksana) * 2.75)
+            lines_per_page = 38.0
+            # Kop surat + judul + tabel Bagian A pada halaman pertama (~11 baris)
+            total_lines = 11.0
             for p in doc_obj.paragraphs:
                 txt = p.text.strip()
                 if "dibuat di" in txt.lower() or "pembuat laporan" in txt.lower():
@@ -1777,22 +1810,21 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
                 if not txt:
                     total_lines += 0.5
                     continue
-                char_len = len(txt)
-                p_lines = max(1, math.ceil(char_len / 85.0))
-                total_lines += p_lines * 1.25 + 0.35
+                is_bullet = bool(pPr is not None and pPr.xpath('./w:numPr'))
+                wrap_chars = 82.0 if is_bullet else 90.0
+                p_lines = max(1, math.ceil(len(txt) / wrap_chars))
+                total_lines += p_lines * 1.0 + 0.25
 
             current_page_used = total_lines % lines_per_page
             remaining_lines = lines_per_page - current_page_used
             return remaining_lines >= needed_lines
 
-        if not wc_cli or not pypdf:
-            # Periksa terlebih dahulu apakah space masih cukup tanpa page break
+        pdf_converter = wc_cli or soffice_cli
+        if not pdf_converter or not pypdf:
             if estimate_space_sufficient(doc):
                 return False
             primary_cand = ordered_candidates[0]
-            pPr = primary_cand[1]._element.get_or_add_pPr()
-            if not pPr.xpath('./w:pageBreakBefore'):
-                pPr.append(OxmlElement("w:pageBreakBefore"))
+            if _insert_page_break_before(primary_cand[1]) is not None:
                 doc.save(docx_path)
                 return True
             return False
@@ -1804,7 +1836,18 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
                 temp_pdf = f_p.name
             try:
                 doc_obj.save(temp_docx)
-                subprocess.run([wc_cli, "convert", temp_docx, temp_pdf], check=True, capture_output=True)
+                if wc_cli:
+                    subprocess.run([wc_cli, "convert", temp_docx, temp_pdf], check=True, capture_output=True)
+                else:
+                    out_dir = os.path.dirname(temp_pdf)
+                    subprocess.run(
+                        [soffice_cli, "--headless", "--convert-to", "pdf", "--outdir", out_dir, temp_docx],
+                        check=True,
+                        capture_output=True,
+                    )
+                    gen_pdf = os.path.join(out_dir, os.path.splitext(os.path.basename(temp_docx))[0] + ".pdf")
+                    if os.path.exists(gen_pdf) and gen_pdf != temp_pdf:
+                        os.replace(gen_pdf, temp_pdf)
                 reader = pypdf.PdfReader(temp_pdf)  # type: ignore
                 personel_pages = {}
                 pembuat_page = None
@@ -1826,10 +1869,6 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
                     return False, set()
 
                 table_page = min(pages_seen)
-                # Split terdeteksi HANYA JIKA:
-                # 1. Tabel personel terpotong di lebih dari satu halaman (len(pages_seen) > 1)
-                # 2. 'Pembuat Laporan' terpisah dari tabel tanda tangan (pembuat_page != table_page)
-                # 3. 'Dibuat di Semarang' terpisah dari tabel tanda tangan (dibuat_page != table_page)
                 is_split = (len(pages_seen) > 1) or \
                            (pembuat_page is not None and pembuat_page != table_page) or \
                            (dibuat_page is not None and dibuat_page != table_page)
@@ -1844,13 +1883,13 @@ def ensure_personel_table_pagination(docx_path: str, pelaksana_names: Optional[L
 
         is_split, pages_seen = check_split_state(doc)
         if not is_split:
-            # Space masih cukup dan seluruh tabel berada pada halaman yang sama tanpa page break
             return False
 
         for c_idx, p_cand, txt in ordered_candidates:
             pPr = p_cand._element.get_or_add_pPr()
-            br_elem = OxmlElement("w:pageBreakBefore")
-            pPr.append(br_elem)
+            br_elem = _insert_page_break_before(p_cand)
+            if br_elem is None:
+                continue
 
             split_after, _ = check_split_state(doc)
             if not split_after:
@@ -2250,7 +2289,11 @@ def generate_monev_docx(
     for p_pen in [p_penutup1, p_penutup2, p_penutup3]:
         pPr_pen = p_pen.xpath('./w:pPr')
         if pPr_pen:
-            pPr_pen[0].append(OxmlElement('w:keepNext'))
+            # Sisipkan keepNext & keepLines tepat setelah pStyle sesuai urutan skema OOXML CT_PPr
+            p_children = list(pPr_pen[0])
+            ins_pos = 1 if (p_children and p_children[0].tag.endswith('}pStyle')) else 0
+            pPr_pen[0].insert(ins_pos, OxmlElement('w:keepNext'))
+            pPr_pen[0].insert(ins_pos + 1, OxmlElement('w:keepLines'))
     insert_before_target(p_penutup1)
     insert_before_target(p_penutup2)
     insert_before_target(p_penutup3)
@@ -2359,13 +2402,14 @@ def generate_monev_docx(
             for elem in to_remove_after:
                 body_parent.remove(elem)
 
-        # Judul Dokumentasi Foto
+        # Judul Dokumentasi Foto (keepNext agar judul tidak terpisah dari tabel foto pertama)
         p_photo_title = doc.add_paragraph()
         p_photo_title.text = f"Monitoring Kegiatan Pamsimas TA {tahun}"
         p_photo_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_photo_title.paragraph_format.line_spacing = 1.2
         p_photo_title.paragraph_format.space_before = Pt(6)
         p_photo_title.paragraph_format.space_after = Pt(12)
+        p_photo_title.paragraph_format.keep_with_next = True
         for r in p_photo_title.runs:
             r.font.name = "Arial"
             r.font.size = Pt(12)
@@ -2379,24 +2423,13 @@ def generate_monev_docx(
         else:
             body_parent.append(p_title_elem)
 
-        num_rows = (len(photos) + 1) // 2
-        photo_table = doc.add_table(rows=num_rows, cols=2)
-        photo_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        def _insert_after_photo_title_area(elem_to_insert):
+            if body_sectpr_elem is not None:
+                body_parent.insert(body_parent.index(body_sectpr_elem), elem_to_insert)
+            else:
+                body_parent.append(elem_to_insert)
 
-        for idx, photo_item in enumerate(photos):
-            row_idx = idx // 2
-            col_idx = idx % 2
-            cell = photo_table.rows[row_idx].cells[col_idx]
-            cell.width = Inches(3.25)
-            # Table Outlines: Bingkai garis tunggal resmi standar kedinasan PU
-            set_cell_borders(
-                cell,
-                top={'val': 'single', 'sz': 4, 'color': 'auto'},
-                bottom={'val': 'single', 'sz': 4, 'color': 'auto'},
-                left={'val': 'single', 'sz': 4, 'color': 'auto'},
-                right={'val': 'single', 'sz': 4, 'color': 'auto'}
-            )
-
+        def _decode_and_stamp_photo(photo_item):
             img_bytes = photo_item.get("bytes")
             if isinstance(img_bytes, list):
                 img_bytes = bytes(img_bytes)
@@ -2415,102 +2448,241 @@ def generate_monev_docx(
                     with open(cand_path, "rb") as f:
                         img_bytes = f.read()
 
-            if img_bytes:
-                is_original = bool(photo_item.get("already_stamped") or photo_item.get("keep_original") or photo_item.get("is_original"))
-                sanitized_jpg_bytes = None
+            if not img_bytes:
+                return None
+
+            is_original = bool(photo_item.get("already_stamped") or photo_item.get("keep_original") or photo_item.get("is_original"))
+            try:
+                pil_img = Image.open(io.BytesIO(img_bytes))
+                pil_img.load()
+                pil_img = normalize_image_aspect_ratio(pil_img)
+
+                if pil_img.mode in ("RGBA", "LA", "P"):
+                    bg = Image.new("RGB", pil_img.size, (255, 255, 255))
+                    if pil_img.mode == "P":
+                        pil_img = pil_img.convert("RGBA")
+                    alpha_mask = pil_img.split()[-1] if pil_img.mode in ("RGBA", "LA") else None
+                    bg.paste(pil_img, mask=alpha_mask)
+                    pil_img = bg
+                elif pil_img.mode != "RGB":
+                    pil_img = pil_img.convert("RGB")
+
+                if not is_original:
+                    t_str = photo_item.get("time_str") or datetime.now().strftime("%A, %d %B %Y %H:%M:%S WIB")
+                    lat_val = str(photo_item.get("lat") or "-7.500000")
+                    lon_val = str(photo_item.get("lon") or "110.500000")
+                    d_val = photo_item.get("dusun", "")
+                    ds_val = photo_item.get("desa", "")
+                    kc_val = photo_item.get("kecamatan", "")
+                    raw_photo_kb = photo_item.get("kabupaten")
+                    if not raw_photo_kb and ds_val:
+                        for vm in villages:
+                            if (vm.get("desa") or "").strip().lower() == ds_val.strip().lower():
+                                raw_photo_kb = vm.get("kabupaten")
+                                break
+                    if not raw_photo_kb:
+                        raw_photo_kb = kabupaten_full
+                    raw_clean_kb = re.sub(r"^(?:Kabupaten|Kota)\s*", "", str(raw_photo_kb), flags=re.I).strip()
+                    kb_val = f"Kota {raw_clean_kb}" if str(raw_photo_kb).lower().startswith("kota") else f"Kabupaten {raw_clean_kb}"
+                    c_addr = photo_item.get("custom_address") or photo_item.get("address")
+
+                    stamped_img = apply_stamp(
+                        pil_img,
+                        time_str=t_str,
+                        lat=lat_val,
+                        lon=lon_val,
+                        dusun=d_val,
+                        desa=ds_val,
+                        kecamatan=kc_val,
+                        kabupaten=kb_val,
+                        custom_address=c_addr,
+                        address_mode=photo_item.get("address_mode", "auto")
+                    )
+                    buf = io.BytesIO()
+                    stamped_img.convert("RGB").save(buf, format="JPEG", quality=92)
+                    return buf.getvalue()
+
+                buf = io.BytesIO()
+                pil_img.convert("RGB").save(buf, format="JPEG", quality=92)
+                return buf.getvalue()
+            except Exception as e:
+                log_error("photo_table_stamping", e)
                 try:
-                    pil_img = Image.open(io.BytesIO(img_bytes))
-                    pil_img.load()
-                    # Normalisasi Aspect Ratio: sesuaikan foto portrait ke landscape 4:3 agar simetris
-                    pil_img = normalize_image_aspect_ratio(pil_img)
+                    pil_fb = Image.open(io.BytesIO(img_bytes))
+                    pil_fb.load()
+                    if pil_fb.mode in ("RGBA", "LA", "P"):
+                        bg = Image.new("RGB", pil_fb.size, (255, 255, 255))
+                        if pil_fb.mode == "P":
+                            pil_fb = pil_fb.convert("RGBA")
+                        bg.paste(pil_fb, mask=pil_fb.split()[-1] if pil_fb.mode in ("RGBA", "LA") else None)
+                        pil_fb = bg
+                    elif pil_fb.mode != "RGB":
+                        pil_fb = pil_fb.convert("RGB")
+                    buf_fb = io.BytesIO()
+                    pil_fb.save(buf_fb, format="JPEG", quality=92)
+                    return buf_fb.getvalue()
+                except Exception as e_fb:
+                    log_error("photo_table_fallback_jpeg", e_fb)
+                    return None
 
-                    # Pastikan mode warna bebas transparansi (RGBA/P/LA) menjadi RGB murni untuk Word
-                    if pil_img.mode in ("RGBA", "LA", "P"):
-                        bg = Image.new("RGB", pil_img.size, (255, 255, 255))
-                        if pil_img.mode == "P":
-                            pil_img = pil_img.convert("RGBA")
-                        alpha_mask = pil_img.split()[-1] if pil_img.mode in ("RGBA", "LA") else None
-                        bg.paste(pil_img, mask=alpha_mask)
-                        pil_img = bg
-                    elif pil_img.mode != "RGB":
-                        pil_img = pil_img.convert("RGB")
+        # Kelompokkan foto berdasarkan desa (retain kategori tabel foto per desa)
+        # Urutan mengikuti daftar desa pada laporan terlebih dahulu, kemudian desa lain di foto
+        village_meta_map = {}
+        ordered_group_keys = []
+        for vm in villages:
+            vd = (vm.get("desa") or "").strip()
+            if vd:
+                vk = vd.lower()
+                if vk not in village_meta_map:
+                    village_meta_map[vk] = {
+                        "desa": vd,
+                        "kecamatan": (vm.get("kecamatan") or "").strip(),
+                        "kabupaten": (vm.get("kabupaten") or "").strip(),
+                    }
+                    ordered_group_keys.append(vk)
 
-                    if not is_original:
-                        t_str = photo_item.get("time_str") or datetime.now().strftime("%A, %d %B %Y %H:%M:%S WIB")
-                        lat_val = str(photo_item.get("lat") or "-7.500000")
-                        lon_val = str(photo_item.get("lon") or "110.500000")
-                        d_val = photo_item.get("dusun", "")
-                        ds_val = photo_item.get("desa", "")
-                        kc_val = photo_item.get("kecamatan", "")
-                        raw_photo_kb = photo_item.get("kabupaten")
-                        if not raw_photo_kb and ds_val:
-                            for vm in villages:
-                                if (vm.get("desa") or "").strip().lower() == ds_val.strip().lower():
-                                    raw_photo_kb = vm.get("kabupaten")
-                                    break
-                        if not raw_photo_kb:
-                            raw_photo_kb = kabupaten_full
-                        raw_clean_kb = re.sub(r"^(?:Kabupaten|Kota)\s*", "", str(raw_photo_kb), flags=re.I).strip()
-                        kb_val = f"Kota {raw_clean_kb}" if str(raw_photo_kb).lower().startswith("kota") else f"Kabupaten {raw_clean_kb}"
-                        c_addr = photo_item.get("custom_address") or photo_item.get("address")
+        photo_groups = {}
+        fallback_single_desa = ordered_group_keys[0] if len(ordered_group_keys) == 1 else ""
+        for p_item in photos:
+            p_desa = (p_item.get("desa") or "").strip()
+            if not p_desa and fallback_single_desa:
+                p_desa = village_meta_map[fallback_single_desa]["desa"]
+            g_key = p_desa.lower() if p_desa else "__umum__"
+            if g_key not in photo_groups:
+                photo_groups[g_key] = []
+                if g_key not in ordered_group_keys:
+                    ordered_group_keys.append(g_key)
+                if g_key != "__umum__" and g_key not in village_meta_map:
+                    village_meta_map[g_key] = {
+                        "desa": p_desa,
+                        "kecamatan": (p_item.get("kecamatan") or "").strip(),
+                        "kabupaten": (p_item.get("kabupaten") or "").strip(),
+                    }
+            photo_groups[g_key].append(p_item)
 
-                        stamped_img = apply_stamp(
-                            pil_img,
-                            time_str=t_str,
-                            lat=lat_val,
-                            lon=lon_val,
-                            dusun=d_val,
-                            desa=ds_val,
-                            kecamatan=kc_val,
-                            kabupaten=kb_val,
-                            custom_address=c_addr,
-                            address_mode=photo_item.get("address_mode", "auto")
-                        )
-                        buf = io.BytesIO()
-                        stamped_img.convert("RGB").save(buf, format="JPEG", quality=92)
-                        sanitized_jpg_bytes = buf.getvalue()
-                    else:
-                        buf = io.BytesIO()
-                        pil_img.convert("RGB").save(buf, format="JPEG", quality=92)
-                        sanitized_jpg_bytes = buf.getvalue()
-                except Exception as e:
-                    log_error("photo_table_stamping", e)
-                    # Robust fallback: paksa re-encode gambar ke JPEG RGB baku agar Word tidak pernah menerima WebP / data rusak
-                    try:
-                        pil_fb = Image.open(io.BytesIO(img_bytes))
-                        pil_fb.load()
-                        if pil_fb.mode in ("RGBA", "LA", "P"):
-                            bg = Image.new("RGB", pil_fb.size, (255, 255, 255))
-                            if pil_fb.mode == "P":
-                                pil_fb = pil_fb.convert("RGBA")
-                            bg.paste(pil_fb, mask=pil_fb.split()[-1] if pil_fb.mode in ("RGBA", "LA") else None)
-                            pil_fb = bg
-                        elif pil_fb.mode != "RGB":
-                            pil_fb = pil_fb.convert("RGB")
-                        buf_fb = io.BytesIO()
-                        pil_fb.save(buf_fb, format="JPEG", quality=92)
-                        sanitized_jpg_bytes = buf_fb.getvalue()
-                    except Exception as e_fb:
-                        log_error("photo_table_fallback_jpeg", e_fb)
-                        sanitized_jpg_bytes = None
+        active_group_keys = [gk for gk in ordered_group_keys if photo_groups.get(gk)]
 
+        for g_idx, g_key in enumerate(active_group_keys):
+            g_photos = photo_groups[g_key]
+            num_photo_rows = (len(g_photos) + 1) // 2
+            has_caption = (g_key != "__umum__")
+            total_rows = num_photo_rows + (1 if has_caption else 0)
+
+            v_table = doc.add_table(rows=total_rows, cols=2)
+            v_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+            # Prevent individual rows from splitting mid-cell
+            for r_obj in v_table.rows:
+                r_obj._tr.get_or_add_trPr().append(OxmlElement('w:cantSplit'))
+
+            for idx, photo_item in enumerate(g_photos):
+                row_idx = idx // 2
+                col_idx = idx % 2
+                cell = v_table.rows[row_idx].cells[col_idx]
+                cell.width = Inches(3.25)
+                set_cell_borders(
+                    cell,
+                    top={'val': 'single', 'sz': 4, 'color': 'auto'},
+                    bottom={'val': 'single', 'sz': 4, 'color': 'auto'},
+                    left={'val': 'single', 'sz': 4, 'color': 'auto'},
+                    right={'val': 'single', 'sz': 4, 'color': 'auto'}
+                )
+
+                sanitized_jpg_bytes = _decode_and_stamp_photo(photo_item)
                 if sanitized_jpg_bytes:
                     try:
                         para = cell.paragraphs[0]
                         para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                         para.paragraph_format.space_before = Pt(4)
                         para.paragraph_format.space_after = Pt(4)
+                        if has_caption and row_idx == num_photo_rows - 1:
+                            para.paragraph_format.keep_with_next = True
                         run = para.add_run()
                         run.add_picture(io.BytesIO(sanitized_jpg_bytes), width=Inches(3.10))
                     except Exception as e:
                         log_error("photo_table_add_picture", e)
 
-        tbl_photo_elem = photo_table._tbl
-        body_parent.remove(tbl_photo_elem)
-        if body_sectpr_elem is not None:
-            body_parent.insert(body_parent.index(body_sectpr_elem), tbl_photo_elem)
-        else:
-            body_parent.append(tbl_photo_elem)
+            # Jika jumlah foto ganjil di desa ini, pastikan sel kosong terakhir tetap berbingkai rapi
+            if len(g_photos) % 2 == 1:
+                empty_cell = v_table.rows[num_photo_rows - 1].cells[1]
+                empty_cell.width = Inches(3.25)
+                set_cell_borders(
+                    empty_cell,
+                    top={'val': 'single', 'sz': 4, 'color': 'auto'},
+                    bottom={'val': 'single', 'sz': 4, 'color': 'auto'},
+                    left={'val': 'single', 'sz': 4, 'color': 'auto'},
+                    right={'val': 'single', 'sz': 4, 'color': 'auto'}
+                )
+                if has_caption:
+                    empty_cell.paragraphs[0].paragraph_format.keep_with_next = True
+
+            # Baris caption kategori desa di paling bawah tabel desa
+            if has_caption:
+                meta_v = village_meta_map.get(g_key, {})
+                cap_desa = meta_v.get("desa") or (g_photos[0].get("desa") or "").strip()
+                cap_kec = meta_v.get("kecamatan") or next(
+                    ((gp.get("kecamatan") or "").strip() for gp in g_photos if (gp.get("kecamatan") or "").strip()),
+                    ""
+                )
+                raw_cap_kab = meta_v.get("kabupaten") or next(
+                    ((gp.get("kabupaten") or "").strip() for gp in g_photos if (gp.get("kabupaten") or "").strip()),
+                    ""
+                ) or kabupaten_full
+                clean_cap_kab = re.sub(r"^(?:Kabupaten|Kota)\s*", "", raw_cap_kab, flags=re.I).strip()
+                cap_kab_full = f"Kota {clean_cap_kab}" if raw_cap_kab.lower().startswith("kota") else f"Kabupaten {clean_cap_kab}"
+                cap_prov = next(
+                    ((gp.get("provinsi") or "").strip() for gp in g_photos if (gp.get("provinsi") or "").strip()),
+                    "Jawa Tengah"
+                )
+
+                cap_row = v_table.rows[num_photo_rows]
+                cap_cell = cap_row.cells[0].merge(cap_row.cells[1])
+                cap_cell.width = Inches(6.50)
+                set_cell_borders(
+                    cap_cell,
+                    top={'val': 'single', 'sz': 4, 'color': 'auto'},
+                    bottom={'val': 'single', 'sz': 4, 'color': 'auto'},
+                    left={'val': 'single', 'sz': 4, 'color': 'auto'},
+                    right={'val': 'single', 'sz': 4, 'color': 'auto'}
+                )
+                cap_tcPr = cap_cell._tc.get_or_add_tcPr()
+                cap_vAlign = OxmlElement('w:vAlign')
+                cap_vAlign.set(qn('w:val'), 'center')
+                cap_tcPr.append(cap_vAlign)
+
+                loc_parts = [f"Desa {cap_desa}"]
+                if cap_kec:
+                    loc_parts.append(f"Kecamatan {cap_kec}")
+                loc_parts.append(cap_kab_full)
+                loc_parts.append(f"Provinsi {cap_prov}")
+                cap_text = (
+                    f"Kegiatan Monitoring dan Evaluasi pada Lokasi Pembangunan Pelaksanaan "
+                    f"Pamsimas TA {tahun} di {', '.join(loc_parts)}"
+                )
+
+                cap_p = cap_cell.paragraphs[0]
+                cap_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                cap_p.paragraph_format.line_spacing = 1.15
+                cap_p.paragraph_format.space_before = Pt(8)
+                cap_p.paragraph_format.space_after = Pt(8)
+                cap_run = cap_p.add_run(cap_text)
+                cap_run.font.name = "Arial"
+                cap_run.font.size = Pt(10.5)
+                cap_run.bold = True
+                cap_run.font.color.rgb = RGBColor(0, 0, 0)
+
+            tbl_photo_elem = v_table._tbl
+            body_parent.remove(tbl_photo_elem)
+            _insert_after_photo_title_area(tbl_photo_elem)
+
+            if g_idx < len(active_group_keys) - 1:
+                p_gap = doc.add_paragraph()
+                p_gap.paragraph_format.space_before = Pt(0)
+                p_gap.paragraph_format.space_after = Pt(6)
+                p_gap.paragraph_format.line_spacing = 1.0
+                p_gap_elem = p_gap._p
+                body_parent.remove(p_gap_elem)
+                _insert_after_photo_title_area(p_gap_elem)
     else:
         # Jika TIDAK ADA foto:
         # Ambil sectPr dari p54, pindahkan ke akhir body sebagai sectPr dokumen,

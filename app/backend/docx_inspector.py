@@ -580,11 +580,17 @@ def inspect_and_import_monev_docx(docx_path: str) -> Dict[str, Any]:
 
     # Item 8: Foto Dokumentasi Lapangan
     if len(parsed_photos) > 0:
-        stamped_cnt = sum(1 for p in parsed_photos if p.get("has_timestamp") or (has_dates and p.get("timeStr")))
-        if stamped_cnt == len(parsed_photos) and has_dates:
-            audit_items.append({"field": "photos", "status": "complete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(parsed_photos)} foto (seluruh foto telah memiliki timestamp)"})
-        elif stamped_cnt > 0:
-            audit_items.append({"field": "photos", "status": "incomplete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(parsed_photos)} foto ({stamped_cnt} foto bertimestamp, {len(parsed_photos)-stamped_cnt} foto belum bertimestamp)"})
+        physical_stamped_cnt = sum(1 for p in parsed_photos if p.get("has_timestamp"))
+        scheduled_ready_cnt = sum(
+            1 for p in parsed_photos
+            if (not p.get("has_timestamp")) and (has_dates and p.get("timeStr") and p.get("desa"))
+        )
+        if physical_stamped_cnt == len(parsed_photos):
+            audit_items.append({"field": "photos", "status": "complete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(parsed_photos)} foto (seluruh foto telah memiliki stempel timestamp fisik)"})
+        elif physical_stamped_cnt + scheduled_ready_cnt == len(parsed_photos):
+            audit_items.append({"field": "photos", "status": "complete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(parsed_photos)} foto ({scheduled_ready_cnt} foto terkelompok per desa & siap dicetak stempel timestamp/geotag)"})
+        elif physical_stamped_cnt > 0 or scheduled_ready_cnt > 0:
+            audit_items.append({"field": "photos", "status": "incomplete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(parsed_photos)} foto ({physical_stamped_cnt} bertimestamp, {scheduled_ready_cnt} siap stempel, {len(parsed_photos) - physical_stamped_cnt - scheduled_ready_cnt} belum terjadwal)"})
         else:
             audit_items.append({"field": "photos", "status": "incomplete", "label": "Foto Dokumentasi", "message": f"Ditemukan {len(parsed_photos)} foto di dokumen (BELUM memiliki timestamp GPS, lengkapi tanggal dinas terlebih dahulu)"})
     else:
